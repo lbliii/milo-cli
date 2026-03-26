@@ -1,3 +1,0 @@
-kida-templates>=0.2.9
-
-[html]
