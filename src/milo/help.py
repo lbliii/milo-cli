@@ -68,10 +68,12 @@ class HelpRenderer(argparse.HelpFormatter):
                 for action in action_group._group_actions
             ]
             if actions:
-                groups.append({
-                    "title": action_group.title or "",
-                    "actions": actions,
-                })
+                groups.append(
+                    {
+                        "title": action_group.title or "",
+                        "actions": actions,
+                    }
+                )
 
         state = HelpState(
             prog=self._prog,

@@ -15,6 +15,7 @@ def action_init():
 @pytest.fixture
 def action_key():
     from milo._types import Key
+
     return Action("@@KEY", payload=Key(char="a"))
 
 

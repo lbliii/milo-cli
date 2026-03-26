@@ -87,9 +87,7 @@ class Flow:
         def flow_reducer(state: FlowState | None, action: Action) -> FlowState:
             if state is None:
                 first = self.screens[0]
-                initial_states = {
-                    s.name: s.reducer(None, Action("@@INIT")) for s in self.screens
-                }
+                initial_states = {s.name: s.reducer(None, Action("@@INIT")) for s in self.screens}
                 return FlowState(
                     current_screen=first.name,
                     screen_states=initial_states,

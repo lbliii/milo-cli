@@ -44,12 +44,14 @@ def recording_middleware(
     def middleware(dispatch: Any, get_state: Any) -> Any:
         def recording_dispatch(action: Action) -> None:
             dispatch(action)
-            records.append({
-                "timestamp": time.time(),
-                "action_type": action.type,
-                "action_payload": action.payload,
-                "state_hash": state_hash(get_state()),
-            })
+            records.append(
+                {
+                    "timestamp": time.time(),
+                    "action_type": action.type,
+                    "action_payload": action.payload,
+                    "state_hash": state_hash(get_state()),
+                }
+            )
 
         return recording_dispatch
 
@@ -83,7 +85,7 @@ def save_recording(
             if "action_payload" in record_data:
                 try:
                     json.dumps(record_data["action_payload"])
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     record_data["action_payload"] = repr(record_data["action_payload"])
             f.write(json.dumps(record_data) + "\n")
 

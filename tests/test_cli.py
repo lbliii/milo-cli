@@ -62,6 +62,7 @@ class TestLoadApp:
         # os:path is a valid module:attr
         result = _load_app("os:path")
         import os
+
         assert result is os.path
 
     def test_adds_cwd_to_sys_path(self):
@@ -83,13 +84,15 @@ class TestCmdReplay:
         path = Path(tmp_dir) / "session.jsonl"
         lines = [
             json.dumps({"type": "header", "initial_state": "0", "metadata": {}}),
-            json.dumps({
-                "type": "action",
-                "timestamp": 1000.0,
-                "action_type": "@@INIT",
-                "action_payload": None,
-                "state_hash": "abc123",
-            }),
+            json.dumps(
+                {
+                    "type": "action",
+                    "timestamp": 1000.0,
+                    "action_type": "@@INIT",
+                    "action_payload": None,
+                    "state_hash": "abc123",
+                }
+            ),
             json.dumps({"type": "footer", "final_state": "0"}),
         ]
         path.write_text("\n".join(lines) + "\n")
@@ -124,13 +127,15 @@ class TestCmdReplay:
             path = Path(tmp) / "session.jsonl"
             lines = [
                 json.dumps({"type": "header", "initial_state": "None", "metadata": {}}),
-                json.dumps({
-                    "type": "action",
-                    "timestamp": 1000.0,
-                    "action_type": "@@INIT",
-                    "action_payload": None,
-                    "state_hash": init_hash,
-                }),
+                json.dumps(
+                    {
+                        "type": "action",
+                        "timestamp": 1000.0,
+                        "action_type": "@@INIT",
+                        "action_payload": None,
+                        "state_hash": init_hash,
+                    }
+                ),
                 json.dumps({"type": "footer", "final_state": "None"}),
             ]
             path.write_text("\n".join(lines) + "\n")
@@ -145,6 +150,7 @@ class TestCmdReplay:
             session = self._make_session_file(tmp)
             # Patch the replay function inside milo.testing._replay
             from unittest.mock import patch as _patch
+
             with _patch("milo.testing._replay.replay") as mock_replay:
                 mock_replay.return_value = "done"
                 main(["replay", str(session), "--speed", "0", "--reducer", "os.path:join"])

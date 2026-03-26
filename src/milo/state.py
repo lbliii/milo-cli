@@ -83,12 +83,14 @@ class Store:
             # Record
             if self._recording is not None:
                 state_hash = hashlib.sha256(repr(self._state).encode()).hexdigest()[:16]
-                self._recording.append({
-                    "timestamp": time.time(),
-                    "action_type": action.type,
-                    "action_payload": action.payload,
-                    "state_hash": state_hash,
-                })
+                self._recording.append(
+                    {
+                        "timestamp": time.time(),
+                        "action_type": action.type,
+                        "action_payload": action.payload,
+                        "state_hash": state_hash,
+                    }
+                )
 
         # Notify listeners
         for listener in self._listeners:

@@ -58,10 +58,13 @@ class TestAssertSaga:
             yield Put(Action("done", payload=result))
 
         gen = my_saga()
-        assert_saga(gen, [
-            (Call(fn=len), 5),
-            (Put(Action("done", payload=5)), None),
-        ])
+        assert_saga(
+            gen,
+            [
+                (Call(fn=len), 5),
+                (Put(Action("done", payload=5)), None),
+            ],
+        )
 
     def test_fails(self):
         def my_saga():
@@ -115,6 +118,7 @@ class TestRecording:
 # ---------------------------------------------------------------------------
 # assert_renders tests
 # ---------------------------------------------------------------------------
+
 
 class TestAssertRenders:
     def _make_env(self, template_str: str):
@@ -205,6 +209,7 @@ class TestAssertRenders:
         # Use the built-in milo templates — help.txt exists
         # We'll pass a template object to avoid needing template name resolution
         from kida import Environment
+
         tmpl_env = Environment()
         tmpl = tmpl_env.from_string("result={{ state }}")
         result = assert_renders("ok", tmpl)
@@ -214,6 +219,7 @@ class TestAssertRenders:
 # ---------------------------------------------------------------------------
 # replay() tests
 # ---------------------------------------------------------------------------
+
 
 class TestReplay:
     def _make_recording(self, records_dicts=None):
@@ -276,7 +282,12 @@ class TestReplay:
         from milo.testing._record import state_hash as sh
 
         records = [
-            {"timestamp": 1000.0, "action_type": "@@INIT", "action_payload": None, "state_hash": sh(0)},
+            {
+                "timestamp": 1000.0,
+                "action_type": "@@INIT",
+                "action_payload": None,
+                "state_hash": sh(0),
+            },
         ]
         recording = self._make_recording(records)
 
@@ -299,7 +310,12 @@ class TestReplay:
             return 42
 
         records = [
-            {"timestamp": 1000.0, "action_type": "@@INIT", "action_payload": None, "state_hash": sh(42)},
+            {
+                "timestamp": 1000.0,
+                "action_type": "@@INIT",
+                "action_payload": None,
+                "state_hash": sh(42),
+            },
         ]
         recording = self._make_recording(records)
         # Should not raise
@@ -312,7 +328,12 @@ class TestReplay:
             return 99  # produces hash for 99
 
         records = [
-            {"timestamp": 1000.0, "action_type": "@@INIT", "action_payload": None, "state_hash": sh(0)},
+            {
+                "timestamp": 1000.0,
+                "action_type": "@@INIT",
+                "action_payload": None,
+                "state_hash": sh(0),
+            },
         ]
         recording = self._make_recording(records)
 
@@ -328,13 +349,15 @@ class TestReplay:
         path = tmp_path / "session.jsonl"
         lines = [
             json.dumps({"type": "header", "initial_state": "0", "metadata": {}}),
-            json.dumps({
-                "type": "action",
-                "timestamp": 1000.0,
-                "action_type": "@@INIT",
-                "action_payload": None,
-                "state_hash": sh(None),
-            }),
+            json.dumps(
+                {
+                    "type": "action",
+                    "timestamp": 1000.0,
+                    "action_type": "@@INIT",
+                    "action_payload": None,
+                    "state_hash": sh(None),
+                }
+            ),
             json.dumps({"type": "footer", "final_state": "0"}),
         ]
         path.write_text("\n".join(lines) + "\n")
@@ -354,7 +377,12 @@ class TestReplay:
             return ReducerResult(state=42)
 
         records = [
-            {"timestamp": 1000.0, "action_type": "@@INIT", "action_payload": None, "state_hash": sh(42)},
+            {
+                "timestamp": 1000.0,
+                "action_type": "@@INIT",
+                "action_payload": None,
+                "state_hash": sh(42),
+            },
         ]
         recording = self._make_recording(records)
         result = replay(recording, reducer, speed=0)

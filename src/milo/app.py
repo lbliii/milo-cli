@@ -86,6 +86,7 @@ class App:
         # Set up signal handler for resize
         original_sigwinch = None
         if hasattr(signal, "SIGWINCH"):
+
             def _on_resize(signum: int, frame: Any) -> None:
                 try:
                     cols, rows = os.get_terminal_size()
