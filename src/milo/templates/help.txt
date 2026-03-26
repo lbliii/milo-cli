@@ -1,0 +1,7 @@
+{{ state.prog }}{% if state.description %} - {{ state.description }}{% endif %}
+
+{% for group in state.groups %}
+{{ group.title }}:
+{% for action in group.actions %}  {% if action.option_strings %}{{ action.option_strings | join(", ") }}{% else %}{{ action.dest }}{% endif %}{% if action.metavar %} {{ action.metavar }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" %} (default: {{ action.default }}){% endif %}
+{% endfor %}
+{% endfor %}
