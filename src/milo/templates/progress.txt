@@ -1,0 +1,1 @@
+{{ state.label | default("Progress") }}: [{{ "█" * (state.progress * 20) | int }}{{ "░" * (20 - (state.progress * 20) | int) }}] {{ (state.progress * 100) | int }}%

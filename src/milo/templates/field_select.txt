@@ -1,0 +1,3 @@
+{% if field.focused %}> {% else %}  {% endif %}{{ spec.label }}:
+{% for choice in spec.choices %}  {% if loop.index0 == field.selected_index %}[x]{% else %}[ ]{% endif %} {{ choice }}
+{% endfor %}
