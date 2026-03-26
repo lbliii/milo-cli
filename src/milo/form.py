@@ -237,7 +237,7 @@ def _form_fallback(specs: tuple[FieldSpec, ...] | tuple) -> dict[str, Any]:
                 try:
                     idx = int(raw) - 1
                     values[spec.name] = spec.choices[idx]
-                except ValueError, IndexError:
+                except (ValueError, IndexError):
                     values[spec.name] = spec.choices[0] if spec.choices else ""
             case _:
                 values[spec.name] = input(f"{spec.label}: ").strip()

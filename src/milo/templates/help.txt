@@ -1,7 +1,7 @@
-{{ state.prog }}{% if state.description %} - {{ state.description }}{% endif %}
+{{ state.prog | bold }}{% if state.description %} {{ "-" | dim }} {{ state.description }}{% endif %}
 
 {% for group in state.groups %}
-{{ group.title }}:
-{% for action in group.actions %}  {% if action.option_strings %}{{ action.option_strings | join(", ") }}{% else %}{{ action.dest }}{% endif %}{% if action.metavar %} {{ action.metavar }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" %} (default: {{ action.default }}){% endif %}
+{{ group.title | yellow | bold }}:
+{% for action in group.actions %}  {% if action.option_strings %}{{ action.option_strings | join(", ") | green }}{% else %}{{ action.dest | cyan }}{% endif %}{% if action.metavar %} {{ action.metavar | dim }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" %} {{ ("(default: " ~ action.default ~ ")") | dim }}{% endif %}
 {% endfor %}
 {% endfor %}

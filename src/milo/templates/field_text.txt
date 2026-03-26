@@ -1,1 +1,1 @@
-{% if field.focused %}> {% else %}  {% endif %}{{ spec.label }}: {{ field.value }}{% if field.error %} ({{ field.error }}){% endif %}
+{% if field.focused %}{{ ">" | green | bold }} {{ spec.label | bold }}: {{ field.value }}{% else %}  {{ spec.label | dim }}: {{ field.value | dim }}{% endif %}{% if field.error %} {{ field.error | red }}{% endif %}

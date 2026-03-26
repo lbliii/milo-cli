@@ -1,0 +1,6 @@
+{{ icons.check | green | bold }} {{ "All done!" | bold | green }}
+{{ hr() }}
+
+  Your project is ready.
+
+  Press {{ "q" | dim }} to exit.

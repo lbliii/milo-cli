@@ -1,0 +1,20 @@
+{{ "URL Fetcher" | bold | cyan }}
+{{ hr() }}
+
+  {{ "URL:" | bold }} {{ state.url }}
+
+{% if state.status == "idle" %}
+  Press {{ "Enter" | green }} to fetch.
+{% elif state.status == "loading" %}
+  {{ icons.arrow | yellow }} {{ "Fetching..." | yellow | bold }}
+{% elif state.status == "done" %}
+  {{ icons.check | green }} {{ "Done" | green | bold }}
+  {{ "Status:" | dim }}  {{ state.status_code }}
+  {{ "Size:" | dim }}    {{ state.content_length | filesizeformat }}
+{% elif state.status == "error" %}
+  {{ icons.cross | red }} {{ "Error" | red | bold }}
+  {{ state.error_message | dim }}
+{% endif %}
+
+{{ hr() }}
+{{ "enter" | dim }} fetch  {{ "esc" | dim }} quit

@@ -1,1 +1,1 @@
-{% if field.focused %}> {% else %}  {% endif %}{{ spec.label }}: {% if field.value %}Yes{% else %}No{% endif %}
+{% if field.focused %}{{ ">" | green | bold }} {{ spec.label | bold }}: {% if field.value %}{{ "Yes" | green | bold }}{% else %}{{ "No" | dim }}{% endif %}{% else %}  {{ spec.label | dim }}: {% if field.value %}{{ "Yes" | dim }}{% else %}{{ "No" | dim }}{% endif %}{% endif %}

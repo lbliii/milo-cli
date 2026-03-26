@@ -34,4 +34,5 @@ def get_env(**kwargs: Any) -> Any:
 
         loader = ChoiceLoader(loaders)
 
+    kwargs.setdefault("autoescape", "terminal")
     return Environment(loader=loader, **kwargs)

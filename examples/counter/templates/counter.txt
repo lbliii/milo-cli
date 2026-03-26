@@ -1,0 +1,7 @@
+{{ "Counter" | bold | cyan }}
+{{ hr() }}
+
+  {{ state.count | string | bold | green }}
+
+{{ hr() }}
+{{ "↑" | dim }} increment  {{ "↓" | dim }} decrement  {{ "r" | dim }} reset  {{ "esc" | dim }} quit
