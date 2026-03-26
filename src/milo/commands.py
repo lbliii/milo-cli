@@ -126,9 +126,7 @@ class CLI:
             description=self.description,
         )
         if self.version:
-            parser.add_argument(
-                "--version", action="version", version=f"%(prog)s {self.version}"
-            )
+            parser.add_argument("--version", action="version", version=f"%(prog)s {self.version}")
         parser.add_argument(
             "--llms-txt",
             action="store_true",
@@ -174,7 +172,11 @@ class CLI:
             # Determine type
             json_type = param_schema.get("type", "string")
             if json_type == "boolean":
-                default = param.default if param and param.default is not inspect.Parameter.empty else False
+                default = (
+                    param.default
+                    if param and param.default is not inspect.Parameter.empty
+                    else False
+                )
                 kwargs["action"] = "store_true"
                 kwargs["default"] = default
             elif json_type == "integer":

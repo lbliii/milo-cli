@@ -62,11 +62,13 @@ def _list_tools(cli: CLI) -> list[dict[str, Any]]:
     for cmd in cli.commands.values():
         if cmd.hidden:
             continue
-        tools.append({
-            "name": cmd.name,
-            "description": cmd.description,
-            "inputSchema": cmd.schema,
-        })
+        tools.append(
+            {
+                "name": cmd.name,
+                "description": cmd.description,
+                "inputSchema": cmd.schema,
+            }
+        )
     return tools
 
 

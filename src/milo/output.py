@@ -80,7 +80,9 @@ def _format_table(data: Any) -> str:
         widths = [max(len(str(cell)) for cell in col) for col in zip(*all_rows, strict=False)]
         lines = []
         for row in all_rows:
-            lines.append("  ".join(str(cell).ljust(w) for cell, w in zip(row, widths, strict=False)))
+            lines.append(
+                "  ".join(str(cell).ljust(w) for cell, w in zip(row, widths, strict=False))
+            )
             if row is headers:
                 lines.append("  ".join("-" * w for w in widths))
         return "\n".join(lines)

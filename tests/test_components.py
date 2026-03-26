@@ -64,7 +64,7 @@ class TestKvPair:
 class TestKvList:
     def test_multiple_items(self, env):
         items = [{"label": "Host", "value": "localhost"}, {"label": "Port", "value": 8080}]
-        out = _render(env, '{{ kv_list(items) }}', items=items)
+        out = _render(env, "{{ kv_list(items) }}", items=items)
         assert "Host" in out
         assert "localhost" in out
         assert "Port" in out
@@ -170,6 +170,7 @@ class TestComposites:
         assert "init" in out
         assert "--verbose" in out
         assert "$ myapp init" in out
+
 
 class TestKeyHints:
     def test_basic_hints(self, env):

@@ -98,9 +98,7 @@ class App:
                 try:
                     self._render_exit(store.state, env)
                 except Exception as e:
-                    msg = format_render_error(
-                        e, template_name=self._exit_template, env=env
-                    )
+                    msg = format_render_error(e, template_name=self._exit_template, env=env)
                     sys.stderr.write(f"[milo] {msg}\n")
             return store.state
 
