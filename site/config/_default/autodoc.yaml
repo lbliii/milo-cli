@@ -1,0 +1,37 @@
+autodoc:
+  github_repo: "lbliii/milo"
+  github_branch: "main"
+
+  python:
+    enabled: true
+    source_dirs:
+      - ../src/milo
+    docstring_style: auto
+    output_prefix: ""
+    display_name: "Milo API Reference"
+    exclude:
+      - "*/tests/*"
+      - "*/test_*.py"
+      - "*_test.py"
+      - "*/__pycache__/*"
+      - "*/.pytest_cache/*"
+      - "*/build/*"
+      - "*/dist/*"
+      - "*.egg-info/*"
+      - "*/.venv/*"
+      - "*/venv/*"
+      - "*/.env/*"
+      - "*/env/*"
+      - "*/.*"
+    include_private: false
+    include_special: false
+
+  cli:
+    enabled: true
+    app_module: "milo.cli:main"
+    framework: argparse
+    output_prefix: "cli"
+    display_name: "Milo CLI Reference"
+
+  openapi:
+    enabled: false

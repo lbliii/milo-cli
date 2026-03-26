@@ -1,0 +1,16 @@
+site:
+  title: "Milo"
+  baseurl: ""
+  logo_text: "▸▸"
+  description: "Template-driven CLI applications for free-threaded Python"
+  language: "en"
+
+template_engine: kida
+
+link_previews:
+  enabled: true
+  allowed_hosts:
+    - lbliii.github.io
+  allowed_schemes:
+    - https
+  host_failure_threshold: 3

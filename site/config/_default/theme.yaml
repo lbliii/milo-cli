@@ -1,0 +1,40 @@
+theme:
+  name: "default"
+  default_appearance: "dark"
+  default_palette: "snow-lynx"
+  features:
+    # Navigation
+    - navigation.breadcrumbs
+    - navigation.toc
+    - navigation.toc.sticky
+    - navigation.prev_next
+    - navigation.back_to_top
+
+    # Content
+    - content.code.copy
+    - content.lightbox
+    - content.reading_time
+    - content.author
+    - content.excerpts
+    - content.children
+    - graph.contextual
+
+    # Search
+    - search.suggest
+    - search.highlight
+
+    # Footer
+    - footer.social
+
+    # Accessibility
+    - accessibility.skip_link
+
+  max_tags_display: 10
+  popular_tags_count: 20
+
+header:
+  nav_position: center
+  sticky: true
+  syntax_highlighting:
+    theme: "auto"
+    css_class_style: "semantic"
