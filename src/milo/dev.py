@@ -58,7 +58,6 @@ class DevServer:
             for path in changed:
                 sys.stderr.write(f"[milo] reloaded {path.name}\n")
                 try:
-
                     # Dispatch hot reload through the app's store
                     if hasattr(self._app, "_store"):
                         self._app._store.dispatch(Action("@@HOT_RELOAD", payload=str(path)))

@@ -162,7 +162,9 @@ class TestApp:
         env = MagicMock()
         env.get_template.return_value = tmpl
 
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=SimpleState(value=9), env=env)
+        app = App(
+            template="t.txt", reducer=simple_reducer, initial_state=SimpleState(value=9), env=env
+        )
 
         written = []
         mock_stdout = MagicMock()

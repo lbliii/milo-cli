@@ -87,9 +87,7 @@ def main(argv: list[str] | None = None) -> None:
         prog="milo",
         description="Template-driven CLI applications for free-threaded Python",
     )
-    parser.add_argument(
-        "--version", action="version", version="%(prog)s 0.1.0"
-    )
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     subparsers = parser.add_subparsers(dest="command")
 
     # milo dev
@@ -116,8 +114,10 @@ def main(argv: list[str] | None = None) -> None:
         "--diff", "-d", action="store_true", help="Show state diff between transitions"
     )
     replay_parser.add_argument(
-        "--assert", dest="assert_hashes", action="store_true",
-        help="Exit non-zero if state hashes don't match (CI use)"
+        "--assert",
+        dest="assert_hashes",
+        action="store_true",
+        help="Exit non-zero if state hashes don't match (CI use)",
     )
 
     args = parser.parse_args(argv)

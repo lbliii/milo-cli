@@ -11,6 +11,7 @@ from typing import Any
 # Keys
 # ---------------------------------------------------------------------------
 
+
 class SpecialKey(Enum):
     ENTER = auto()
     TAB = auto()
@@ -55,6 +56,7 @@ class Key:
 # Actions
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class Action:
     """Event dispatched to a reducer."""
@@ -81,6 +83,7 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
 # App
 # ---------------------------------------------------------------------------
 
+
 class AppStatus(Enum):
     IDLE = auto()
     RUNNING = auto()
@@ -96,6 +99,7 @@ class RenderTarget(Enum):
 # ---------------------------------------------------------------------------
 # Screens / Flows
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class Screen:
@@ -118,6 +122,7 @@ class Transition:
 # ---------------------------------------------------------------------------
 # Fields / Forms
 # ---------------------------------------------------------------------------
+
 
 class FieldType(Enum):
     TEXT = auto()
@@ -164,6 +169,7 @@ class FormState:
 # Effects (sagas)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class Call:
     """Call a function, resume saga with its return value."""
@@ -204,6 +210,7 @@ class Delay:
 # ---------------------------------------------------------------------------
 # Reducer result (state + optional sagas)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class ReducerResult:

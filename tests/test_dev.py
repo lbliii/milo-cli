@@ -137,6 +137,7 @@ class TestDevServer:
             for path in changed:
                 if hasattr(app, "_store"):
                     from milo._types import Action
+
                     app._store.dispatch(Action("@@HOT_RELOAD", payload=str(path)))
 
             mock_store.dispatch.assert_called_once()

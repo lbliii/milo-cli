@@ -18,9 +18,7 @@ class TestHelpState:
         s = HelpState(
             prog="myapp",
             description="A test app",
-            groups=(
-                {"title": "options", "actions": [{"dest": "verbose", "help": "Be verbose"}]},
-            ),
+            groups=({"title": "options", "actions": [{"dest": "verbose", "help": "Be verbose"}]},),
         )
         assert s.prog == "myapp"
         assert len(s.groups) == 1

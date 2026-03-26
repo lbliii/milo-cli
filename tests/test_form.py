@@ -34,7 +34,8 @@ class TestMakeInitialFields:
     def test_select_field(self):
         specs = (
             FieldSpec(
-                name="env", label="Environment",
+                name="env",
+                label="Environment",
                 field_type=FieldType.SELECT,
                 choices=("dev", "prod"),
             ),
@@ -43,16 +44,12 @@ class TestMakeInitialFields:
         assert fields[0].value == 0  # Default index
 
     def test_confirm_field(self):
-        specs = (
-            FieldSpec(name="ok", label="Continue?", field_type=FieldType.CONFIRM),
-        )
+        specs = (FieldSpec(name="ok", label="Continue?", field_type=FieldType.CONFIRM),)
         fields = _make_initial_fields(specs)
         assert fields[0].value is False
 
     def test_default_values(self):
-        specs = (
-            FieldSpec(name="name", label="Name", default="Alice"),
-        )
+        specs = (FieldSpec(name="name", label="Name", default="Alice"),)
         fields = _make_initial_fields(specs)
         assert fields[0].value == "Alice"
 
@@ -189,14 +186,18 @@ class TestFormReducer:
 
 class TestHandleSelectKey:
     def test_down_increments(self):
-        spec = FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("a", "b", "c"))
+        spec = FieldSpec(
+            name="env", label="Env", field_type=FieldType.SELECT, choices=("a", "b", "c")
+        )
         field = FieldState(value="a", selected_index=0)
         result = _handle_select_key(field, Key(name=SpecialKey.DOWN), spec)
         assert result.selected_index == 1
         assert result.value == "b"
 
     def test_up_decrements(self):
-        spec = FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("a", "b", "c"))
+        spec = FieldSpec(
+            name="env", label="Env", field_type=FieldType.SELECT, choices=("a", "b", "c")
+        )
         field = FieldState(value="b", selected_index=1)
         result = _handle_select_key(field, Key(name=SpecialKey.UP), spec)
         assert result.selected_index == 0
@@ -232,7 +233,9 @@ class TestHandleSelectKey:
 class TestFormReducerSelectAndPassword:
     def test_select_field_dispatch(self):
         specs = (
-            FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")),
+            FieldSpec(
+                name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")
+            ),
         )
         state = FormState(
             fields=(FieldState(value="dev", selected_index=0, focused=True),),
@@ -343,19 +346,31 @@ class TestFormFallback:
         assert result == {"ok": True}
 
     def test_select_field_valid(self, capsys):
-        specs = (FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")),)
+        specs = (
+            FieldSpec(
+                name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")
+            ),
+        )
         with patch("builtins.input", return_value="2"):
             result = _form_fallback(specs)
         assert result == {"env": "prod"}
 
     def test_select_field_invalid_falls_back_to_first(self, capsys):
-        specs = (FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")),)
+        specs = (
+            FieldSpec(
+                name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")
+            ),
+        )
         with patch("builtins.input", return_value="99"):
             result = _form_fallback(specs)
         assert result == {"env": "dev"}
 
     def test_select_field_non_numeric_falls_back_to_first(self, capsys):
-        specs = (FieldSpec(name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")),)
+        specs = (
+            FieldSpec(
+                name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")
+            ),
+        )
         with patch("builtins.input", return_value="abc"):
             result = _form_fallback(specs)
         assert result == {"env": "dev"}

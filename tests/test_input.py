@@ -57,6 +57,7 @@ class TestCtrlChars:
 # Platform tests
 # ---------------------------------------------------------------------------
 
+
 class TestIsTty:
     def test_is_tty_true(self):
         from milo.input._platform import is_tty
@@ -206,6 +207,7 @@ class TestRawMode:
 # ---------------------------------------------------------------------------
 # KeyReader tests
 # ---------------------------------------------------------------------------
+
 
 class TestKeyReader:
     def test_enter_raises_if_not_tty(self):
