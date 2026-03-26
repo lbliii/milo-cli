@@ -1,0 +1,9 @@
+features:
+  rss: true
+  sitemap: true
+  search: true
+  json: true
+  llm_txt: true
+
+social_cards:
+  enabled: false

@@ -1,0 +1,11 @@
+versioning:
+  enabled: false
+  sections:
+    - docs
+  versions:
+    - id: v0.1
+      label: "0.1"
+      latest: true
+  aliases:
+    latest: v0.1
+    stable: v0.1

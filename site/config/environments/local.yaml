@@ -1,0 +1,13 @@
+site:
+  baseurl: "/"
+
+build:
+  incremental: true
+
+assets:
+  minify: true
+  fingerprint: false
+
+health_check:
+  enabled: true
+  verbose: true

@@ -1,0 +1,16 @@
+markdown:
+  parser: "patitas"
+
+content:
+  default_type: "doc"
+  excerpt_length: 750
+  excerpt_words: 150
+  summary_length: 160
+  reading_speed: 200
+  related_count: 5
+  related_threshold: 0.25
+  toc_depth: 4
+  toc_min_headings: 2
+  toc_style: "nested"
+  sort_pages_by: "weight"
+  sort_order: "asc"

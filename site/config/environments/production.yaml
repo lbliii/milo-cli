@@ -1,0 +1,13 @@
+site:
+  baseurl: "/milo"
+
+build:
+  incremental: true
+  strict_mode: true
+
+assets:
+  minify: true
+  fingerprint: true
+
+features:
+  analytics: true

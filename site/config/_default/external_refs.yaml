@@ -1,0 +1,18 @@
+external_refs:
+  enabled: true
+  export_index: true
+  cache_dir: ".bengal/cache/external_refs"
+  default_cache_days: 7
+
+  templates:
+    python: "https://docs.python.org/3/library/{module}.html#{name}"
+    typing: "https://docs.python.org/3/library/typing.html#{name}"
+    kida: "https://lbliii.github.io/kida/{target}"
+    bengal: "https://lbliii.github.io/bengal/{target}"
+    patitas: "https://lbliii.github.io/patitas/{target}"
+    rosettes: "https://lbliii.github.io/rosettes/{target}"
+
+  indexes:
+    - name: kida
+      url: "../../../kida/public/xref.json"
+      cache_days: 7
