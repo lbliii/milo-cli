@@ -108,9 +108,7 @@ class TestPipelineReducer:
         state = reducer(None, Action("@@INIT"))
         state = reducer(state, Action(PIPELINE_START))
         state = reducer(state, Action(PHASE_START, "discover"))
-        state = reducer(
-            state, Action(PHASE_FAILED, {"name": "discover", "error": "boom"})
-        )
+        state = reducer(state, Action(PHASE_FAILED, {"name": "discover", "error": "boom"}))
         discover = next(p for p in state.phases if p.name == "discover")
         assert discover.status == "failed"
         assert discover.error == "boom"
@@ -209,7 +207,9 @@ class TestPipelineSaga:
         pipeline = Pipeline(
             "build",
             Phase("a", handler=lambda: "ok"),
-            Phase("b", handler=lambda: (_ for _ in ()).throw(RuntimeError("fail")), depends_on=("a",)),
+            Phase(
+                "b", handler=lambda: (_ for _ in ()).throw(RuntimeError("fail")), depends_on=("a",)
+            ),
         )
 
         saga = pipeline.build_saga()

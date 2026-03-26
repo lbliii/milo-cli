@@ -112,7 +112,7 @@ class HookRegistry:
             except Exception as e:
                 raise PluginError(
                     ErrorCode.PLG_HOOK,
-                    f"Hook '{hook_name}' listener {fn.__name__!r} raised: {e}",
+                    f"Hook '{hook_name}' listener {getattr(fn, '__name__', repr(fn))!r} raised: {e}",
                 ) from e
         return results
 

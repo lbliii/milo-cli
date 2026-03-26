@@ -26,7 +26,7 @@ class GlobalOption:
 
     name: str
     short: str = ""
-    type: type = str
+    option_type: type = str
     default: Any = None
     description: str = ""
     is_flag: bool = False
@@ -113,10 +113,7 @@ class LazyCommandDef:
 
             module_path, _, attr_name = self.import_path.rpartition(":")
             if not module_path or not attr_name:
-                msg = (
-                    f"Invalid import_path {self.import_path!r}: "
-                    "expected 'module.path:attribute'"
-                )
+                msg = f"Invalid import_path {self.import_path!r}: expected 'module.path:attribute'"
                 raise ValueError(msg)
 
             module = importlib.import_module(module_path)
@@ -188,7 +185,7 @@ class CLI:
         name: str,
         *,
         short: str = "",
-        type: type = str,
+        option_type: type = str,
         default: Any = None,
         description: str = "",
         is_flag: bool = False,
@@ -204,7 +201,7 @@ class CLI:
             GlobalOption(
                 name=name,
                 short=short,
-                type=type,
+                option_type=option_type,
                 default=default,
                 description=description,
                 is_flag=is_flag,
@@ -330,7 +327,7 @@ class CLI:
         """All registered top-level groups."""
         return dict(self._groups)
 
-    def get_command(self, name: str) -> CommandDef | None:
+    def get_command(self, name: str) -> CommandDef | LazyCommandDef | None:
         """Look up a command by name, alias, or dotted path.
 
         Dotted paths traverse groups: ``get_command("site.build")``
@@ -348,7 +345,7 @@ class CLI:
             return self._commands.get(resolved)
         return None
 
-    def _resolve_dotted(self, path: str) -> CommandDef | None:
+    def _resolve_dotted(self, path: str) -> CommandDef | LazyCommandDef | None:
         """Resolve a dotted command path like 'site.config.show'."""
         parts = path.split(".")
         # Walk groups for all but the last part
@@ -371,7 +368,7 @@ class CLI:
             return self.get_command(cmd_name)
         return current_group.get_command(cmd_name)
 
-    def walk_commands(self) -> list[tuple[str, CommandDef]]:
+    def walk_commands(self) -> list[tuple[str, CommandDef | LazyCommandDef]]:
         """Walk all commands in the tree, yielding (dotted_path, CommandDef).
 
         Top-level commands have simple names. Group commands use dots::
@@ -437,7 +434,7 @@ class CLI:
             if opt.is_flag:
                 kwargs["action"] = "store_true"
             else:
-                kwargs["type"] = opt.type
+                kwargs["type"] = opt.option_type
             parser.add_argument(*flags, **kwargs)
 
         has_children = self._commands or self._groups

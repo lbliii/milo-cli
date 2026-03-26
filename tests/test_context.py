@@ -87,8 +87,9 @@ class TestContextVar:
 class TestGlobalOptions:
     def test_global_option_registration(self):
         cli = CLI(name="app")
-        cli.global_option("environment", short="-e", default="local",
-                          description="Config environment")
+        cli.global_option(
+            "environment", short="-e", default="local", description="Config environment"
+        )
         assert len(cli._global_options) == 1
         assert cli._global_options[0].name == "environment"
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from milo.commands import CLI, CommandDef
+    from milo.commands import CLI, CommandDef, LazyCommandDef
     from milo.groups import Group
 
 
@@ -33,8 +33,8 @@ def generate_llms_txt(cli: CLI) -> str:
         lines.append("")
 
     # Group commands by tag
-    tagged: dict[str, list[CommandDef]] = {}
-    untagged: list[CommandDef] = []
+    tagged: dict[str, list[CommandDef | LazyCommandDef]] = {}
+    untagged: list[CommandDef | LazyCommandDef] = []
 
     for cmd in cli.commands.values():
         if cmd.hidden:

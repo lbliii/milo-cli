@@ -118,7 +118,9 @@ class TestPollingWatcher:
         stop = threading.Event()
         watcher = _PollingWatcher((tmp_path / "nonexistent",), poll_interval=0.05)
 
-        thread = threading.Thread(target=watcher.watch, args=(lambda p: detected.extend(p), stop), daemon=True)
+        thread = threading.Thread(
+            target=watcher.watch, args=(lambda p: detected.extend(p), stop), daemon=True
+        )
         thread.start()
 
         time.sleep(0.15)

@@ -19,18 +19,13 @@ def tmp_config(tmp_path):
     )
     # Override TOML
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "build.toml").write_text(
-        '[build]\nparallel = true\n'
-    )
+    (tmp_path / "config" / "build.toml").write_text("[build]\nparallel = true\n")
     # Production overlay
     (tmp_path / "config" / "production.toml").write_text(
-        '[site]\nurl = "https://example.com"\n\n'
-        '[build]\nminify = true\n'
+        '[site]\nurl = "https://example.com"\n\n[build]\nminify = true\n'
     )
     # JSON config
-    (tmp_path / "extra.json").write_text(
-        json.dumps({"features": {"search": True}})
-    )
+    (tmp_path / "extra.json").write_text(json.dumps({"features": {"search": True}}))
     return tmp_path
 
 

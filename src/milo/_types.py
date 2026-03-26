@@ -202,7 +202,7 @@ class Select:
 class Fork:
     """Run another saga concurrently."""
 
-    saga: Generator
+    saga: Callable | Generator
 
 
 @dataclass(frozen=True, slots=True)

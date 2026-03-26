@@ -43,7 +43,7 @@ milo = ["templates/*.txt", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 
 [tool.coverage.run]
 source = ["milo"]

@@ -126,15 +126,17 @@ class Pipeline:
                 phase_name = action.payload
                 now = time.monotonic()
                 new_phases = tuple(
-                    replace(p, status="running", started_at=now)
-                    if p.name == phase_name
-                    else p
+                    replace(p, status="running", started_at=now) if p.name == phase_name else p
                     for p in state.phases
                 )
                 return replace(state, phases=new_phases, current_phase=phase_name)
 
             if action.type == PHASE_COMPLETE:
-                phase_name = action.payload.get("name", "") if isinstance(action.payload, dict) else action.payload
+                phase_name = (
+                    action.payload.get("name", "")
+                    if isinstance(action.payload, dict)
+                    else action.payload
+                )
                 now = time.monotonic()
                 new_phases = []
                 completed_weight = 0
@@ -156,7 +158,9 @@ class Pipeline:
                 )
 
             if action.type == PHASE_FAILED:
-                payload = action.payload if isinstance(action.payload, dict) else {"name": action.payload}
+                payload = (
+                    action.payload if isinstance(action.payload, dict) else {"name": action.payload}
+                )
                 phase_name = payload.get("name", "")
                 error = payload.get("error", "")
                 now = time.monotonic()
@@ -201,11 +205,7 @@ class Pipeline:
 
             while remaining:
                 # Find phases whose dependencies are all satisfied
-                ready = [
-                    name
-                    for name in remaining
-                    if dep_graph[name].issubset(executed)
-                ]
+                ready = [name for name in remaining if dep_graph[name].issubset(executed)]
 
                 if not ready:
                     # Circular dependency or impossible state
