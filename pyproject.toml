@@ -6,14 +6,18 @@ build-backend = "setuptools.build_meta"
 name = "milo"
 version = "0.1.0"
 description = "Template-driven CLI applications for free-threaded Python"
+readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
 dependencies = ["kida-templates>=0.2.9"]
 keywords = ["cli", "terminal", "forms", "free-threading", "template", "elm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
     "Topic :: Terminals",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
 
@@ -21,7 +25,13 @@ classifiers = [
 milo = "milo.cli:main"
 
 [project.optional-dependencies]
-html = []
+docs = ["bengal>=0.2.6"]
+
+[project.urls]
+Homepage = "https://lbliii.github.io/milo/"
+Documentation = "https://lbliii.github.io/milo/"
+Repository = "https://github.com/lbliii/milo"
+Changelog = "https://github.com/lbliii/milo/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,7 +48,16 @@ source = ["milo"]
 branch = true
 
 [tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 1
 fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
 
 [tool.ty.environment]
 python-version = "3.14"
@@ -46,14 +65,33 @@ python-version = "3.14"
 [tool.ty.rules]
 call-non-callable = "warn"
 unresolved-attribute = "warn"
+unresolved-import = "warn"
+invalid-argument-type = "warn"
+possibly-unresolved-reference = "ignore"
+invalid-return-type = "warn"
+invalid-assignment = "warn"
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "UP", "B", "SIM", "I", "N", "PIE", "PERF", "C4", "RUF"]
-ignore = ["E501"]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports, variables, etc.)
+    "UP",   # pyupgrade - Python modernization
+    "B",    # flake8-bugbear - common bugs
+    "SIM",  # flake8-simplify - simplify code
+    "I",    # isort - import sorting
+    "N",    # pep8-naming
+    "PIE",  # misc lints (unnecessary pass, duplicate dict keys, etc.)
+    "PERF", # perflint - performance anti-patterns
+    "C4",   # unnecessary comprehensions/list()/dict() calls
+    "RUF",  # Ruff-specific (unused noqa, mutable class defaults, etc.)
+    "PT",   # pytest style
+]
+ignore = ["E501"] # Line length handled by formatter
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
@@ -61,9 +99,16 @@ ignore = ["E501"]
 
 [dependency-groups]
 dev = [
+    # Testing
     "pytest>=8.0",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.3.0",
+    "pytest-timeout>=2.3.0",
     "hypothesis>=6.100.0",
+    # Linting & Type Checking
     "ty>=0.0.11",
     "ruff>=0.15.1",
+    # Pre-commit
+    "pre-commit>=4.0.0",
 ]
+docs = ["bengal>=0.2.6"]

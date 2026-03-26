@@ -1,0 +1,49 @@
+# Pre-commit hooks for Milo
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# Note: Milo requires Python 3.14+ (free-threaded Python)
+
+default_language_version:
+  python: python3.14
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.1
+    hooks:
+      # Run the linter
+      - id: ruff-check
+        args: [--fix]
+        types_or: [python, pyi]
+
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format .
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: ty
+        name: ty type checker
+        entry: uv run ty check src/milo/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-toml
+      - id: check-yaml
+        args: [--unsafe]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
