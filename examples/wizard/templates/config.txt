@@ -1,0 +1,4 @@
+{{ "Configure your project" | bold | cyan }}
+{{ hr() }}
+
+{% include "form.txt" %}

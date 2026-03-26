@@ -1,0 +1,7 @@
+{% from "components/_defs.txt" import header_box %}
+{{ header_box("Project Setup Wizard") }}
+
+  Welcome! This wizard will walk you through
+  creating a new project.
+
+  Press {{ "Enter" | green | bold }} to begin.

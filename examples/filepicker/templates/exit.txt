@@ -1,0 +1,6 @@
+{% from "components/_defs.txt" import status_line %}
+{% if state.cancelled %}
+{{ status_line("warning", "Cancelled.") }}
+{% elif state.selected %}
+{{ status_line("success", "Selected: " ~ state.selected) }}
+{% endif %}

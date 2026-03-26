@@ -1,0 +1,5 @@
+{{ "error" | red | bold }}{% if code %} {{ code | yellow }}{% endif %}
+{{ error | dim }}
+{% if template_name %}  {{ "template:" | dim }} {{ template_name }}{% endif %}
+{% if hint %}  {{ "hint:" | cyan }} {{ hint }}{% endif %}
+{% if docs_url %}  {{ "docs:" | dim }} {{ docs_url }}{% endif %}

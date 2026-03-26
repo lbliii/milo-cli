@@ -1,0 +1,43 @@
+{#- Full help page layout.
+
+    Expects in scope:
+        name         -- program name (str)
+        version      -- version string (optional)
+        description  -- one-line description (optional)
+        usage        -- usage string (optional)
+        commands     -- list of command dicts (optional)
+        flags        -- list of flag dicts: {flags, description, default} (optional)
+        examples     -- list of example dicts: {command, description} (optional)
+        epilog       -- footer text (optional)
+-#}
+{%- from "components/_defs.txt" import header, section, command_row, example_block, def_list -%}
+
+{{ header(name, version | default(""), description | default("")) }}
+
+{% if usage | default("") %}
+{{ section("Usage") }}
+  {{ usage | dim }}
+{% endif %}
+
+{% if commands | default([]) %}
+{{ section("Commands") }}
+{% for cmd in commands %}
+{{ command_row(cmd.name, cmd.get("description", ""), cmd.get("aliases", []), cmd.get("tags", [])) }}
+{% endfor %}
+{% endif %}
+
+{% if flags | default([]) %}
+{{ section("Options") }}
+{% for flag in flags %}
+  {{ flag.flags | join(", ") | green }}{% if flag.get("metavar") %} {{ flag.metavar | dim }}{% endif %}    {{ flag.get("description", "") }}{% if flag.get("default") %} {{ ("(default: " ~ flag.default ~ ")") | dim }}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if examples | default([]) %}
+{{ section("Examples") }}
+{{ example_block(examples) }}
+{% endif %}
+
+{% if epilog | default("") %}
+{{ epilog | dim }}
+{% endif %}

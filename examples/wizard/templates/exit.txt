@@ -1,0 +1,10 @@
+{% from "components/_defs.txt" import status_line, kv_pair %}
+{% set config = state.get("config") if state is mapping else none %}
+{% if config and config.fields %}
+{{ status_line("success", "Project created!") }}
+{% for i in range(config.fields | length) %}
+  {{ kv_pair(config.specs[i].label, config.fields[i].value | string) }}
+{% endfor %}
+{% else %}
+{{ status_line("warning", "Wizard cancelled.") }}
+{% endif %}

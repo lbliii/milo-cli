@@ -1,0 +1,40 @@
+{% from "components/_defs.txt" import header, status_line, key_hints %}
+{{ header("Parallel Downloader") }}
+{{ hr() }}
+
+{% if state.phase == "ready" %}
+  {{ "URLs queued:" | bold }}
+{% for u in state.urls %}
+    {{ icons.arrow_r | dim }} {{ u.url | dim }}
+{% endfor %}
+
+  Press {{ "Enter" | green }} to start all fetches.
+
+{% elif state.phase == "fetching" or state.phase == "done" %}
+{% for u in state.urls %}
+{% if u.status == "pending" %}
+    {{ status_line("", u.url, "pending") }}
+{% elif u.status == "fetching" %}
+{% set dots = "." * ((state.tick % 3) + 1) %}
+    {{ icons.arrow_r | yellow }} {{ u.url | yellow }}  {{ ("fetching" + dots) | yellow | bold }}
+{% elif u.status == "done" %}
+    {{ status_line("success", u.url | green, u.status_code ~ "  " ~ (u.content_length | filesizeformat)) }}
+{% elif u.status == "error" %}
+    {{ status_line("error", u.url | red, u.error_message) }}
+{% endif %}
+{% endfor %}
+
+{% if state.phase == "done" %}
+  {{ status_line("success", "All downloads complete!" | green) }}
+{% endif %}
+  {{ "Elapsed:" | dim }} {{ "{:.2f}" | format(state.elapsed) }}s
+{% endif %}
+
+{{ hr() }}
+{% if state.phase == "ready" %}
+{{ key_hints([{"key": "enter", "action": "start"}, {"key": "esc/q", "action": "quit"}]) }}
+{% elif state.phase == "fetching" %}
+{{ key_hints([{"key": "esc/q", "action": "cancel"}]) }}
+{% else %}
+{{ key_hints([{"key": "esc/q", "action": "quit"}]) }}
+{% endif %}

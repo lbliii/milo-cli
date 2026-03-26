@@ -1,1 +1,1 @@
-{{ state.label | default("Progress") }}: [{{ "█" * (state.progress * 20) | int }}{{ "░" * (20 - (state.progress * 20) | int) }}] {{ (state.progress * 100) | int }}%
+{{ state.label | default("Progress") | bold }}: {{ bar(state.progress, width=20) | green }} {{ (state.progress * 100) | int }}%

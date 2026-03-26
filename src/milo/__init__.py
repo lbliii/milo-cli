@@ -19,6 +19,7 @@ def __getattr__(name: str):
         "Screen": "_types",
         "Transition": "_types",
         "ReducerResult": "_types",
+        "Quit": "_types",
         "Call": "_types",
         "Put": "_types",
         "Select": "_types",
@@ -33,6 +34,8 @@ def __getattr__(name: str):
         "AppError": "_errors",
         "FlowError": "_errors",
         "ErrorCode": "_errors",
+        "format_error": "_errors",
+        "format_render_error": "_errors",
         # State
         "Store": "state",
         "combine_reducers": "state",
@@ -47,10 +50,18 @@ def __getattr__(name: str):
         # Form
         "form": "form",
         "form_reducer": "form",
+        "make_form_reducer": "form",
         # Help
         "HelpRenderer": "help",
         # Dev
         "DevServer": "dev",
+        # Commands (AI-native)
+        "CLI": "commands",
+        "CommandDef": "commands",
+        "function_to_schema": "schema",
+        "format_output": "output",
+        "write_output": "output",
+        "generate_llms_txt": "llms",
     }
     if name in _imports:
         import importlib
@@ -68,15 +79,14 @@ def _Py_mod_gil() -> int:  # noqa: N802
 __version__ = "0.1.0"
 __all__ = [
     "BUILTIN_ACTIONS",
-    # Types
+    "CLI",
     "Action",
-    # App
     "App",
     "AppError",
     "AppStatus",
     "Call",
+    "CommandDef",
     "Delay",
-    # Dev
     "DevServer",
     "ErrorCode",
     "FieldSpec",
@@ -84,32 +94,35 @@ __all__ = [
     "FieldType",
     "Flow",
     "FlowError",
-    # Flow
     "FlowScreen",
     "FlowState",
     "Fork",
     "FormError",
     "FormState",
-    # Help
     "HelpRenderer",
     "InputError",
     "Key",
-    # Errors
     "MiloError",
     "Put",
+    "Quit",
     "ReducerResult",
     "RenderTarget",
     "Screen",
     "Select",
     "SpecialKey",
     "StateError",
-    # State
     "Store",
     "Transition",
     "combine_reducers",
-    # Form
     "form",
     "form_reducer",
+    "format_error",
+    "format_output",
+    "format_render_error",
+    "function_to_schema",
+    "generate_llms_txt",
+    "make_form_reducer",
     "render_html",
     "run",
+    "write_output",
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
@@ -185,6 +186,38 @@ def _replace_field(
     lst = list(fields)
     lst[index] = new
     return tuple(lst)
+
+
+def make_form_reducer(*specs: FieldSpec, navigate_on_submit: bool = False) -> Callable:
+    """Create a form reducer pre-loaded with field specs.
+
+    The returned reducer initializes with the given fields on @@INIT,
+    so you don't need to pass specs via action payload.
+
+    If navigate_on_submit=True, dispatches @@NAVIGATE when the form
+    is submitted — useful in flows where the next screen should appear
+    automatically after form completion.
+    """
+    from milo._types import Put, ReducerResult
+
+    initial = FormState(
+        fields=_make_initial_fields(specs),
+        specs=specs,
+        active_index=0,
+    )
+
+    def _navigate_saga():
+        yield Put(Action("@@NAVIGATE"))
+
+    def reducer(state: FormState | None, action: Action) -> FormState | ReducerResult:
+        if state is None:
+            return initial
+        new_state = form_reducer(state, action)
+        if navigate_on_submit and not state.submitted and new_state.submitted:
+            return ReducerResult(state=new_state, sagas=(_navigate_saga,))
+        return new_state
+
+    return reducer
 
 
 def form(

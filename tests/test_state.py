@@ -8,7 +8,7 @@ import time
 import pytest
 
 from milo._errors import StateError
-from milo._types import Action, Call, Fork, Put, ReducerResult, Select
+from milo._types import Action, Call, Fork, Put, Quit, ReducerResult, Select
 from milo.state import Store, combine_reducers
 
 
@@ -245,3 +245,108 @@ class TestCombineReducers:
         state = combined(None, Action("@@INIT"))
         state2 = combined(state, Action("unknown"))
         assert state is state2
+
+    def test_propagates_sagas(self):
+        """Sagas from child ReducerResult should be collected."""
+        saga_ran = threading.Event()
+
+        def my_saga():
+            saga_ran.set()
+            yield Put(Action("done"))
+
+        def child(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=1, sagas=(my_saga,))
+            return state
+
+        combined = combine_reducers(child=child)
+        store = Store(combined, None)
+        store.dispatch(Action("trigger"))
+        saga_ran.wait(timeout=1.0)
+        assert saga_ran.is_set()
+        store.shutdown()
+
+    def test_propagates_quit(self):
+        """Quit from a child reducer should propagate through combine_reducers."""
+
+        def quitter(state, action):
+            if state is None:
+                return 0
+            if action.type == "quit":
+                return Quit(state=99, code=1)
+            return state
+
+        def other(state, action):
+            return state or 0
+
+        combined = combine_reducers(quitter=quitter, other=other)
+        store = Store(combined, None)
+        store.dispatch(Action("quit"))
+        assert store.quit_requested
+        assert store.exit_code == 1
+        assert store.state["quitter"] == 99
+        store.shutdown()
+
+
+class TestStoreQuit:
+    def test_quit_sets_flag(self):
+        def reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "quit":
+                return Quit(state=42)
+            return state
+
+        store = Store(reducer, None)
+        assert not store.quit_requested
+        store.dispatch(Action("quit"))
+        assert store.quit_requested
+        assert store.state == 42
+        assert store.exit_code == 0
+        store.shutdown()
+
+    def test_quit_with_exit_code(self):
+        def reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "fail":
+                return Quit(state=0, code=1)
+            return state
+
+        store = Store(reducer, None)
+        store.dispatch(Action("fail"))
+        assert store.quit_requested
+        assert store.exit_code == 1
+        store.shutdown()
+
+    def test_quit_with_sagas(self):
+        saga_ran = threading.Event()
+
+        def cleanup():
+            saga_ran.set()
+            yield Put(Action("cleaned"))
+
+        def reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "quit":
+                return Quit(state=0, sagas=(cleanup,))
+            return state
+
+        store = Store(reducer, None)
+        store.dispatch(Action("quit"))
+        saga_ran.wait(timeout=1.0)
+        assert store.quit_requested
+        assert saga_ran.is_set()
+        store.shutdown()
+
+    def test_quit_not_set_by_default(self):
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        assert not store.quit_requested
+        assert store.exit_code == 0
+        store.shutdown()

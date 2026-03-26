@@ -1,0 +1,10 @@
+{% from "components/_defs.txt" import status_line %}
+{% set total = state.todos | length %}
+{% set done = state.todos | selectattr("done") | list | length %}
+{% if total == 0 %}
+{{ status_line("success", "All clear — no todos left!") }}
+{% elif done == total %}
+{{ status_line("success", "All done! " ~ total ~ " of " ~ total ~ " completed.") }}
+{% else %}
+{{ status_line("warning", "See you later! " ~ done ~ "/" ~ total ~ " completed, " ~ (total - done) ~ " remaining.") }}
+{% endif %}

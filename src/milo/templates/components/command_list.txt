@@ -1,0 +1,13 @@
+{#- Command list component.
+
+    Expects in scope:
+        commands  -- list of dicts: {name, description, aliases (optional), tags (optional)}
+        title     -- optional section title (default: "Commands")
+        grouped   -- optional bool, if true group by first tag (default: false)
+-#}
+{%- from "components/_defs.txt" import section, command_row, tag_list -%}
+
+{{ section(title | default("Commands")) }}
+{% for cmd in commands %}
+{{ command_row(cmd.name, cmd.get("description", ""), cmd.get("aliases", []), cmd.get("tags", [])) }}
+{% endfor %}

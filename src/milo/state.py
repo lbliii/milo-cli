@@ -17,6 +17,7 @@ from milo._types import (
     Delay,
     Fork,
     Put,
+    Quit,
     ReducerResult,
     Select,
 )
@@ -45,6 +46,8 @@ class Store:
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._recording: list[dict] | None = [] if record else None
         self._record_path = record if isinstance(record, (str, Path)) else None
+        self._quit = threading.Event()
+        self._exit_code = 0
 
         # Build middleware chain
         self._dispatch_fn = self._base_dispatch
@@ -67,6 +70,8 @@ class Store:
 
     def _base_dispatch(self, action: Action) -> None:
         """Core dispatch: reducer + saga scheduling + recording."""
+        quit_signal = False
+
         with self._lock:
             try:
                 result = self._reducer(self._state, action)
@@ -74,9 +79,18 @@ class Store:
                 raise StateError(ErrorCode.STA_REDUCER, f"Reducer error: {e}") from e
 
             sagas = ()
+
+            # Unwrap Quit — may wrap a ReducerResult or plain state
+            if isinstance(result, Quit):
+                quit_signal = True
+                self._exit_code = result.code
+                sagas = result.sagas
+                result = result.state
+
+            # Unwrap ReducerResult
             if isinstance(result, ReducerResult):
                 self._state = result.state
-                sagas = result.sagas
+                sagas = sagas + result.sagas
             else:
                 self._state = result
 
@@ -99,6 +113,10 @@ class Store:
         # Schedule sagas outside the lock
         for saga_fn in sagas:
             self.run_saga(saga_fn())
+
+        # Set quit after sagas are scheduled and listeners notified
+        if quit_signal:
+            self._quit.set()
 
     def run_saga(self, saga: Any) -> None:
         """Schedule a saga on the thread pool."""
@@ -149,6 +167,16 @@ class Store:
         return unsubscribe
 
     @property
+    def quit_requested(self) -> bool:
+        """True if a reducer returned Quit."""
+        return self._quit.is_set()
+
+    @property
+    def exit_code(self) -> int:
+        """Exit code from the Quit signal (default 0)."""
+        return self._exit_code
+
+    @property
     def recording(self) -> list[dict] | None:
         """Get session recording if enabled."""
         return self._recording
@@ -162,23 +190,40 @@ def combine_reducers(**reducers: Callable) -> Callable:
     """Combine multiple reducers into one that manages a dict state.
 
     Each reducer manages a slice of state under its keyword name.
+    Sagas from ReducerResult and Quit are collected and propagated.
     """
 
-    def combined(state: dict | None, action: Action) -> dict:
+    def combined(state: dict | None, action: Action) -> dict | ReducerResult | Quit:
         if state is None:
             state = {}
         next_state = {}
         changed = False
+        all_sagas: list[Callable] = []
+        quit_signal: Quit | None = None
+
         for key, reducer in reducers.items():
             prev = state.get(key)
             next_val = reducer(prev, action)
-            if isinstance(next_val, ReducerResult):
+            if isinstance(next_val, Quit):
+                quit_signal = next_val
                 next_state[key] = next_val.state
+                all_sagas.extend(next_val.sagas)
+                changed = True
+            elif isinstance(next_val, ReducerResult):
+                next_state[key] = next_val.state
+                all_sagas.extend(next_val.sagas)
                 changed = True
             else:
                 next_state[key] = next_val
             if next_state[key] is not prev:
                 changed = True
-        return next_state if changed else state
+
+        result = next_state if changed else state
+
+        if quit_signal is not None:
+            return Quit(state=result, code=quit_signal.code, sagas=tuple(all_sagas))
+        if all_sagas:
+            return ReducerResult(state=result, sagas=tuple(all_sagas))
+        return result
 
     return combined

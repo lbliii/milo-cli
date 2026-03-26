@@ -218,3 +218,12 @@ class ReducerResult:
 
     state: Any
     sagas: tuple[Callable, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class Quit:
+    """Signal the app to exit. Return from a reducer to stop the event loop."""
+
+    state: Any
+    code: int = 0
+    sagas: tuple[Callable, ...] = ()

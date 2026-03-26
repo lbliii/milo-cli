@@ -17,6 +17,7 @@ from milo._types import (
     FormState,
     Key,
     Put,
+    Quit,
     ReducerResult,
     RenderTarget,
     Screen,
@@ -122,6 +123,30 @@ class TestReducerResult:
 
         r = ReducerResult(state=42, sagas=(saga,))
         assert len(r.sagas) == 1
+
+
+class TestQuit:
+    def test_basic(self):
+        q = Quit(state=42)
+        assert q.state == 42
+        assert q.code == 0
+        assert q.sagas == ()
+
+    def test_with_code(self):
+        q = Quit(state=0, code=1)
+        assert q.code == 1
+
+    def test_with_sagas(self):
+        def saga():
+            yield
+
+        q = Quit(state=0, sagas=(saga,))
+        assert len(q.sagas) == 1
+
+    def test_frozen(self):
+        q = Quit(state=0)
+        with pytest.raises(AttributeError):
+            q.state = 1
 
 
 class TestEnums:

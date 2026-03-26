@@ -1,0 +1,21 @@
+{% from "components/_defs.txt" import header, status_line, kv_pair, key_hints %}
+{{ header("URL Fetcher") }}
+{{ hr() }}
+
+  {{ "URL:" | bold }} {{ state.url }}
+
+{% if state.status == "idle" %}
+  Press {{ "Enter" | green }} to fetch.
+{% elif state.status == "loading" %}
+  {{ status_line("warning", "Fetching..." | bold | yellow) }}
+{% elif state.status == "done" %}
+  {{ status_line("success", "Done") }}
+  {{ kv_pair("Status", state.status_code) }}
+  {{ kv_pair("Size", state.content_length | filesizeformat) }}
+{% elif state.status == "error" %}
+  {{ status_line("error", "Error") }}
+  {{ state.error_message | dim }}
+{% endif %}
+
+{{ hr() }}
+{{ key_hints([{"key": "enter", "action": "fetch"}, {"key": "esc", "action": "quit"}]) }}

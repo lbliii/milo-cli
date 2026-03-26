@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from milo._errors import FlowError
-from milo._types import Action
+from milo._types import Action, Quit, ReducerResult
 from milo.flow import Flow, FlowScreen, FlowState
 
 
@@ -128,3 +128,43 @@ class TestFlowReducer:
         assert state.current_screen == "b"
         state = reducer(state, Action("go_back"))
         assert state.current_screen == "a"
+
+    def test_propagates_reducer_result_sagas(self):
+        """ReducerResult sagas from screen reducers should propagate."""
+
+        def saga_reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=1, sagas=(lambda: iter([]),))
+            return state
+
+        a = FlowScreen("a", "a.txt", saga_reducer)
+        b = FlowScreen("b", "b.txt", noop_reducer)
+        flow = a >> b
+        reducer = flow.build_reducer()
+        state = reducer(None, Action("@@INIT"))
+        result = reducer(state, Action("trigger"))
+        assert isinstance(result, ReducerResult)
+        assert result.sagas
+
+    def test_propagates_quit_from_screen(self):
+        """Quit from a screen reducer should propagate through the flow."""
+
+        def quit_reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "quit":
+                return Quit(state=99, code=1)
+            return state
+
+        a = FlowScreen("a", "a.txt", quit_reducer)
+        b = FlowScreen("b", "b.txt", noop_reducer)
+        flow = a >> b
+        reducer = flow.build_reducer()
+        state = reducer(None, Action("@@INIT"))
+        result = reducer(state, Action("quit"))
+        assert isinstance(result, Quit)
+        assert result.code == 1
+        assert isinstance(result.state, FlowState)
+        assert result.state.screen_states["a"] == 99

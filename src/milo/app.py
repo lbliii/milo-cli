@@ -6,11 +6,12 @@ import contextlib
 import os
 import signal
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from milo._errors import AppError, ErrorCode
+from milo._errors import AppError, ErrorCode, format_render_error
 from milo._types import Action, AppStatus, RenderTarget
 from milo.flow import Flow, FlowState
 from milo.input._platform import is_tty
@@ -38,6 +39,7 @@ class App:
         record: bool | str | Path = False,
         env: Any = None,
         flow: Flow | None = None,
+        exit_template: str = "",
     ) -> None:
         self._target = target
         self._tick_rate = tick_rate
@@ -45,7 +47,9 @@ class App:
         self._env = env
         self._flow = flow
         self._template_name = template
+        self._exit_template = exit_template
         self._status = AppStatus.IDLE
+        self._stop = threading.Event()
 
         # Flow mode: build reducer from flow
         if flow is not None:
@@ -67,6 +71,16 @@ class App:
         """Create App from a declarative Flow."""
         return cls(flow=flow, **kwargs)
 
+    @classmethod
+    def render(cls, template: str, state: Any = None, *, env: Any = None) -> str:
+        """One-shot render of a template with state. Returns the rendered string."""
+        if env is None:
+            from milo.templates import get_env
+
+            env = get_env()
+        tmpl = env.get_template(template)
+        return tmpl.render(state=state)
+
     def run(self) -> Any:
         """Run the event loop. Returns final state."""
         store = Store(
@@ -79,9 +93,17 @@ class App:
         if self._target == RenderTarget.HTML or not is_tty():
             # Single render pass, no input
             self._render_once(store.state)
+            if self._exit_template:
+                env = self._get_env()
+                try:
+                    self._render_exit(store.state, env)
+                except Exception as e:
+                    msg = format_render_error(e, template_name=self._exit_template, env=env)
+                    sys.stderr.write(f"[milo] {msg}\n")
             return store.state
 
         self._status = AppStatus.RUNNING
+        self._stop.clear()
 
         # Set up signal handler for resize
         original_sigwinch = None
@@ -100,14 +122,12 @@ class App:
         # Set up tick timer
         tick_thread = None
         if self._tick_rate > 0:
-            import threading
-
             stop_tick = threading.Event()
 
             def _tick_loop() -> None:
                 while not stop_tick.is_set():
                     stop_tick.wait(self._tick_rate)
-                    if not stop_tick.is_set() and self._status == AppStatus.RUNNING:
+                    if not stop_tick.is_set() and not self._stop.is_set():
                         store.dispatch(Action("@@TICK"))
 
             tick_thread = threading.Thread(target=_tick_loop, daemon=True)
@@ -115,6 +135,7 @@ class App:
 
         env = self._get_env()
         renderer = None
+        quit_dispatched = False
 
         try:
             # Try to use kida LiveRenderer for flicker-free rendering
@@ -135,28 +156,28 @@ class App:
             self._render_state(store.state, env, renderer)
 
             # Input loop
-            try:
-                with KeyReader() as keys:
-                    for key in keys:
-                        if self._status != AppStatus.RUNNING:
-                            break
+            with KeyReader() as keys:
+                for key in keys:
+                    if self._stop.is_set() or store.quit_requested:
+                        break
 
-                        # Ctrl+C or Escape quits
-                        if key.ctrl and key.char == "c":
-                            store.dispatch(Action("@@QUIT"))
+                    # Ctrl+C: first dispatches @@QUIT, second force-exits
+                    if key.ctrl and key.char == "c":
+                        if quit_dispatched:
                             break
-
-                        store.dispatch(Action("@@KEY", payload=key))
-
-                        # Check if the app should stop
-                        state = store.state
-                        if self._should_quit(state):
-                            store.dispatch(Action("@@QUIT"))
+                        quit_dispatched = True
+                        store.dispatch(Action("@@QUIT"))
+                        if store.quit_requested:
                             break
-            except Exception:
-                pass
+                        continue
+
+                    store.dispatch(Action("@@KEY", payload=key))
+
+                    if store.quit_requested:
+                        break
 
             self._status = AppStatus.STOPPED
+            self._stop.set()
             unsubscribe()
 
         finally:
@@ -174,13 +195,17 @@ class App:
             with contextlib.suppress(Exception):
                 renderer.clear()
 
-        return store.state
+        final_state = store.state
 
-    def _should_quit(self, state: Any) -> bool:
-        """Check if state signals the app should quit."""
-        if hasattr(state, "submitted") and state.submitted:
-            return True
-        return bool(isinstance(state, dict) and state.get("quit"))
+        # Render exit template if provided
+        if self._exit_template:
+            try:
+                self._render_exit(final_state, env)
+            except Exception as e:
+                msg = format_render_error(e, template_name=self._exit_template, env=env)
+                sys.stderr.write(f"[milo] {msg}\n")
+
+        return final_state
 
     def _get_env(self) -> Any:
         """Get or create the kida Environment."""
@@ -214,8 +239,21 @@ class App:
             else:
                 sys.stdout.write("\033[2J\033[H" + output)
                 sys.stdout.flush()
-        except Exception:
-            pass
+        except Exception as e:
+            template_name = self._get_template_name(state)
+            msg = format_render_error(e, template_name=template_name, env=env)
+            sys.stderr.write(f"[milo] {msg}\n")
+
+    def _render_exit(self, state: Any, env: Any) -> None:
+        """Render the exit template once to stdout."""
+        template = env.get_template(self._exit_template)
+        render_state = state
+        if isinstance(state, FlowState):
+            # For flows, pass all screen states so exit template can reference any data
+            render_state = state.screen_states
+        output = template.render(state=render_state)
+        sys.stdout.write(output + "\n")
+        sys.stdout.flush()
 
     def _render_once(self, state: Any) -> None:
         """Single render pass (non-TTY or HTML mode)."""
@@ -231,8 +269,10 @@ class App:
             output = template.render(state=render_state)
             sys.stdout.write(output + "\n")
             sys.stdout.flush()
-        except Exception:
-            pass
+        except Exception as e:
+            template_name = self._get_template_name(state)
+            msg = format_render_error(e, template_name=template_name)
+            sys.stderr.write(f"[milo] {msg}\n")
 
 
 def run(*, template: str, reducer: Callable, initial_state: Any, **kwargs: Any) -> Any:

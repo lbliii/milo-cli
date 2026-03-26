@@ -1,0 +1,41 @@
+{% from "components/_defs.txt" import header, status_line, key_hints %}
+{{ header("File Picker") }}
+{{ hr() }}
+
+  {{ icons.arrow_r | cyan }} {{ state.cwd | bold }}
+
+{% if state.loading %}
+  {{ "Loading..." | yellow | bold }}
+{% elif state.error %}
+  {{ status_line("error", state.error) }}
+{% elif state.entries | length == 0 %}
+  {{ "(empty directory)" | dim }}
+{% else %}
+{% set visible_start = state.scroll_offset %}
+{% set visible_end = state.scroll_offset + viewport_height %}
+{% if visible_start > 0 %}
+  {{ ("  ... " ~ (visible_start | string) ~ " more above") | dim }}
+{% endif %}
+{% for entry in state.entries[visible_start:visible_end] %}
+{% set idx = visible_start + loop.index0 %}
+{% if idx == state.cursor %}
+  {{ icons.arrow_r | green }} {% if entry.is_dir %}{{ (entry.name ~ "/") | bold | cyan }}{% else %}{{ entry.name }}{% endif %}{% if not entry.is_dir and entry.size > 0 %}  {{ format_size(entry.size) | dim }}{% endif %}
+
+{% else %}
+    {% if entry.is_dir %}{{ (entry.name ~ "/") | cyan }}{% else %}{{ entry.name | dim }}{% endif %}{% if not entry.is_dir and entry.size > 0 %}  {{ format_size(entry.size) | dim }}{% endif %}
+
+{% endif %}
+{% endfor %}
+{% set remaining = (state.entries | length) - visible_end %}
+{% if remaining > 0 %}
+  {{ ("  ... " ~ (remaining | string) ~ " more below") | dim }}
+{% endif %}
+{% endif %}
+
+{{ hr() }}
+{{ key_hints([
+  {"key": "up/down", "action": "navigate"},
+  {"key": "enter", "action": "open"},
+  {"key": "backspace", "action": "parent"},
+  {"key": "esc/q", "action": "quit"},
+]) }}

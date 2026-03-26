@@ -1,8 +1,8 @@
 {% for spec, field in zip(state.specs, state.fields) %}
-{% if field.focused %}> {% else %}  {% endif %}{{ spec.label }}{% if field.error %} ({{ field.error }}){% endif %}
-{% if spec.field_type.name == "TEXT" or spec.field_type.name == "PASSWORD" %}  {% if spec.field_type.name == "PASSWORD" %}{{ "*" * (field.value | length) }}{% else %}{{ field.value }}{% endif %}
+{% if field.focused %}{{ ">" | green | bold }} {{ spec.label | bold }}{% else %}  {{ spec.label | dim }}{% endif %}{% if field.error %} {{ field.error | red }}{% endif %}
+{% if spec.field_type.name == "TEXT" or spec.field_type.name == "PASSWORD" %}  {% if spec.field_type.name == "PASSWORD" %}{{ "*" * (field.value | length) | dim }}{% else %}{{ field.value }}{% endif %}
 {% elif spec.field_type.name == "SELECT" %}{% for choice in spec.choices %}
-  {% if loop.index0 == field.selected_index %}[x]{% else %}[ ]{% endif %} {{ choice }}{% endfor %}
-{% elif spec.field_type.name == "CONFIRM" %}  {% if field.value %}Yes{% else %}No{% endif %}
+  {% if loop.index0 == field.selected_index %}{{ icons.check | green }} {{ choice | bold }}{% else %}  {{ choice | dim }}{% endif %}{% endfor %}
+{% elif spec.field_type.name == "CONFIRM" %}  {% if field.value %}{{ "Yes" | green | bold }}{% else %}{{ "No" | dim }}{% endif %}
 {% endif %}
 {% endfor %}

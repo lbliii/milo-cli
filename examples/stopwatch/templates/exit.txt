@@ -1,0 +1,5 @@
+{% from "components/_defs.txt" import status_line %}
+{% set mins = (state.elapsed // 60) | int %}
+{% set secs = (state.elapsed % 60) | int %}
+{% set ms = ((state.elapsed * 100) % 100) | int %}
+{{ status_line("success", "Stopwatch stopped at " ~ ("{:02d}:{:02d}.{:02d}" | format(mins, secs, ms) | bold | green) ~ (" with " ~ (state.laps | length) ~ " lap" ~ ("s" if state.laps | length != 1 else "") if state.laps else "") ~ ".") }}

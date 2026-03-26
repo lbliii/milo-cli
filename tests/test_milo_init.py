@@ -237,6 +237,18 @@ class TestLazyImports:
 
         assert milo.DevServer is DevServer
 
+    def test_quit_accessible(self):
+        import milo
+        from milo._types import Quit
+
+        assert milo.Quit is Quit
+
+    def test_make_form_reducer_accessible(self):
+        import milo
+        from milo.form import make_form_reducer
+
+        assert milo.make_form_reducer is make_form_reducer
+
     def test_unknown_attribute_raises(self):
         import milo
 
