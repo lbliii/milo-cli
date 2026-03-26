@@ -79,11 +79,11 @@ def _Py_mod_gil() -> int:  # noqa: N802
 __version__ = "0.1.0"
 __all__ = [
     "BUILTIN_ACTIONS",
+    "CLI",
     "Action",
     "App",
     "AppError",
     "AppStatus",
-    "CLI",
     "Call",
     "CommandDef",
     "Delay",

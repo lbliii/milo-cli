@@ -7,7 +7,7 @@ import pytest
 from milo.templates import get_env
 
 
-@pytest.fixture()
+@pytest.fixture
 def env():
     return get_env()
 

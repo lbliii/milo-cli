@@ -12,7 +12,6 @@ from milo.mcp import _call_tool, _handle_method, _list_tools
 from milo.output import format_output
 from milo.schema import function_to_schema
 
-
 # ---------------------------------------------------------------------------
 # Schema tests
 # ---------------------------------------------------------------------------
