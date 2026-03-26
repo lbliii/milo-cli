@@ -1,0 +1,41 @@
+{% from "components/_defs.txt" import header, key_hints %}
+{{ header("Todo List") }}
+{{ hr() }}
+
+{# --- Filter tabs --- #}
+  {% if state.filter.name == "ALL" %}{{ "[All]" | bold | cyan }}{% else %}{{ "All" | dim }}{% endif %}   {% if state.filter.name == "ACTIVE" %}{{ "[Active]" | bold | cyan }}{% else %}{{ "Active" | dim }}{% endif %}   {% if state.filter.name == "COMPLETED" %}{{ "[Completed]" | bold | cyan }}{% else %}{{ "Completed" | dim }}{% endif %}
+
+{# --- Todo items --- #}
+{% set visible = filtered_todos(state) %}
+{% if visible %}
+{% for todo in visible %}
+{% if loop.index0 == state.cursor %}  {{ icons.arrow_r | cyan }} {% else %}    {% endif %}{% if todo.done %}{{ icons.check | green }} {{ todo.text | dim }}{% else %}{{ icons.cross | red }} {{ todo.text }}{% endif %}
+{% endfor %}
+{% else %}
+  {{ "No items to show." | dim }}
+{% endif %}
+
+{# --- Input line (add mode) --- #}
+{% if state.mode.name == "ADDING" %}
+{{ hr() }}
+  {{ "New todo:" | bold | yellow }} {{ state.input_text }}{{ "_" | dim }}
+{% endif %}
+
+{{ hr() }}
+{# --- Status bar --- #}
+{% set total = state.todos | length %}
+{% set done = state.todos | selectattr("done") | list | length %}
+  {{ (total | string) | bold }} items, {{ (done | string) | green }} completed, {{ ((total - done) | string) | yellow }} active
+
+{# --- Key hints --- #}
+{% if state.mode.name == "ADDING" %}
+{{ key_hints([{"key": "enter", "action": "confirm"}, {"key": "esc", "action": "cancel"}]) }}
+{% else %}
+{{ key_hints([
+  {"key": "a", "action": "add"},
+  {"key": "space", "action": "toggle"},
+  {"key": "d", "action": "delete"},
+  {"key": "1/2/3", "action": "filter"},
+  {"key": "q", "action": "quit"},
+]) }}
+{% endif %}

@@ -1,4 +1,5 @@
-{{ icons.check | green | bold }} {{ "All done!" | bold | green }}
+{% from "components/_defs.txt" import status_line %}
+{{ status_line("success", "All done!" | green) }}
 {{ hr() }}
 
   Your project is ready.

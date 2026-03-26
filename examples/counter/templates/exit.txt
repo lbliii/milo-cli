@@ -1,1 +1,2 @@
-{{ icons.check | green }} {{ "Counter" | bold }} finished at {{ state.count | string | bold | green }}.
+{% from "components/_defs.txt" import status_line %}
+{{ status_line("success", "Counter finished at " ~ (state.count | string | bold | green) ~ ".") }}

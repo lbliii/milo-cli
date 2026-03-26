@@ -1,7 +1,13 @@
-{{ "Counter" | bold | cyan }}
+{% from "components/_defs.txt" import header, key_hints %}
+{{ header("Counter") }}
 {{ hr() }}
 
   {{ state.count | string | bold | green }}
 
 {{ hr() }}
-{{ "↑" | dim }} increment  {{ "↓" | dim }} decrement  {{ "r" | dim }} reset  {{ "esc" | dim }} quit
+{{ key_hints([
+  {"key": "↑", "action": "increment"},
+  {"key": "↓", "action": "decrement"},
+  {"key": "r", "action": "reset"},
+  {"key": "esc", "action": "quit"},
+]) }}

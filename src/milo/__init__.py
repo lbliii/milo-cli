@@ -55,6 +55,13 @@ def __getattr__(name: str):
         "HelpRenderer": "help",
         # Dev
         "DevServer": "dev",
+        # Commands (AI-native)
+        "CLI": "commands",
+        "CommandDef": "commands",
+        "function_to_schema": "schema",
+        "format_output": "output",
+        "write_output": "output",
+        "generate_llms_txt": "llms",
     }
     if name in _imports:
         import importlib
@@ -76,7 +83,9 @@ __all__ = [
     "App",
     "AppError",
     "AppStatus",
+    "CLI",
     "Call",
+    "CommandDef",
     "Delay",
     "DevServer",
     "ErrorCode",
@@ -108,8 +117,12 @@ __all__ = [
     "form",
     "form_reducer",
     "format_error",
+    "format_output",
     "format_render_error",
+    "function_to_schema",
+    "generate_llms_txt",
     "make_form_reducer",
     "render_html",
     "run",
+    "write_output",
 ]

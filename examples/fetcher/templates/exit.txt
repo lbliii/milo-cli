@@ -1,7 +1,8 @@
+{% from "components/_defs.txt" import status_line %}
 {% if state.status == "done" %}
-{{ icons.check | green }} Fetched {{ state.url | bold }}: {{ state.status_code }} ({{ state.content_length | filesizeformat }})
+{{ status_line("success", "Fetched " ~ (state.url | bold) ~ ": " ~ state.status_code ~ " (" ~ (state.content_length | filesizeformat) ~ ")") }}
 {% elif state.status == "error" %}
-{{ icons.cross | red }} {{ state.error_message | dim }}
+{{ status_line("error", state.error_message) }}
 {% else %}
-{{ "Goodbye!" | dim }}
+{{ status_line("info", "Goodbye!") }}
 {% endif %}

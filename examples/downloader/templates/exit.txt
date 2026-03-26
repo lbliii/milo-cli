@@ -1,0 +1,15 @@
+{% from "components/_defs.txt" import status_line %}
+{% if state.phase == "done" %}
+{{ status_line("success", "Parallel download complete (" ~ ("{:.2f}" | format(state.elapsed)) ~ "s)") }}
+{% for u in state.urls %}
+{% if u.status == "done" %}
+  {{ status_line("success", u.url ~ " " ~ u.status_code ~ " " ~ (u.content_length | filesizeformat)) }}
+{% elif u.status == "error" %}
+  {{ status_line("error", u.url, u.error_message) }}
+{% endif %}
+{% endfor %}
+{% elif state.phase == "fetching" %}
+{{ status_line("warning", "Cancelled during fetch.") }}
+{% else %}
+{{ status_line("info", "Goodbye!") }}
+{% endif %}
