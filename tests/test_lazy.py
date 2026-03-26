@@ -18,18 +18,18 @@ class TestLazyCommandDef:
     def test_create(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         assert cmd.name == "greet"
         assert cmd.description == "Say hello"
-        assert cmd.import_path == "tests._lazy_handlers:greet"
+        assert cmd.import_path == "_lazy_handlers:greet"
         assert cmd.hidden is False
 
     def test_resolve(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         resolved = cmd.resolve()
@@ -41,7 +41,7 @@ class TestLazyCommandDef:
     def test_resolve_caches(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         first = cmd.resolve()
@@ -51,7 +51,7 @@ class TestLazyCommandDef:
     def test_schema_from_resolve(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         schema = cmd.schema
@@ -67,7 +67,7 @@ class TestLazyCommandDef:
         }
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
             schema=pre_schema,
         )
@@ -79,7 +79,7 @@ class TestLazyCommandDef:
     def test_handler_property_resolves(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         handler = cmd.handler
@@ -107,7 +107,7 @@ class TestLazyCommandDef:
     def test_invalid_attribute(self):
         cmd = LazyCommandDef(
             "bad",
-            "tests._lazy_handlers:nonexistent",
+            "_lazy_handlers:nonexistent",
             description="Bad attr",
         )
         with pytest.raises(AttributeError):
@@ -116,7 +116,7 @@ class TestLazyCommandDef:
     def test_thread_safety(self):
         cmd = LazyCommandDef(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         results = []
@@ -151,7 +151,7 @@ class TestCLILazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         assert "greet" in cli.commands
@@ -161,7 +161,7 @@ class TestCLILazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         result = cli.call("greet", name="Lazy")
@@ -171,7 +171,7 @@ class TestCLILazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "add",
-            "tests._lazy_handlers:add",
+            "_lazy_handlers:add",
             description="Add numbers",
         )
         result = cli.run(["add", "--a", "3", "--b", "7"])
@@ -181,7 +181,7 @@ class TestCLILazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
             aliases=("g",),
         )
@@ -203,7 +203,7 @@ class TestCLILazy:
 
         cli.lazy_command(
             "lazy",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Lazy command",
         )
 
@@ -217,7 +217,7 @@ class TestCLILazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         walked = cli.walk_commands()
@@ -226,7 +226,7 @@ class TestCLILazy:
     def test_lazy_with_precomputed_schema_no_import(self):
         """Ensure pre-computed schema avoids module import."""
         # Clear the module from cache to detect import
-        mod_name = "tests._lazy_handlers"
+        mod_name = "_lazy_handlers"
         was_loaded = mod_name in sys.modules
         if was_loaded:
             saved = sys.modules.pop(mod_name)
@@ -266,7 +266,7 @@ class TestGroupLazy:
         site = cli.group("site")
         site.lazy_command(
             "build",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Build site",
         )
         cmd = cli.get_command("site.build")
@@ -278,7 +278,7 @@ class TestGroupLazy:
         site = cli.group("site")
         site.lazy_command(
             "build",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Build site",
         )
         result = cli.call("site.build", name="GroupLazy")
@@ -289,7 +289,7 @@ class TestGroupLazy:
         site = cli.group("site")
         site.lazy_command(
             "add",
-            "tests._lazy_handlers:add",
+            "_lazy_handlers:add",
             description="Add numbers",
         )
         result = cli.run(["site", "add", "--a", "10", "--b", "20"])
@@ -308,7 +308,7 @@ class TestMCPLazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
             schema={
                 "type": "object",
@@ -325,7 +325,7 @@ class TestMCPLazy:
         cli = CLI(name="app")
         cli.lazy_command(
             "greet",
-            "tests._lazy_handlers:greet",
+            "_lazy_handlers:greet",
             description="Say hello",
         )
         result = _call_tool(cli, {"name": "greet", "arguments": {"name": "MCP"}})
