@@ -26,6 +26,8 @@ milo = "milo.cli:main"
 
 [project.optional-dependencies]
 docs = ["bengal>=0.2.6"]
+yaml = ["pyyaml>=6.0"]
+watch = ["watchfiles>=1.0"]
 
 [project.urls]
 Homepage = "https://lbliii.github.io/milo/"

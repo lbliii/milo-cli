@@ -37,18 +37,53 @@ class ErrorCode(Enum):
     DEV_WATCH = "M-DEV-001"
     DEV_RELOAD = "M-DEV-002"
 
+    # Config errors
+    CFG_PARSE = "M-CFG-001"
+    CFG_MERGE = "M-CFG-002"
+    CFG_VALIDATE = "M-CFG-003"
+    CFG_MISSING = "M-CFG-004"
+
+    # Pipeline errors
+    PIP_PHASE = "M-PIP-001"
+    PIP_TIMEOUT = "M-PIP-002"
+    PIP_DEPENDENCY = "M-PIP-003"
+
+    # Plugin errors
+    PLG_LOAD = "M-PLG-001"
+    PLG_HOOK = "M-PLG-002"
+
+    # Command errors
+    CMD_NOT_FOUND = "M-CMD-001"
+    CMD_AMBIGUOUS = "M-CMD-002"
+
 
 class MiloError(Exception):
     """Base error for all milo errors."""
 
-    def __init__(self, code: ErrorCode, message: str) -> None:
+    def __init__(
+        self,
+        code: ErrorCode,
+        message: str,
+        *,
+        suggestion: str = "",
+        context: dict[str, Any] | None = None,
+        docs_url: str = "",
+    ) -> None:
         self.code = code
         self.message = message
+        self.suggestion = suggestion
+        self.context = context or {}
+        self.docs_url = docs_url
         super().__init__(f"[{code.value}] {message}")
 
     def format_compact(self) -> str:
         """Format error for terminal display, consistent with kida's format_compact()."""
-        return f"{self.code.value}: {self.message}"
+        parts = [f"{self.code.value}: {self.message}"]
+        if self.suggestion:
+            parts.append(f"  hint: {self.suggestion}")
+        if self.docs_url:
+            parts.append(f"  docs: {self.docs_url}")
+        return "\n".join(parts)
 
 
 class InputError(MiloError):
@@ -73,6 +108,18 @@ class FlowError(MiloError):
 
 class DevError(MiloError):
     """Dev server errors (watch, reload)."""
+
+
+class ConfigError(MiloError):
+    """Configuration errors (parse, merge, validate)."""
+
+
+class PipelineError(MiloError):
+    """Pipeline orchestration errors (phase, timeout, dependency)."""
+
+
+class PluginError(MiloError):
+    """Plugin system errors (load, hook)."""
 
 
 def format_error(error: Exception) -> str:
@@ -135,6 +182,8 @@ def _get_hint(error: Exception) -> str:
 
 def _get_docs_url(error: Exception) -> str:
     """Extract docs URL from an error."""
+    if hasattr(error, "docs_url") and error.docs_url:
+        return str(error.docs_url)
     if hasattr(error, "code") and hasattr(error.code, "docs_url"):
         return str(error.code.docs_url)
     return ""

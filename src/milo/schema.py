@@ -42,6 +42,10 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         if name == "return":
             continue
 
+        # Skip Context parameters (injected by CLI dispatcher)
+        if _is_context_type(annotation, name):
+            continue
+
         is_optional = _is_optional(annotation)
         if is_optional:
             annotation = _unwrap_optional(annotation)
@@ -89,3 +93,12 @@ def _unwrap_optional(annotation: Any) -> Any:
     args = get_args(annotation)
     non_none = [a for a in args if a is not type(None)]
     return non_none[0] if len(non_none) == 1 else str
+
+
+def _is_context_type(annotation: Any, name: str) -> bool:
+    """Check if an annotation refers to milo's Context type."""
+    if name == "ctx":
+        return True
+    if isinstance(annotation, type) and annotation.__name__ == "Context":
+        return True
+    return isinstance(annotation, str) and annotation in ("Context", "milo.context.Context")

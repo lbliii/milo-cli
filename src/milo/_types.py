@@ -75,6 +75,11 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
         "@@QUIT",
         "@@NAVIGATE",
         "@@HOT_RELOAD",
+        "@@PIPELINE_START",
+        "@@PIPELINE_COMPLETE",
+        "@@PHASE_START",
+        "@@PHASE_COMPLETE",
+        "@@PHASE_FAILED",
     }
 )
 

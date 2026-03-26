@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from milo.commands import CLI
+    from milo.commands import CLI, CommandDef
+    from milo.groups import Group
 
 
 def generate_llms_txt(cli: CLI) -> str:
@@ -13,7 +14,7 @@ def generate_llms_txt(cli: CLI) -> str:
 
     Follows the llms.txt specification (https://llmstxt.org/).
     Output is a curated Markdown document that helps AI agents
-    discover what the CLI can do.
+    discover what the CLI can do. Groups produce nested headings.
     """
     lines: list[str] = []
 
@@ -32,8 +33,8 @@ def generate_llms_txt(cli: CLI) -> str:
         lines.append("")
 
     # Group commands by tag
-    tagged: dict[str, list] = {}
-    untagged: list = []
+    tagged: dict[str, list[CommandDef]] = {}
+    untagged: list[CommandDef] = []
 
     for cmd in cli.commands.values():
         if cmd.hidden:
@@ -59,10 +60,36 @@ def generate_llms_txt(cli: CLI) -> str:
         lines.extend(_format_command(cmd) for cmd in cmds)
         lines.append("")
 
+    # Command groups
+    for group in cli.groups.values():
+        if group.hidden:
+            continue
+        _format_group(group, lines, depth=2)
+
     return "\n".join(lines)
 
 
-def _format_command(cmd) -> str:
+def _format_group(group: Group, lines: list[str], depth: int) -> None:
+    """Format a command group as a section with nested headings."""
+    heading = "#" * depth
+    title = group.description or group.name.replace("-", " ").replace("_", " ").title()
+    lines.append(f"{heading} {title}")
+    lines.append("")
+
+    for cmd in group.commands.values():
+        if cmd.hidden:
+            continue
+        lines.append(_format_command(cmd))
+    if group.commands:
+        lines.append("")
+
+    for sub_group in group.groups.values():
+        if sub_group.hidden:
+            continue
+        _format_group(sub_group, lines, depth=depth + 1)
+
+
+def _format_command(cmd: CommandDef) -> str:
     """Format a single command as an llms.txt entry."""
     parts = [f"- **{cmd.name}**"]
 
