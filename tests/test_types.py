@@ -77,7 +77,7 @@ class TestAction:
         assert "@@INIT" in BUILTIN_ACTIONS
         assert "@@KEY" in BUILTIN_ACTIONS
         assert "@@QUIT" in BUILTIN_ACTIONS
-        assert len(BUILTIN_ACTIONS) == 8
+        assert len(BUILTIN_ACTIONS) == 13
 
 
 class TestEffects:

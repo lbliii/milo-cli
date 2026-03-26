@@ -57,14 +57,17 @@ def _handle_method(cli: CLI, method: str, params: dict[str, Any]) -> dict[str, A
 
 
 def _list_tools(cli: CLI) -> list[dict[str, Any]]:
-    """Generate MCP tools/list response from registered commands."""
+    """Generate MCP tools/list response from all commands including groups.
+
+    Group commands use dot-notation names: ``site.build``, ``site.config.show``.
+    """
     tools = []
-    for cmd in cli.commands.values():
+    for dotted_name, cmd in cli.walk_commands():
         if cmd.hidden:
             continue
         tools.append(
             {
-                "name": cmd.name,
+                "name": dotted_name,
                 "description": cmd.description,
                 "inputSchema": cmd.schema,
             }

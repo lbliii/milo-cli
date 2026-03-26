@@ -75,6 +75,11 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
         "@@QUIT",
         "@@NAVIGATE",
         "@@HOT_RELOAD",
+        "@@PIPELINE_START",
+        "@@PIPELINE_COMPLETE",
+        "@@PHASE_START",
+        "@@PHASE_COMPLETE",
+        "@@PHASE_FAILED",
     }
 )
 
@@ -197,7 +202,7 @@ class Select:
 class Fork:
     """Run another saga concurrently."""
 
-    saga: Generator
+    saga: Callable | Generator
 
 
 @dataclass(frozen=True, slots=True)

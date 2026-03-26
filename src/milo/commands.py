@@ -3,14 +3,33 @@
 from __future__ import annotations
 
 import argparse
+import difflib
+import importlib
 import inspect
 import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from milo.output import write_output
 from milo.schema import function_to_schema
+
+if TYPE_CHECKING:
+    from milo.context import Context
+    from milo.groups import Group
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalOption:
+    """A CLI-wide option available to all commands via Context."""
+
+    name: str
+    short: str = ""
+    option_type: type = str
+    default: Any = None
+    description: str = ""
+    is_flag: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,10 +45,99 @@ class CommandDef:
     hidden: bool = False
 
 
+class LazyCommandDef:
+    """A command whose handler is imported on first use.
+
+    Stores a dotted import path (``module:attribute``) and defers the
+    actual import until the command is invoked.  This keeps CLI startup
+    fast even with dozens of commands.
+
+    If *schema* is provided upfront, MCP ``tools/list`` and llms.txt
+    can be generated without importing the handler module at all.
+    """
+
+    __slots__ = (
+        "_lock",
+        "_resolved",
+        "_schema",
+        "aliases",
+        "description",
+        "hidden",
+        "import_path",
+        "name",
+        "tags",
+    )
+
+    def __init__(
+        self,
+        name: str,
+        import_path: str,
+        description: str = "",
+        *,
+        schema: dict[str, Any] | None = None,
+        aliases: tuple[str, ...] | list[str] = (),
+        tags: tuple[str, ...] | list[str] = (),
+        hidden: bool = False,
+    ) -> None:
+        self.name = name
+        self.description = description
+        self.import_path = import_path
+        self.aliases = tuple(aliases)
+        self.tags = tuple(tags)
+        self.hidden = hidden
+        self._schema = schema
+        self._resolved: CommandDef | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        """Return pre-computed schema or resolve to get it."""
+        if self._schema is not None:
+            return self._schema
+        return self.resolve().schema
+
+    @property
+    def handler(self) -> Callable[..., Any]:
+        """Resolve and return the handler function."""
+        return self.resolve().handler
+
+    def resolve(self) -> CommandDef:
+        """Import the handler and cache as a full CommandDef. Thread-safe."""
+        if self._resolved is not None:
+            return self._resolved
+
+        with self._lock:
+            # Double-check after acquiring lock
+            if self._resolved is not None:
+                return self._resolved
+
+            module_path, _, attr_name = self.import_path.rpartition(":")
+            if not module_path or not attr_name:
+                msg = f"Invalid import_path {self.import_path!r}: expected 'module.path:attribute'"
+                raise ValueError(msg)
+
+            module = importlib.import_module(module_path)
+            handler = getattr(module, attr_name)
+
+            schema = self._schema if self._schema is not None else function_to_schema(handler)
+
+            self._resolved = CommandDef(
+                name=self.name,
+                description=self.description,
+                handler=handler,
+                schema=schema,
+                aliases=self.aliases,
+                tags=self.tags,
+                hidden=self.hidden,
+            )
+            return self._resolved
+
+
 class CLI:
-    """Command-line application with typed commands.
+    """Command-line application with typed commands and nested groups.
 
     Each @command becomes a CLI subcommand, an MCP tool, and a help entry.
+    Groups create nested command namespaces.
 
     Usage::
 
@@ -40,14 +148,18 @@ class CLI:
             msg = f"Hello, {name}!"
             return msg.upper() if loud else msg
 
+        site = cli.group("site", description="Site operations")
+
+        @site.command("build", description="Build the site")
+        def build(output: str = "_site") -> str:
+            return f"Building to {output}"
+
         cli.run()
 
     CLI::
 
         myapp greet --name Alice
-        myapp greet --name Alice --loud
-        myapp greet --name Alice --format json
-        myapp --help
+        myapp site build --output _site
         myapp --llms-txt
         myapp --mcp
     """
@@ -62,8 +174,39 @@ class CLI:
         self.name = name or "app"
         self.description = description
         self.version = version
-        self._commands: dict[str, CommandDef] = {}
+        self._commands: dict[str, CommandDef | LazyCommandDef] = {}
         self._alias_map: dict[str, str] = {}
+        self._groups: dict[str, Group] = {}
+        self._group_alias_map: dict[str, str] = {}
+        self._global_options: list[GlobalOption] = []
+
+    def global_option(
+        self,
+        name: str,
+        *,
+        short: str = "",
+        option_type: type = str,
+        default: Any = None,
+        description: str = "",
+        is_flag: bool = False,
+    ) -> None:
+        """Register a global option available to all commands via Context.
+
+        Usage::
+
+            cli.global_option("environment", short="-e", default="local",
+                              description="Config environment")
+        """
+        self._global_options.append(
+            GlobalOption(
+                name=name,
+                short=short,
+                option_type=option_type,
+                default=default,
+                description=description,
+                is_flag=is_flag,
+            )
+        )
 
     def command(
         self,
@@ -105,13 +248,96 @@ class CLI:
 
         return decorator
 
+    def lazy_command(
+        self,
+        name: str,
+        import_path: str,
+        *,
+        description: str = "",
+        schema: dict[str, Any] | None = None,
+        aliases: tuple[str, ...] | list[str] = (),
+        tags: tuple[str, ...] | list[str] = (),
+        hidden: bool = False,
+    ) -> LazyCommandDef:
+        """Register a lazy-loaded command.
+
+        The handler module is not imported until the command is invoked.
+        This keeps CLI startup fast for large command sets.
+
+        Usage::
+
+            cli.lazy_command(
+                "build",
+                "myapp.commands.site:build_handler",
+                description="Build the site",
+            )
+        """
+        cmd = LazyCommandDef(
+            name=name,
+            import_path=import_path,
+            description=description,
+            schema=schema,
+            aliases=aliases,
+            tags=tags,
+            hidden=hidden,
+        )
+        self._commands[name] = cmd
+        for alias in aliases:
+            self._alias_map[alias] = name
+        return cmd
+
+    def group(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        aliases: tuple[str, ...] | list[str] = (),
+        hidden: bool = False,
+    ) -> Group:
+        """Create and register a command group.
+
+        Returns the Group for registering commands within it::
+
+            site = cli.group("site", description="Site operations")
+
+            @site.command("build", description="Build the site")
+            def build(output: str = "_site") -> str: ...
+        """
+        from milo.groups import Group as GroupClass
+
+        grp = GroupClass(name, description=description, aliases=aliases, hidden=hidden)
+        self._groups[name] = grp
+        for alias in aliases:
+            self._group_alias_map[alias] = name
+        return grp
+
+    def add_group(self, group: Group) -> None:
+        """Register an externally-created Group."""
+        self._groups[group.name] = group
+        for alias in group.aliases:
+            self._group_alias_map[alias] = group.name
+
     @property
-    def commands(self) -> dict[str, CommandDef]:
-        """All registered commands."""
+    def commands(self) -> dict[str, CommandDef | LazyCommandDef]:
+        """All registered top-level commands (eager and lazy)."""
         return dict(self._commands)
 
-    def get_command(self, name: str) -> CommandDef | None:
-        """Look up a command by name or alias."""
+    @property
+    def groups(self) -> dict[str, Group]:
+        """All registered top-level groups."""
+        return dict(self._groups)
+
+    def get_command(self, name: str) -> CommandDef | LazyCommandDef | None:
+        """Look up a command by name, alias, or dotted path.
+
+        Dotted paths traverse groups: ``get_command("site.build")``
+        resolves to the ``build`` command inside the ``site`` group.
+        """
+        # Dotted path: walk into groups
+        if "." in name:
+            return self._resolve_dotted(name)
+
+        # Top-level command
         if name in self._commands:
             return self._commands[name]
         resolved = self._alias_map.get(name)
@@ -119,8 +345,43 @@ class CLI:
             return self._commands.get(resolved)
         return None
 
+    def _resolve_dotted(self, path: str) -> CommandDef | LazyCommandDef | None:
+        """Resolve a dotted command path like 'site.config.show'."""
+        parts = path.split(".")
+        # Walk groups for all but the last part
+        current_group: Group | None = None
+        for part in parts[:-1]:
+            if current_group is None:
+                current_group = self._groups.get(part)
+                if current_group is None:
+                    resolved = self._group_alias_map.get(part)
+                    if resolved:
+                        current_group = self._groups.get(resolved)
+            else:
+                current_group = current_group.get_group(part)
+            if current_group is None:
+                return None
+
+        # Resolve the final part as a command
+        cmd_name = parts[-1]
+        if current_group is None:
+            return self.get_command(cmd_name)
+        return current_group.get_command(cmd_name)
+
+    def walk_commands(self) -> list[tuple[str, CommandDef | LazyCommandDef]]:
+        """Walk all commands in the tree, yielding (dotted_path, CommandDef).
+
+        Top-level commands have simple names. Group commands use dots::
+
+            [("greet", greet_cmd), ("site.build", build_cmd), ...]
+        """
+        result = [(cmd.name, cmd) for cmd in self._commands.values()]
+        for group in self._groups.values():
+            result.extend(group.walk_commands())
+        return result
+
     def build_parser(self) -> argparse.ArgumentParser:
-        """Build argparse parser from registered commands."""
+        """Build argparse parser from registered commands and groups."""
         parser = argparse.ArgumentParser(
             prog=self.name,
             description=self.description,
@@ -138,35 +399,115 @@ class CLI:
             help="Run as MCP server (JSON-RPC on stdin/stdout)",
         )
 
-        if self._commands:
+        # Built-in global options
+        parser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            default=0,
+            help="Increase verbosity (-v verbose, -vv debug)",
+        )
+        parser.add_argument(
+            "-q",
+            "--quiet",
+            action="store_true",
+            default=False,
+            help="Suppress non-error output",
+        )
+        parser.add_argument(
+            "--no-color",
+            action="store_true",
+            default=False,
+            help="Disable color output",
+        )
+
+        # User-defined global options
+        for opt in self._global_options:
+            flags = [f"--{opt.name.replace('_', '-')}"]
+            if opt.short:
+                flags.insert(0, opt.short)
+            kwargs: dict[str, Any] = {
+                "dest": opt.name,
+                "help": opt.description,
+                "default": opt.default,
+            }
+            if opt.is_flag:
+                kwargs["action"] = "store_true"
+            else:
+                kwargs["type"] = opt.option_type
+            parser.add_argument(*flags, **kwargs)
+
+        has_children = self._commands or self._groups
+        if has_children:
             subparsers = parser.add_subparsers(dest="_command")
-            for cmd in self._commands.values():
-                if cmd.hidden:
-                    continue
-                sub = subparsers.add_parser(
-                    cmd.name,
-                    help=cmd.description,
-                    aliases=list(cmd.aliases),
-                )
-                self._add_arguments(sub, cmd)
-                sub.add_argument(
-                    "--format",
-                    choices=["plain", "json", "table"],
-                    default="plain",
-                    help="Output format (default: plain)",
-                )
+            self._add_commands_to_subparsers(subparsers, self._commands)
+            self._add_groups_to_subparsers(subparsers, self._groups)
 
         return parser
 
-    def _add_arguments(self, parser: argparse.ArgumentParser, cmd: CommandDef) -> None:
-        """Add argparse arguments from a command's schema."""
-        props = cmd.schema.get("properties", {})
-        required = set(cmd.schema.get("required", []))
+    def _add_commands_to_subparsers(
+        self,
+        subparsers: argparse._SubParsersAction,
+        commands: dict[str, CommandDef | LazyCommandDef],
+    ) -> None:
+        """Add command parsers to a subparsers action."""
+        for cmd in commands.values():
+            if cmd.hidden:
+                continue
+            sub = subparsers.add_parser(
+                cmd.name,
+                help=cmd.description,
+                aliases=list(cmd.aliases),
+            )
+            self._add_arguments_from_schema(sub, cmd.schema, cmd)
+            sub.add_argument(
+                "--format",
+                choices=["plain", "json", "table"],
+                default="plain",
+                help="Output format (default: plain)",
+            )
 
-        sig = inspect.signature(cmd.handler)
+    def _add_groups_to_subparsers(
+        self,
+        subparsers: argparse._SubParsersAction,
+        groups: dict[str, Group],
+    ) -> None:
+        """Recursively add group parsers to a subparsers action."""
+        for group in groups.values():
+            if group.hidden:
+                continue
+            group_parser = subparsers.add_parser(
+                group.name,
+                help=group.description,
+                aliases=list(group.aliases),
+            )
+            has_children = group._commands or group._groups
+            if has_children:
+                group_sub = group_parser.add_subparsers(dest=f"_command_{group.name}")
+                self._add_commands_to_subparsers(group_sub, group._commands)
+                self._add_groups_to_subparsers(group_sub, group._groups)
+
+    def _add_arguments_from_schema(
+        self,
+        parser: argparse.ArgumentParser,
+        schema: dict[str, Any],
+        cmd: CommandDef | LazyCommandDef,
+    ) -> None:
+        """Add argparse arguments from a command's JSON schema.
+
+        Uses the handler's signature for defaults when available (eager
+        commands), or falls back to schema-only mode (lazy commands).
+        """
+        props = schema.get("properties", {})
+        required_set = set(schema.get("required", []))
+
+        # Try to get signature for defaults (only for eager commands)
+        sig = None
+        if isinstance(cmd, CommandDef):
+            sig = inspect.signature(cmd.handler)
 
         for param_name, param_schema in props.items():
-            param = sig.parameters.get(param_name)
+            param = sig.parameters.get(param_name) if sig else None
             kwargs: dict[str, Any] = {}
 
             # Determine type
@@ -193,12 +534,12 @@ class CLI:
             else:
                 kwargs["type"] = str
 
-            # Set default
+            # Set default from signature if available
             if param and param.default is not inspect.Parameter.empty and json_type != "boolean":
                 kwargs["default"] = param.default
 
             # Required vs optional
-            if param_name in required and json_type != "boolean":
+            if param_name in required_set and json_type != "boolean":
                 kwargs["required"] = True
 
             flag = f"--{param_name.replace('_', '-')}"
@@ -223,40 +564,158 @@ class CLI:
             run_mcp_server(self)
             return None
 
-        # Dispatch to command
-        cmd_name = getattr(args, "_command", None)
-        if not cmd_name:
+        # Build execution context from global options
+        ctx = self._build_context(args)
+
+        # Resolve command from args (may be nested in groups)
+        found, fmt = self._resolve_command_from_args(args)
+        if not found:
             parser.print_help()
             return None
 
-        cmd = self.get_command(cmd_name)
-        if not cmd:
-            parser.print_help()
-            return None
+        # Resolve lazy commands
+        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
 
-        # Extract command arguments
+        # Extract command arguments and inject context
         sig = inspect.signature(cmd.handler)
         kwargs = {}
-        for param_name in sig.parameters:
-            if hasattr(args, param_name):
+        for param_name, param in sig.parameters.items():
+            if param_name == "ctx" or _is_context_param(param):
+                kwargs[param_name] = ctx
+            elif hasattr(args, param_name):
                 kwargs[param_name] = getattr(args, param_name)
+
+        # Set context for get_context() access
+        from milo.context import set_context
+
+        set_context(ctx)
 
         # Call handler
         result = cmd.handler(**kwargs)
 
         # Format and output
-        fmt = getattr(args, "format", "plain")
         write_output(result, fmt=fmt)
 
         return result
 
+    def _build_context(self, args: argparse.Namespace) -> Context:
+        """Build a Context from parsed global options."""
+        from milo.context import Context as ContextClass
+
+        verbose = getattr(args, "verbose", 0)
+        quiet = getattr(args, "quiet", False)
+        verbosity = -1 if quiet else verbose
+
+        # Collect user global option values
+        user_globals = {}
+        for opt in self._global_options:
+            if hasattr(args, opt.name):
+                user_globals[opt.name] = getattr(args, opt.name)
+
+        return ContextClass(
+            verbosity=verbosity,
+            format=getattr(args, "format", "plain"),
+            color=not getattr(args, "no_color", False),
+            globals=user_globals,
+        )
+
+    def _resolve_command_from_args(
+        self, args: argparse.Namespace
+    ) -> tuple[CommandDef | LazyCommandDef | None, str]:
+        """Walk the parsed args to find the leaf command.
+
+        Argparse stores each group's subcommand in ``_command_<group_name>``.
+        This walks the chain to find the actual command.
+        """
+        fmt = getattr(args, "format", "plain")
+
+        # Check top-level command
+        cmd_name = getattr(args, "_command", None)
+        if not cmd_name:
+            return None, fmt
+
+        # Is it a direct command?
+        cmd = self.get_command(cmd_name)
+        if cmd:
+            return cmd, fmt
+
+        # Is it a group? Walk into it.
+        group = self._groups.get(cmd_name)
+        if group is None:
+            resolved = self._group_alias_map.get(cmd_name)
+            if resolved:
+                group = self._groups.get(resolved)
+        if group is None:
+            return None, fmt
+
+        return self._resolve_group_command(group, args, fmt)
+
+    def _resolve_group_command(
+        self,
+        group: Group,
+        args: argparse.Namespace,
+        fmt: str,
+    ) -> tuple[CommandDef | None, str]:
+        """Recursively resolve a command within a group from parsed args."""
+        sub_name = getattr(args, f"_command_{group.name}", None)
+        if not sub_name:
+            return None, fmt
+
+        # Check if it's a command in this group
+        cmd = group.get_command(sub_name)
+        if cmd:
+            return cmd, fmt
+
+        # Check if it's a nested sub-group
+        sub_group = group.get_group(sub_name)
+        if sub_group:
+            return self._resolve_group_command(sub_group, args, fmt)
+
+        return None, fmt
+
     def call(self, command_name: str, **kwargs: Any) -> Any:
-        """Programmatically call a command by name. Used by MCP server."""
-        cmd = self.get_command(command_name)
-        if not cmd:
-            raise ValueError(f"Unknown command: {command_name!r}")
+        """Programmatically call a command by name or dotted path.
+
+        Used by MCP server and for programmatic invocation::
+
+            cli.call("greet", name="Alice")
+            cli.call("site.build", output="_site")
+        """
+        found = self.get_command(command_name)
+        if not found:
+            suggestion = self.suggest_command(command_name)
+            msg = f"Unknown command: {command_name!r}"
+            if suggestion:
+                msg += f". Did you mean {suggestion!r}?"
+            raise ValueError(msg)
+
+        # Resolve lazy commands
+        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
 
         sig = inspect.signature(cmd.handler)
-        # Filter to only valid parameters
-        valid = {k: v for k, v in kwargs.items() if k in sig.parameters}
+        # Filter to only valid parameters (exclude context params)
+        valid = {
+            k: v
+            for k, v in kwargs.items()
+            if k in sig.parameters and not _is_context_param(sig.parameters[k])
+        }
         return cmd.handler(**valid)
+
+    def suggest_command(self, name: str) -> str | None:
+        """Suggest the closest command name for typo correction."""
+        all_names = [path for path, _ in self.walk_commands()]
+        matches = difflib.get_close_matches(name, all_names, n=1, cutoff=0.6)
+        return matches[0] if matches else None
+
+
+def _is_context_param(param: inspect.Parameter) -> bool:
+    """Check if a parameter is a Context injection point."""
+    annotation = param.annotation
+    if annotation is inspect.Parameter.empty:
+        return False
+    # Check for Context type or string annotation
+    if isinstance(annotation, type):
+        return annotation.__name__ == "Context"
+    if isinstance(annotation, str):
+        return annotation in ("Context", "milo.context.Context")
+    return False
