@@ -1,0 +1,1 @@
+{{ icons.check | green }} {{ "Counter" | bold }} finished at {{ state.count | string | bold | green }}.

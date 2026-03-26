@@ -1,6 +1,6 @@
 """Counter — the simplest milo app.
 
-Demonstrates: reducer, @@KEY dispatch, template rendering.
+Demonstrates: reducer, @@KEY dispatch, Quit, template rendering.
 
     uv run python examples/counter/app.py
 """
@@ -10,17 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from milo import Action, App, Key, SpecialKey
+from milo import Action, App, Key, Quit, SpecialKey
 from milo.templates import get_env
 
 
 @dataclass(frozen=True, slots=True)
 class State:
     count: int = 0
-    quit: bool = False
 
 
-def reducer(state: State | None, action: Action) -> State:
+def reducer(state: State | None, action: Action) -> State | Quit:
     if state is None:
         return State()
     if action.type != "@@KEY":
@@ -33,7 +32,7 @@ def reducer(state: State | None, action: Action) -> State:
         case SpecialKey.DOWN:
             return replace(state, count=max(0, state.count - 1))
         case SpecialKey.ESCAPE:
-            return replace(state, quit=True)
+            return Quit(state)
     if key.char == "r":
         return replace(state, count=0)
     return state
@@ -50,6 +49,6 @@ if __name__ == "__main__":
         reducer=reducer,
         initial_state=State(),
         env=env,
+        exit_template="exit.txt",
     )
-    final = app.run()
-    print(f"Final count: {final.count}")
+    app.run()

@@ -19,6 +19,7 @@ def __getattr__(name: str):
         "Screen": "_types",
         "Transition": "_types",
         "ReducerResult": "_types",
+        "Quit": "_types",
         "Call": "_types",
         "Put": "_types",
         "Select": "_types",
@@ -33,6 +34,8 @@ def __getattr__(name: str):
         "AppError": "_errors",
         "FlowError": "_errors",
         "ErrorCode": "_errors",
+        "format_error": "_errors",
+        "format_render_error": "_errors",
         # State
         "Store": "state",
         "combine_reducers": "state",
@@ -47,6 +50,7 @@ def __getattr__(name: str):
         # Form
         "form": "form",
         "form_reducer": "form",
+        "make_form_reducer": "form",
         # Help
         "HelpRenderer": "help",
         # Dev
@@ -68,15 +72,12 @@ def _Py_mod_gil() -> int:  # noqa: N802
 __version__ = "0.1.0"
 __all__ = [
     "BUILTIN_ACTIONS",
-    # Types
     "Action",
-    # App
     "App",
     "AppError",
     "AppStatus",
     "Call",
     "Delay",
-    # Dev
     "DevServer",
     "ErrorCode",
     "FieldSpec",
@@ -84,32 +85,31 @@ __all__ = [
     "FieldType",
     "Flow",
     "FlowError",
-    # Flow
     "FlowScreen",
     "FlowState",
     "Fork",
     "FormError",
     "FormState",
-    # Help
     "HelpRenderer",
     "InputError",
     "Key",
-    # Errors
     "MiloError",
     "Put",
+    "Quit",
     "ReducerResult",
     "RenderTarget",
     "Screen",
     "Select",
     "SpecialKey",
     "StateError",
-    # State
     "Store",
     "Transition",
     "combine_reducers",
-    # Form
     "form",
     "form_reducer",
+    "format_error",
+    "format_render_error",
+    "make_form_reducer",
     "render_html",
     "run",
 ]

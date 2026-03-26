@@ -16,7 +16,6 @@ from milo.app import App, render_html, run
 class SimpleState:
     value: int = 0
     submitted: bool = False
-    quit: bool = False
 
 
 def simple_reducer(state, action):
@@ -88,25 +87,6 @@ class TestApp:
             result = app.run()
         assert isinstance(result, SimpleState)
 
-    def test_should_quit_submitted(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=SimpleState())
-        state = SimpleState(submitted=True)
-        assert app._should_quit(state) is True
-
-    def test_should_quit_dict_quit(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=SimpleState())
-        assert app._should_quit({"quit": True}) is True
-        assert app._should_quit({"quit": False}) is False
-
-    def test_should_quit_not_submitted(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=SimpleState())
-        assert app._should_quit(SimpleState(submitted=False)) is False
-
-    def test_should_quit_plain_object(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None)
-        assert app._should_quit("something") is False
-        assert app._should_quit(42) is False
-
     def test_get_template_name_no_flow(self):
         app = App(template="my.txt", reducer=simple_reducer, initial_state=None)
         assert app._get_template_name(SimpleState()) == "my.txt"
@@ -137,21 +117,25 @@ class TestApp:
         env = app._get_env()
         assert env is not None
 
-    def test_render_state_suppresses_exceptions(self):
-        """_render_state should not raise even if template fails."""
+    def test_render_state_logs_errors_to_stderr(self):
+        """_render_state should log errors to stderr, not raise."""
         bad_env = MagicMock()
         bad_env.get_template.side_effect = Exception("template error")
         app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=bad_env)
-        # Should not raise
-        app._render_state(SimpleState(), bad_env, None)
+        with patch("sys.stderr") as mock_stderr:
+            app._render_state(SimpleState(), bad_env, None)
+            mock_stderr.write.assert_called_once()
+            assert "template error" in mock_stderr.write.call_args[0][0]
 
-    def test_render_once_suppresses_exceptions(self):
-        """_render_once should not raise even if template fails."""
+    def test_render_once_logs_errors_to_stderr(self):
+        """_render_once should log errors to stderr, not raise."""
         bad_env = MagicMock()
         bad_env.get_template.side_effect = Exception("template error")
         app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=bad_env)
-        # Should not raise
-        app._render_once(SimpleState())
+        with patch("sys.stderr") as mock_stderr:
+            app._render_once(SimpleState())
+            mock_stderr.write.assert_called_once()
+            assert "template error" in mock_stderr.write.call_args[0][0]
 
     def test_render_once_writes_output(self):
         from kida import Environment
@@ -235,6 +219,103 @@ class TestApp:
         with patch("sys.stdout", mock_stdout):
             app._render_once(flow_state)
         assert any("screen_a_state" in s for s in written)
+
+
+class TestExitTemplate:
+    def test_exit_template_renders_after_run(self):
+        """exit_template renders the final state after the app loop ends."""
+        from kida import Environment
+
+        tmpl_env = Environment()
+        main_tmpl = tmpl_env.from_string("main={{ state.value }}")
+        exit_tmpl = tmpl_env.from_string("bye={{ state.value }}")
+
+        env = MagicMock()
+
+        def get_template(name):
+            if name == "exit.txt":
+                return exit_tmpl
+            return main_tmpl
+
+        env.get_template.side_effect = get_template
+
+        app = App(
+            template="t.txt",
+            reducer=simple_reducer,
+            initial_state=SimpleState(value=42),
+            target=RenderTarget.HTML,
+            env=env,
+            exit_template="exit.txt",
+        )
+        written = []
+        mock_stdout = MagicMock()
+        mock_stdout.write = lambda s: written.append(s)
+        with patch("sys.stdout", mock_stdout):
+            app.run()
+        assert any("bye=42" in s for s in written)
+
+    def test_no_exit_template_by_default(self):
+        """Without exit_template, nothing extra is rendered."""
+        from kida import Environment
+
+        tmpl_env = Environment()
+        tmpl = tmpl_env.from_string("main")
+
+        env = MagicMock()
+        env.get_template.return_value = tmpl
+
+        app = App(
+            template="t.txt",
+            reducer=simple_reducer,
+            initial_state=SimpleState(),
+            target=RenderTarget.HTML,
+            env=env,
+        )
+        with patch("sys.stdout"):
+            app.run()
+        # get_template called once for the main render, not twice
+        assert env.get_template.call_count == 1
+
+    def test_exit_template_error_logged(self):
+        """Errors in exit template render go to stderr, not raised."""
+        from kida import Environment
+
+        tmpl_env = Environment()
+        main_tmpl = tmpl_env.from_string("main")
+
+        env = MagicMock()
+
+        def get_template(name):
+            if name == "exit.txt":
+                raise Exception("exit template missing")
+            return main_tmpl
+
+        env.get_template.side_effect = get_template
+
+        app = App(
+            template="t.txt",
+            reducer=simple_reducer,
+            initial_state=SimpleState(),
+            target=RenderTarget.HTML,
+            env=env,
+            exit_template="exit.txt",
+        )
+        with patch("sys.stdout"), patch("sys.stderr") as mock_stderr:
+            app.run()  # should not raise
+            mock_stderr.write.assert_called_once()
+
+    def test_render_classmethod(self):
+        """App.render does a one-shot template render."""
+        from kida import Environment
+
+        tmpl_env = Environment()
+        tmpl = tmpl_env.from_string("hello={{ state.value }}")
+
+        env = MagicMock()
+        env.get_template.return_value = tmpl
+
+        result = App.render("t.txt", SimpleState(value=5), env=env)
+        assert result == "hello=5"
 
 
 class TestRun:

@@ -20,6 +20,7 @@ from milo.form import (
     _handle_text_key,
     _make_initial_fields,
     form_reducer,
+    make_form_reducer,
 )
 
 
@@ -318,6 +319,51 @@ class TestFormReducerSelectAndPassword:
         # Unrecognized key for confirm field — returns same field, so same state
         result = form_reducer(state, Action("@@KEY", payload=Key(char="z")))
         assert result is state
+
+
+class TestMakeFormReducer:
+    def test_initializes_with_fields(self):
+        specs = (
+            FieldSpec(name="name", label="Name"),
+            FieldSpec(name="age", label="Age"),
+        )
+        reducer = make_form_reducer(*specs)
+        state = reducer(None, Action("@@INIT"))
+        assert len(state.fields) == 2
+        assert state.specs == specs
+
+    def test_handles_key_input(self):
+        specs = (FieldSpec(name="name", label="Name"),)
+        reducer = make_form_reducer(*specs)
+        state = reducer(None, Action("@@INIT"))
+        state = reducer(state, Action("@@KEY", payload=Key(char="a")))
+        assert state.fields[0].value == "a"
+
+    def test_submit_on_enter(self):
+        specs = (FieldSpec(name="name", label="Name"),)
+        reducer = make_form_reducer(*specs)
+        state = reducer(None, Action("@@INIT"))
+        state = reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.ENTER)))
+        assert state.submitted is True
+
+    def test_navigate_on_submit(self):
+        from milo._types import ReducerResult
+
+        specs = (FieldSpec(name="name", label="Name"),)
+        reducer = make_form_reducer(*specs, navigate_on_submit=True)
+        state = reducer(None, Action("@@INIT"))
+        result = reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.ENTER)))
+        assert isinstance(result, ReducerResult)
+        assert result.state.submitted is True
+        assert len(result.sagas) == 1
+
+    def test_navigate_on_submit_false_by_default(self):
+        specs = (FieldSpec(name="name", label="Name"),)
+        reducer = make_form_reducer(*specs)
+        state = reducer(None, Action("@@INIT"))
+        result = reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.ENTER)))
+        # Plain FormState, not ReducerResult
+        assert isinstance(result, FormState)
 
 
 class TestFormFallback:

@@ -1,0 +1,7 @@
+{% if state.status == "done" %}
+{{ icons.check | green }} Fetched {{ state.url | bold }}: {{ state.status_code }} ({{ state.content_length | filesizeformat }})
+{% elif state.status == "error" %}
+{{ icons.cross | red }} {{ state.error_message | dim }}
+{% else %}
+{{ "Goodbye!" | dim }}
+{% endif %}

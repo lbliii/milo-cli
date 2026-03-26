@@ -1,6 +1,6 @@
 """URL fetcher — sagas for async side effects.
 
-Demonstrates: sagas (Call, Put, Select), ReducerResult, tick-based loading animation.
+Demonstrates: sagas (Call, Put, Select), ReducerResult, Quit, tick-based loading.
 
     uv run python examples/fetcher/app.py
 """
@@ -11,7 +11,7 @@ import urllib.request
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from milo import Action, App, Call, Key, Put, ReducerResult, SpecialKey
+from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey
 from milo.templates import get_env
 
 
@@ -22,7 +22,6 @@ class State:
     status_code: int = 0
     content_length: int = 0
     error_message: str = ""
-    quit: bool = False
     tick: int = 0
 
 
@@ -38,7 +37,9 @@ def fetch_url(url: str) -> dict:
 
 def fetch_saga():
     """Saga: read URL from state, fetch it, dispatch result."""
-    state = yield from _select_state()
+    from milo import Select
+
+    state = yield Select()
     url = state.url
     if not url:
         yield Put(Action("FETCH_ERROR", payload="No URL entered"))
@@ -50,13 +51,7 @@ def fetch_saga():
         yield Put(Action("FETCH_ERROR", payload=str(e)))
 
 
-def _select_state():
-    from milo import Select
-
-    return (yield Select())
-
-
-def reducer(state: State | None, action: Action) -> State | ReducerResult:
+def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit:
     if state is None:
         return State()
 
@@ -64,7 +59,7 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult:
         case "@@KEY":
             key: Key = action.payload
             if key.name == SpecialKey.ESCAPE:
-                return replace(state, quit=True)
+                return Quit(state)
             if key.name == SpecialKey.ENTER and state.status != "loading":
                 return ReducerResult(
                     state=replace(state, status="loading", tick=0),
@@ -102,7 +97,6 @@ if __name__ == "__main__":
         initial_state=State(url="https://example.com"),
         tick_rate=0.15,
         env=env,
+        exit_template="exit.txt",
     )
-    final = app.run()
-    if final.status == "done":
-        print(f"Fetched {final.url}: {final.status_code} ({final.content_length} bytes)")
+    app.run()

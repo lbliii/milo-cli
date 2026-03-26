@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from milo._errors import ErrorCode, FlowError
-from milo._types import Action, Transition
+from milo._types import Action, Quit, ReducerResult, Transition
 
 
 def _default_transition(from_name: str, to_name: str) -> Transition:
@@ -111,12 +111,32 @@ class Flow:
             if screen is None:
                 raise FlowError(ErrorCode.FLW_SCREEN, f"Unknown screen: {current}")
 
-            new_screen_state = screen.reducer(state.screen_states.get(current), action)
+            result = screen.reducer(state.screen_states.get(current), action)
+
+            # Unwrap Quit/ReducerResult to propagate sagas
+            sagas = ()
+            quit_signal: Quit | None = None
+            if isinstance(result, Quit):
+                quit_signal = result
+                new_screen_state = result.state
+                sagas = result.sagas
+            elif isinstance(result, ReducerResult):
+                new_screen_state = result.state
+                sagas = result.sagas
+            else:
+                new_screen_state = result
+
             new_states = {**state.screen_states, current: new_screen_state}
-            return FlowState(
+            flow_state = FlowState(
                 current_screen=current,
                 screen_states=new_states,
             )
+
+            if quit_signal is not None:
+                return Quit(state=flow_state, code=quit_signal.code, sagas=sagas)
+            if sagas:
+                return ReducerResult(state=flow_state, sagas=sagas)
+            return flow_state
 
         return flow_reducer
 

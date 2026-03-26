@@ -1,8 +1,9 @@
-"""Structured error hierarchy."""
+"""Structured error hierarchy with format_compact() for terminal display."""
 
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 
 class ErrorCode(Enum):
@@ -42,7 +43,12 @@ class MiloError(Exception):
 
     def __init__(self, code: ErrorCode, message: str) -> None:
         self.code = code
+        self.message = message
         super().__init__(f"[{code.value}] {message}")
+
+    def format_compact(self) -> str:
+        """Format error for terminal display, consistent with kida's format_compact()."""
+        return f"{self.code.value}: {self.message}"
 
 
 class InputError(MiloError):
@@ -67,3 +73,68 @@ class FlowError(MiloError):
 
 class DevError(MiloError):
     """Dev server errors (watch, reload)."""
+
+
+def format_error(error: Exception) -> str:
+    """Format any error for terminal display.
+
+    Uses format_compact() for kida TemplateErrors and MiloErrors.
+    Falls back to str() for other exceptions.
+    """
+    if hasattr(error, "format_compact"):
+        return error.format_compact()
+    return f"{type(error).__name__}: {error}"
+
+
+def format_render_error(
+    error: Exception,
+    *,
+    template_name: str = "",
+    env: Any = None,
+) -> str:
+    """Format a render error with optional error template rendering.
+
+    Tries to render through the built-in error.txt template.
+    Falls back to format_error() if template rendering fails.
+    """
+    compact = format_error(error)
+
+    # Try to render through error template
+    if env is not None:
+        try:
+            tmpl = env.get_template("error.txt")
+            return tmpl.render(
+                error=compact,
+                code=_get_error_code(error),
+                template_name=template_name,
+                message=str(error),
+                hint=_get_hint(error),
+                docs_url=_get_docs_url(error),
+            )
+        except Exception:
+            pass
+
+    return compact
+
+
+def _get_error_code(error: Exception) -> str:
+    """Extract error code string from any error."""
+    if isinstance(error, MiloError):
+        return error.code.value
+    if hasattr(error, "code") and error.code is not None:
+        return str(error.code.value) if hasattr(error.code, "value") else str(error.code)
+    return ""
+
+
+def _get_hint(error: Exception) -> str:
+    """Extract hint/suggestion from an error."""
+    if hasattr(error, "suggestion") and error.suggestion:
+        return str(error.suggestion)
+    return ""
+
+
+def _get_docs_url(error: Exception) -> str:
+    """Extract docs URL from an error."""
+    if hasattr(error, "code") and hasattr(error.code, "docs_url"):
+        return str(error.code.docs_url)
+    return ""

@@ -1,0 +1,9 @@
+{% set config = state.get("config") if state is mapping else none %}
+{% if config and config.fields %}
+{{ icons.check | green | bold }} {{ "Project created!" | bold }}
+{% for i in range(config.fields | length) %}
+  {{ config.specs[i].label | dim }}: {{ config.fields[i].value | string | bold }}
+{% endfor %}
+{% else %}
+{{ "Wizard cancelled." | dim }}
+{% endif %}
