@@ -55,7 +55,7 @@ class TestFormatError:
 
         env = Environment()
         try:
-            env.from_string("{% if x %}unclosed", name="test.txt")
+            env.from_string("{% if x %}unclosed", name="test.kida")
             pytest.fail("Should have raised")
         except Exception as e:
             result = format_error(e)
@@ -78,19 +78,19 @@ class TestFormatRenderError:
 
         env = get_env()
         e = AppError(ErrorCode.APP_TEMPLATE, "not found")
-        result = format_render_error(e, template_name="counter.txt", env=env)
+        result = format_render_error(e, template_name="counter.kida", env=env)
         assert "not found" in result
-        assert "counter.txt" in result
+        assert "counter.kida" in result
 
     def test_with_kida_error(self):
         from kida import Environment
 
         env = Environment()
         try:
-            env.from_string("{{ foo.bar }}", name="test.txt").render()
+            env.from_string("{{ foo.bar }}", name="test.kida").render()
             pytest.fail("Should have raised")
         except Exception as e:
-            result = format_render_error(e, template_name="test.txt")
+            result = format_render_error(e, template_name="test.kida")
             # Should contain something useful
             assert len(result) > 0
 

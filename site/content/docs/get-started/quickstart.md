@@ -57,7 +57,7 @@ The reducer handles three cases:
 Milo uses [[ext:kida:|Kida]] templates for rendering. Create a template file:
 
 ```kida
-{# counter.txt #}
+{# counter.kida #}
 Count: {{ count }}
 
 [SPACE] Increment  [R] Reset  [Ctrl+C] Quit
@@ -71,7 +71,7 @@ Your state dict becomes the template context — `{{ count }}` renders the curre
 :description: Create an App and run the event loop
 
 ```python
-app = App(template="counter.txt", reducer=reducer, initial_state=None)
+app = App(template="counter.kida", reducer=reducer, initial_state=None)
 final_state = app.run()
 print(f"Final count: {final_state['count']}")
 ```
@@ -91,7 +91,7 @@ milo dev app:app --watch .
 :::{/steps}
 
 :::{tip}
-The `milo dev` command uses the `module:attribute` convention. `app:app` means "import `app` from `app.py` and look up the `app` attribute." The `--watch` flag enables hot reload — edit `counter.txt` and see changes instantly.
+The `milo dev` command uses the `module:attribute` convention. `app:app` means "import `app` from `app.py` and look up the `app` attribute." The `--watch` flag enables hot reload — edit `counter.kida` and see changes instantly.
 :::
 
 ## What just happened?

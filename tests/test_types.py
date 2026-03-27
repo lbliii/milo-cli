@@ -210,9 +210,9 @@ class TestScreen:
         def r(s, a):
             return s
 
-        s = Screen(name="main", template="main.txt", reducer=r)
+        s = Screen(name="main", template="main.kida", reducer=r)
         assert s.name == "main"
-        assert s.template == "main.txt"
+        assert s.template == "main.kida"
 
 
 class TestTransition:

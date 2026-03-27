@@ -27,7 +27,7 @@ The `myapp:app` argument follows the `module:attribute` convention. Milo imports
 ```python
 from milo import App, DevServer
 
-app = App(template="dashboard.txt", reducer=reducer, initial_state=None)
+app = App(template="dashboard.kida", reducer=reducer, initial_state=None)
 server = DevServer(app, watch_dirs=("./templates",), poll_interval=0.5)
 server.run()
 ```
@@ -44,7 +44,7 @@ flowchart LR
 
 :::{steps}
 :::{step} Poll
-:description: DevServer watches directories for *.txt changes
+:description: DevServer watches directories for *.kida changes
 
 The server polls watched directories at a configurable interval, comparing file mtimes.
 

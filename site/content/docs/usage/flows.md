@@ -34,7 +34,7 @@ def welcome_reducer(state, action):
         return {**state, "submitted": True}
     return state
 
-welcome = FlowScreen("welcome", "welcome.txt", welcome_reducer)
+welcome = FlowScreen("welcome", "welcome.kida", welcome_reducer)
 ```
 
 ## Chaining screens
@@ -45,9 +45,9 @@ Use `>>` to create a flow:
 from milo import App
 from milo.flow import FlowScreen
 
-welcome = FlowScreen("welcome", "welcome.txt", welcome_reducer)
-config = FlowScreen("config", "config.txt", config_reducer)
-confirm = FlowScreen("confirm", "confirm.txt", confirm_reducer)
+welcome = FlowScreen("welcome", "welcome.kida", welcome_reducer)
+config = FlowScreen("config", "config.kida", config_reducer)
+confirm = FlowScreen("confirm", "confirm.kida", confirm_reducer)
 
 flow = welcome >> config >> confirm
 app = App.from_flow(flow)

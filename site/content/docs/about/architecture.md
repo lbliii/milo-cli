@@ -39,7 +39,7 @@ Every state transition is explicit. There are no hidden mutations, no event bus,
 | Elm concept | Milo implementation |
 |-------------|-------------------|
 | Model | Plain dicts or frozen dataclasses |
-| View | Kida templates (`.txt` files) |
+| View | Kida templates (`.kida` files) |
 | Update | Reducer functions: `(state, action) -> state` |
 | Commands | Sagas: generator functions yielding effect descriptors |
 | Subscriptions | `tick_rate`, `SIGWINCH` handler, `KeyReader` |

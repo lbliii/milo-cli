@@ -50,7 +50,7 @@ class HelpRenderer(argparse.HelpFormatter):
         from milo.templates import get_env
 
         env = get_env()
-        template = env.get_template("help.txt")
+        template = env.get_template("help.kida")
 
         groups = []
         for action_group in self._action_groups:  # type: ignore[attr-defined]

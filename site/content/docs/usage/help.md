@@ -29,16 +29,16 @@ parser.add_argument("command", help="Command to run")
 parser.parse_args()
 ```
 
-When the user runs `myapp --help`, the output is rendered through the `help.txt` Kida template instead of argparse's default plain-text formatter.
+When the user runs `myapp --help`, the output is rendered through the `help.kida` Kida template instead of argparse's default plain-text formatter.
 
 ## Customization
 
-Override the built-in `help.txt` template by placing your own in your template directory. The template receives the full argparse structure as context.
+Override the built-in `help.kida` template by placing your own in your template directory. The template receives the full argparse structure as context.
 
 :::{dropdown} Template context variables
 :icon: code
 
-The `help.txt` template receives:
+The `help.kida` template receives:
 
 | Variable | Type | Description |
 |----------|------|-------------|

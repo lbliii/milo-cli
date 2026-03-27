@@ -45,9 +45,9 @@ Each screen is a `FlowScreen` with its own template and reducer:
 ```python
 from milo.flow import FlowScreen
 
-welcome = FlowScreen("welcome", "welcome.txt", welcome_reducer)
-config = FlowScreen("config", "config.txt", config_reducer)
-install = FlowScreen("install", "install.txt", install_reducer)
+welcome = FlowScreen("welcome", "welcome.kida", welcome_reducer)
+config = FlowScreen("config", "config.kida", config_reducer)
+install = FlowScreen("install", "install.kida", install_reducer)
 ```
 
 :::{/step}
@@ -128,7 +128,7 @@ def install_saga():
 :description: Kida templates for each screen
 
 :::{tab-set}
-:::{tab-item} welcome.txt
+:::{tab-item} welcome.kida
 
 ```kida
 {{ "Install Wizard" | bold }}
@@ -141,22 +141,22 @@ Press ENTER to continue.
 
 :::{/tab-item}
 
-:::{tab-item} config.txt
+:::{tab-item} config.kida
 
 ```kida
-{% include "form.txt" %}
+{% include "form.kida" %}
 ```
 
 Uses the built-in form template.
 
 :::{/tab-item}
 
-:::{tab-item} install.txt
+:::{tab-item} install.kida
 
 ```kida
 {{ "Installing..." | bold }}
 
-{% include "progress.txt" %}
+{% include "progress.kida" %}
 
 {% for line in log %}
 {{ line }}

@@ -84,9 +84,9 @@ def done_reducer(state: DoneState | None, action: Action) -> DoneState | Quit:
 
 # -- Flow ---------------------------------------------------------------------
 
-welcome = FlowScreen(name="welcome", template="welcome.txt", reducer=welcome_reducer)
-config = FlowScreen(name="config", template="config.txt", reducer=config_reducer)
-done = FlowScreen(name="done", template="done.txt", reducer=done_reducer)
+welcome = FlowScreen(name="welcome", template="welcome.kida", reducer=welcome_reducer)
+config = FlowScreen(name="config", template="config.kida", reducer=config_reducer)
+done = FlowScreen(name="done", template="done.kida", reducer=done_reducer)
 
 flow = welcome >> config >> done
 
@@ -99,5 +99,5 @@ if __name__ == "__main__":
     templates = Path(__file__).parent / "templates"
     env = get_env(loader=FileSystemLoader(str(templates)))
 
-    app = App.from_flow(flow, env=env, exit_template="exit.txt")
+    app = App.from_flow(flow, env=env, exit_template="exit.kida")
     app.run()

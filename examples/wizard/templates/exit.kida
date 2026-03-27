@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import status_line, kv_pair %}
+{% from "components/_defs.kida" import status_line, kv_pair %}
 {% set config = state.get("config") if state is mapping else none %}
 {% if config and config.fields %}
 {{ status_line("success", "Project created!") }}

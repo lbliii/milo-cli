@@ -1,4 +1,4 @@
 {{ "Configure your project" | bold | cyan }}
 {{ hr() }}
 
-{% include "form.txt" %}
+{% include "form.kida" %}

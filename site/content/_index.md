@@ -36,7 +36,7 @@ def reducer(state, action):
         return {**state, "count": state["count"] + 1}
     return state
 
-app = App(template="counter.txt", reducer=reducer, initial_state=None)
+app = App(template="counter.kida", reducer=reducer, initial_state=None)
 app.run()
 ```
 

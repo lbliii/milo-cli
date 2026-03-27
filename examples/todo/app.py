@@ -194,10 +194,10 @@ if __name__ == "__main__":
     )
 
     app = App(
-        template="todo.txt",
+        template="todo.kida",
         reducer=reducer,
         initial_state=initial,
         env=env,
-        exit_template="exit.txt",
+        exit_template="exit.kida",
     )
     app.run()

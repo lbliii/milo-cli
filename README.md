@@ -17,7 +17,7 @@ def reducer(state, action):
         return {**state, "count": state["count"] + 1}
     return state
 
-app = App(template="counter.txt", reducer=reducer, initial_state=None)
+app = App(template="counter.kida", reducer=reducer, initial_state=None)
 final_state = app.run()
 ```
 
@@ -112,11 +112,11 @@ def reducer(state, action):
         return {**state, "count": state["count"] + 1}
     return state
 
-app = App(template="counter.txt", reducer=reducer, initial_state=None)
+app = App(template="counter.kida", reducer=reducer, initial_state=None)
 final_state = app.run()
 ```
 
-**counter.txt:**
+**counter.kida:**
 ```
 Count: {{ count }}
 
@@ -132,9 +132,9 @@ Press SPACE to increment, Ctrl+C to quit.
 from milo import App
 from milo.flow import FlowScreen
 
-welcome = FlowScreen("welcome", "welcome.txt", welcome_reducer)
-config = FlowScreen("config", "config.txt", config_reducer)
-confirm = FlowScreen("confirm", "confirm.txt", confirm_reducer)
+welcome = FlowScreen("welcome", "welcome.kida", welcome_reducer)
+config = FlowScreen("config", "config.kida", config_reducer)
+confirm = FlowScreen("confirm", "confirm.kida", confirm_reducer)
 
 flow = welcome >> config >> confirm
 app = App.from_flow(flow)
@@ -198,7 +198,7 @@ def logging_middleware(dispatch, get_state):
     return wrapper
 
 app = App(
-    template="app.txt",
+    template="app.kida",
     reducer=reducer,
     initial_state=None,
     middleware=[logging_middleware],
@@ -218,7 +218,7 @@ milo dev myapp:app --watch ./templates --poll 0.25
 ```python
 from milo import App, DevServer
 
-app = App(template="dashboard.txt", reducer=reducer, initial_state=None)
+app = App(template="dashboard.kida", reducer=reducer, initial_state=None)
 server = DevServer(app, watch_dirs=("./templates",), poll_interval=0.5)
 server.run()
 ```
@@ -230,7 +230,7 @@ server.run()
 
 ```python
 # Record a session
-app = App(template="app.txt", reducer=reducer, initial_state=None, record=True)
+app = App(template="app.kida", reducer=reducer, initial_state=None, record=True)
 app.run()  # Writes to session.jsonl
 
 # Replay for debugging
@@ -253,7 +253,7 @@ from milo.testing import assert_renders, assert_state, assert_saga
 from milo import Action, Call
 
 # Snapshot test: render state through template, compare to file
-assert_renders({"count": 5}, "counter.txt", snapshot="tests/snapshots/count_5.txt")
+assert_renders({"count": 5}, "counter.kida", snapshot="tests/snapshots/count_5.txt")
 
 # Reducer test: feed actions, assert final state
 assert_state(reducer, None, [Action("@@INIT"), Action("INCREMENT")], {"count": 1})

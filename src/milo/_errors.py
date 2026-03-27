@@ -149,7 +149,7 @@ def format_render_error(
     # Try to render through error template
     if env is not None:
         try:
-            tmpl = env.get_template("error.txt")
+            tmpl = env.get_template("error.kida")
             return tmpl.render(
                 error=compact,
                 code=_get_error_code(error),

@@ -10,7 +10,7 @@
         examples     -- list of example dicts: {command, description} (optional)
         epilog       -- footer text (optional)
 -#}
-{%- from "components/_defs.txt" import header, section, command_row, example_block, def_list -%}
+{%- from "components/_defs.kida" import header, section, command_row, example_block, def_list -%}
 
 {{ header(name, version | default(""), description | default("")) }}
 

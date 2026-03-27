@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import status_line %}
+{% from "components/_defs.kida" import status_line %}
 {% if state.phase == "done" %}
 {{ status_line("success", "Parallel download complete (" ~ ("{:.2f}" | format(state.elapsed)) ~ "s)") }}
 {% for u in state.urls %}

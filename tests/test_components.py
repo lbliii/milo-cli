@@ -14,7 +14,7 @@ def env():
 
 def _render(env, body: str, **ctx) -> str:
     """Render a template string with component imports."""
-    prefix = '{% from "components/_defs.txt" import section, status_line, kv_pair, kv_list, def_list, example_block, tag_list, breadcrumb, command_row, header, header_box, key_hints %}'
+    prefix = '{% from "components/_defs.kida" import section, status_line, kv_pair, kv_list, def_list, example_block, tag_list, breadcrumb, command_row, header, header_box, key_hints %}'
     tmpl = env.from_string(prefix + body, name="test")
     return tmpl.render(**ctx)
 
@@ -157,7 +157,7 @@ class TestHeaderBox:
 
 class TestComposites:
     def test_help_page(self, env):
-        tmpl = env.get_template("components/help_page.txt")
+        tmpl = env.get_template("components/help_page.kida")
         out = tmpl.render(
             name="myapp",
             version="v1.0",
@@ -194,7 +194,7 @@ class TestKeyHints:
 
 class TestCompositeTemplates:
     def test_command_list(self, env):
-        tmpl = env.get_template("components/command_list.txt")
+        tmpl = env.get_template("components/command_list.kida")
         out = tmpl.render(
             commands=[
                 {"name": "new", "description": "Create"},
