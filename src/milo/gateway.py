@@ -218,18 +218,17 @@ def _proxy_call(
         }
 
     command = info.get("command", [])
-    call_request = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {"name": original_name, "arguments": arguments},
-    })
+    call_request = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": original_name, "arguments": arguments},
+        }
+    )
 
     # Send initialize + tools/call
-    input_lines = (
-        '{"jsonrpc":"2.0","id":0,"method":"initialize"}\n'
-        f"{call_request}\n"
-    )
+    input_lines = f'{{"jsonrpc":"2.0","id":0,"method":"initialize"}}\n{call_request}\n'
 
     try:
         result = subprocess.run(

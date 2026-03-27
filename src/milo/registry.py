@@ -17,7 +17,7 @@ def _load() -> dict[str, Any]:
         return {"version": 1, "clis": {}}
     try:
         return json.loads(_REGISTRY_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return {"version": 1, "clis": {}}
 
 

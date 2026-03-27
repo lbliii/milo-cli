@@ -410,8 +410,10 @@ class TestMCPExtended:
 
         from milo.mcp import run_mcp_server
 
-        with patch("sys.stdin", io.StringIO("")), \
-             patch("sys.stderr", new_callable=io.StringIO) as mock_err:
+        with (
+            patch("sys.stdin", io.StringIO("")),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
             run_mcp_server(cli)
 
         banner = mock_err.getvalue()
@@ -429,31 +431,37 @@ class TestReturnToSchema:
     def test_returns_dict(self):
         def f() -> dict:
             pass
+
         assert return_to_schema(f) == {"type": "object"}
 
     def test_returns_list(self):
         def f() -> list:
             pass
+
         assert return_to_schema(f) == {"type": "array"}
 
     def test_returns_str(self):
         def f() -> str:
             pass
+
         assert return_to_schema(f) == {"type": "string"}
 
     def test_returns_none(self):
         def f() -> None:
             pass
+
         assert return_to_schema(f) is None
 
     def test_no_annotation(self):
         def f():
             pass
+
         assert return_to_schema(f) is None
 
     def test_optional_return(self):
         def f() -> str | None:
             pass
+
         assert return_to_schema(f) == {"type": "string"}
 
 
@@ -465,9 +473,11 @@ class TestReturnToSchema:
 class TestRegistry:
     def test_install_and_list(self, tmp_path):
         reg_file = tmp_path / "registry.json"
-        with patch("milo.registry._REGISTRY_FILE", reg_file), \
-             patch("milo.registry._REGISTRY_DIR", tmp_path), \
-             patch("sys.stderr", new_callable=io.StringIO):
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
             from milo.registry import install, list_clis
 
             install("myapp", ["python", "app.py", "--mcp"], description="My app", version="1.0")
@@ -479,9 +489,11 @@ class TestRegistry:
 
     def test_uninstall(self, tmp_path):
         reg_file = tmp_path / "registry.json"
-        with patch("milo.registry._REGISTRY_FILE", reg_file), \
-             patch("milo.registry._REGISTRY_DIR", tmp_path), \
-             patch("sys.stderr", new_callable=io.StringIO):
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
             from milo.registry import install, list_clis, uninstall
 
             install("myapp", ["python", "app.py", "--mcp"])
@@ -490,23 +502,28 @@ class TestRegistry:
 
     def test_uninstall_missing(self, tmp_path):
         reg_file = tmp_path / "registry.json"
-        with patch("milo.registry._REGISTRY_FILE", reg_file), \
-             patch("milo.registry._REGISTRY_DIR", tmp_path), \
-             patch("sys.stderr", new_callable=io.StringIO):
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
             from milo.registry import uninstall
 
             assert uninstall("nonexistent") is False
 
     def test_list_empty(self, tmp_path):
         reg_file = tmp_path / "registry.json"
-        with patch("milo.registry._REGISTRY_FILE", reg_file), \
-             patch("milo.registry._REGISTRY_DIR", tmp_path):
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+        ):
             from milo.registry import list_clis
 
             assert list_clis() == {}
 
     def test_registry_path(self):
         from milo.registry import registry_path
+
         path = registry_path()
         assert path.name == "registry.json"
 
@@ -577,8 +594,10 @@ class TestGateway:
 
         from milo.gateway import _print_registry
 
-        with patch("milo.gateway.list_clis", return_value={}), \
-             patch("sys.stderr", new_callable=io.StringIO) as mock_err:
+        with (
+            patch("milo.gateway.list_clis", return_value={}),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
             _print_registry()
         assert "No CLIs registered" in mock_err.getvalue()
 
@@ -587,9 +606,13 @@ class TestGateway:
 
         from milo.gateway import _print_registry
 
-        clis = {"myapp": {"command": ["python", "app.py"], "description": "My app", "version": "1.0"}}
-        with patch("milo.gateway.list_clis", return_value=clis), \
-             patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+        clis = {
+            "myapp": {"command": ["python", "app.py"], "description": "My app", "version": "1.0"}
+        }
+        with (
+            patch("milo.gateway.list_clis", return_value=clis),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_out,
+        ):
             _print_registry()
         output = mock_out.getvalue()
         assert "myapp" in output
@@ -621,8 +644,10 @@ class TestGateway:
 
         from milo.gateway import main
 
-        with patch("sys.argv", ["gateway"]), \
-             patch("sys.stderr", new_callable=io.StringIO) as mock_err:
+        with (
+            patch("sys.argv", ["gateway"]),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
             main()
         assert "milo gateway" in mock_err.getvalue()
 
@@ -631,7 +656,9 @@ class TestGateway:
 
         from milo.gateway import main
 
-        with patch("sys.argv", ["gateway", "--list"]), \
-             patch("milo.gateway.list_clis", return_value={}), \
-             patch("sys.stderr", new_callable=io.StringIO):
+        with (
+            patch("sys.argv", ["gateway", "--list"]),
+            patch("milo.gateway.list_clis", return_value={}),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
             main()  # Should not raise
