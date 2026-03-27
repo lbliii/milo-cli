@@ -200,8 +200,8 @@ class TestAssertRenders:
     def test_with_string_template_uses_env(self):
         env, tmpl = self._make_env("t={{ state }}")
         env.get_template.return_value = tmpl
-        result = assert_renders("5", "t.txt", env=env)
-        env.get_template.assert_called_with("t.txt")
+        result = assert_renders("5", "t.kida", env=env)
+        env.get_template.assert_called_with("t.kida")
         assert result == "t=5"
 
     def test_no_env_creates_default(self):

@@ -5,7 +5,7 @@
         title     -- optional section title (default: "Commands")
         grouped   -- optional bool, if true group by first tag (default: false)
 -#}
-{%- from "components/_defs.txt" import section, command_row, tag_list -%}
+{%- from "components/_defs.kida" import section, command_row, tag_list -%}
 
 {{ section(title | default("Commands")) }}
 {% for cmd in commands %}

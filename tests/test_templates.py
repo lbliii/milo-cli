@@ -16,7 +16,7 @@ class TestGetEnv:
 
         env = get_env()
         # help.txt is a built-in template
-        tmpl = env.get_template("help.txt")
+        tmpl = env.get_template("help.kida")
         assert tmpl is not None
 
     def test_autoescape_kwarg_passed_through(self):
@@ -37,12 +37,12 @@ class TestGetEnv:
 
         with tempfile.TemporaryDirectory() as tmp:
             # Create a custom template file
-            (Path(tmp) / "custom.txt").write_text("custom={{ state }}")
+            (Path(tmp) / "custom.kida").write_text("custom={{ state }}")
             user_loader = FileSystemLoader(tmp)
 
             env = get_env(loader=user_loader)
             # Should find the custom template
-            tmpl = env.get_template("custom.txt")
+            tmpl = env.get_template("custom.kida")
             assert tmpl is not None
             rendered = tmpl.render(state="ok")
             assert "custom=ok" in rendered
@@ -54,7 +54,7 @@ class TestGetEnv:
         env = get_env(loader=None)
         assert env is not None
         # Should still load built-in templates
-        tmpl = env.get_template("help.txt")
+        tmpl = env.get_template("help.kida")
         assert tmpl is not None
 
     def test_without_user_loader_uses_single_loader(self):
@@ -86,7 +86,7 @@ class TestGetEnv:
         from milo.templates import get_env
 
         env = get_env()
-        tmpl = env.get_template("help.txt")
+        tmpl = env.get_template("help.kida")
         state = HelpState(prog="testprog", description="A test", groups=())
         output = tmpl.render(state=state)
         assert "testprog" in output

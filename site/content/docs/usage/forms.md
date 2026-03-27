@@ -120,7 +120,7 @@ from milo import App
 from milo.form import form_reducer
 
 specs = [FieldSpec("name", "Name"), FieldSpec("age", "Age")]
-app = App(template="form.txt", reducer=form_reducer, initial_state={"specs": specs})
+app = App(template="form.kida", reducer=form_reducer, initial_state={"specs": specs})
 final = app.run()
 ```
 

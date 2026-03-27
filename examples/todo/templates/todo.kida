@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import header, key_hints %}
+{% from "components/_defs.kida" import header, key_hints %}
 {{ header("Todo List") }}
 {{ hr() }}
 

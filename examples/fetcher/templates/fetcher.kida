@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import header, status_line, kv_pair, key_hints %}
+{% from "components/_defs.kida" import header, status_line, kv_pair, key_hints %}
 {{ header("URL Fetcher") }}
 {{ hr() }}
 

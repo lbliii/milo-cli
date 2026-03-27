@@ -39,7 +39,7 @@ from milo.testing import assert_renders
 
 assert_renders(
     {"count": 5, "label": "Total"},
-    "counter.txt",
+    "counter.kida",
     snapshot="tests/snapshots/counter_5.txt",
 )
 ```
@@ -111,7 +111,7 @@ Record every action dispatched during an interactive session:
 :::{tab-item} Auto-path
 
 ```python
-app = App(template="app.txt", reducer=reducer,
+app = App(template="app.kida", reducer=reducer,
           initial_state=None, record=True)
 app.run()  # Writes to session.jsonl
 ```
@@ -121,7 +121,7 @@ app.run()  # Writes to session.jsonl
 :::{tab-item} Custom path
 
 ```python
-app = App(template="app.txt", reducer=reducer,
+app = App(template="app.kida", reducer=reducer,
           initial_state=None, record="my_session.jsonl")
 app.run()
 ```

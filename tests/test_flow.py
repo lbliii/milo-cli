@@ -25,17 +25,17 @@ def counter_reducer(state, action):
 
 class TestFlowScreen:
     def test_rshift_creates_flow(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         assert isinstance(flow, Flow)
         assert len(flow.screens) == 2
         assert len(flow.transitions) == 1
 
     def test_chain_three(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
-        c = FlowScreen("c", "c.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
+        c = FlowScreen("c", "c.kida", noop_reducer)
         flow = a >> b >> c
         assert len(flow.screens) == 3
         assert len(flow.transitions) == 2
@@ -43,42 +43,42 @@ class TestFlowScreen:
 
 class TestFlow:
     def test_from_screens(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
-        c = FlowScreen("c", "c.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
+        c = FlowScreen("c", "c.kida", noop_reducer)
         flow = Flow.from_screens(a, b, c)
         assert len(flow.screens) == 3
         assert len(flow.transitions) == 2
 
     def test_from_screens_requires_two(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
         with pytest.raises(FlowError):
             Flow.from_screens(a)
 
     def test_with_transition(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = (a >> b).with_transition("b", "a", on="@@BACK")
         assert len(flow.transitions) == 2
 
     def test_with_transition_invalid_screen(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         with pytest.raises(FlowError):
             flow.with_transition("c", "a", on="@@BACK")
 
     def test_template_map(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
-        assert flow.template_map == {"a": "a.txt", "b": "b.txt"}
+        assert flow.template_map == {"a": "a.kida", "b": "b.kida"}
 
 
 class TestFlowReducer:
     def test_init(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -88,8 +88,8 @@ class TestFlowReducer:
         assert "b" in state.screen_states
 
     def test_navigate(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -97,8 +97,8 @@ class TestFlowReducer:
         assert state.current_screen == "b"
 
     def test_action_routes_to_current_screen(self):
-        a = FlowScreen("a", "a.txt", counter_reducer)
-        b = FlowScreen("b", "b.txt", counter_reducer)
+        a = FlowScreen("a", "a.kida", counter_reducer)
+        b = FlowScreen("b", "b.kida", counter_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -107,8 +107,8 @@ class TestFlowReducer:
         assert state.screen_states["b"] == 0
 
     def test_screen_state_preserved(self):
-        a = FlowScreen("a", "a.txt", counter_reducer)
-        b = FlowScreen("b", "b.txt", counter_reducer)
+        a = FlowScreen("a", "a.kida", counter_reducer)
+        b = FlowScreen("b", "b.kida", counter_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -119,8 +119,8 @@ class TestFlowReducer:
         assert state.screen_states["b"] == 1
 
     def test_custom_transition(self):
-        a = FlowScreen("a", "a.txt", noop_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", noop_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = (a >> b).with_transition("b", "a", on="go_back")
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -139,8 +139,8 @@ class TestFlowReducer:
                 return ReducerResult(state=1, sagas=(lambda: iter([]),))
             return state
 
-        a = FlowScreen("a", "a.txt", saga_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", saga_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))
@@ -158,8 +158,8 @@ class TestFlowReducer:
                 return Quit(state=99, code=1)
             return state
 
-        a = FlowScreen("a", "a.txt", quit_reducer)
-        b = FlowScreen("b", "b.txt", noop_reducer)
+        a = FlowScreen("a", "a.kida", quit_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
         flow = a >> b
         reducer = flow.build_reducer()
         state = reducer(None, Action("@@INIT"))

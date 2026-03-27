@@ -25,19 +25,19 @@ flowchart LR
 from milo.templates import get_env
 
 env = get_env()  # Pre-configured environment with all loaders
-template = env.get_template("my_screen.txt")
+template = env.get_template("my_screen.kida")
 ```
 
 ## Built-in templates
 
 | Template | Description |
 |----------|-------------|
-| `form.txt` | Full form layout — iterates field specs and renders each field |
-| `field_text.txt` | Text/password input field with cursor |
-| `field_select.txt` | Select field with `[x]` / `[ ]` radio indicators |
-| `field_confirm.txt` | Yes/No confirm field |
-| `help.txt` | argparse help output styled with Kida |
-| `progress.txt` | Unicode progress bar (`█` / `░`) |
+| `form.kida` | Full form layout — iterates field specs and renders each field |
+| `field_text.kida` | Text/password input field with cursor |
+| `field_select.kida` | Select field with `[x]` / `[ ]` radio indicators |
+| `field_confirm.kida` | Yes/No confirm field |
+| `help.kida` | argparse help output styled with Kida |
+| `progress.kida` | Unicode progress bar (`█` / `░`) |
 
 :::{tip}
 Override any built-in template by placing a file with the same name in your template directory. The loader chain checks your templates first.
@@ -48,7 +48,7 @@ Override any built-in template by placing a file with the same name in your temp
 Templates use [[ext:kida:docs/syntax|Kida syntax]] (similar to Jinja2). Your state dict becomes the template context:
 
 ```kida
-{# dashboard.txt #}
+{# dashboard.kida #}
 {{ "Status Dashboard" | bold }}
 {{ "=" * 40 | fg("dim") }}
 
@@ -90,7 +90,7 @@ For one-shot output (documentation, exports), use `render_html`:
 ```python
 from milo import render_html
 
-html = render_html(state={"count": 42}, template="counter.txt")
+html = render_html(state={"count": 42}, template="counter.kida")
 ```
 
 :::{note}

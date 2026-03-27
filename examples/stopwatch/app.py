@@ -72,11 +72,11 @@ if __name__ == "__main__":
     env = get_env(loader=FileSystemLoader(str(templates)))
 
     app = App(
-        template="stopwatch.txt",
+        template="stopwatch.kida",
         reducer=reducer,
         initial_state=State(),
         env=env,
         tick_rate=TICK_INTERVAL,
-        exit_template="exit.txt",
+        exit_template="exit.kida",
     )
     app.run()

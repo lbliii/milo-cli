@@ -73,7 +73,7 @@ Render through a kida template:
 ```python
 from milo import format_output
 
-output = format_output(data, fmt="template", template="report.txt")
+output = format_output(data, fmt="template", template="report.kida")
 ```
 
 ## Using format_output directly

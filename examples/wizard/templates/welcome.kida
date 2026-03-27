@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import header_box %}
+{% from "components/_defs.kida" import header_box %}
 {{ header_box("Project Setup Wizard") }}
 
   Welcome! This wizard will walk you through

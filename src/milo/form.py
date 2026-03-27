@@ -245,7 +245,7 @@ def form(
         initial = replace(initial, fields=tuple(fields))
 
     app = App(
-        template="form.txt",
+        template="form.kida",
         reducer=form_reducer,
         initial_state=initial,
         env=env,

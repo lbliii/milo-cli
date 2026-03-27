@@ -1,4 +1,4 @@
-{% from "components/_defs.txt" import header, section, key_hints %}
+{% from "components/_defs.kida" import header, section, key_hints %}
 {{ header("Stopwatch") }}
 {{ hr() }}
 

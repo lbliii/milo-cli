@@ -92,11 +92,11 @@ if __name__ == "__main__":
     env = get_env(loader=FileSystemLoader(str(templates)))
 
     app = App(
-        template="fetcher.txt",
+        template="fetcher.kida",
         reducer=reducer,
         initial_state=State(url="https://example.com"),
         tick_rate=0.15,
         env=env,
-        exit_template="exit.txt",
+        exit_template="exit.kida",
     )
     app.run()

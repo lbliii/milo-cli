@@ -231,10 +231,10 @@ if __name__ == "__main__":
     env.globals["viewport_height"] = VIEWPORT_HEIGHT
 
     app = App(
-        template="filepicker.txt",
+        template="filepicker.kida",
         reducer=reducer,
         initial_state=State(),
         env=env,
-        exit_template="exit.txt",
+        exit_template="exit.kida",
     )
     app.run()

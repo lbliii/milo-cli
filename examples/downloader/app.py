@@ -217,11 +217,11 @@ if __name__ == "__main__":
     env = get_env(loader=FileSystemLoader(str(templates)))
 
     app = App(
-        template="downloader.txt",
+        template="downloader.kida",
         reducer=reducer,
         initial_state=State(urls=tuple(UrlState(url=u) for u in URLS)),
         tick_rate=0.1,
         env=env,
-        exit_template="exit.txt",
+        exit_template="exit.kida",
     )
     app.run()

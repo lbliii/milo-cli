@@ -27,7 +27,7 @@ def simple_reducer(state, action):
 class TestApp:
     def test_requires_reducer_or_flow(self):
         with pytest.raises(AppError):
-            App(template="test.txt", initial_state=0)
+            App(template="test.kida", initial_state=0)
 
     def test_from_flow(self):
         from milo.flow import FlowScreen
@@ -35,13 +35,13 @@ class TestApp:
         def r(s, a):
             return s or 0
 
-        a = FlowScreen("a", "a.txt", r)
-        b = FlowScreen("b", "b.txt", r)
+        a = FlowScreen("a", "a.kida", r)
+        b = FlowScreen("b", "b.kida", r)
         app = App.from_flow(a >> b)
         assert app._flow is not None
 
     def test_default_attributes(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=SimpleState())
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=SimpleState())
         assert app._tick_rate == 0.0
         assert app._transient is False
         assert app._target == RenderTarget.TERMINAL
@@ -57,7 +57,7 @@ class TestApp:
         env.get_template.return_value = tmpl
 
         app = App(
-            template="t.txt",
+            template="t.kida",
             reducer=simple_reducer,
             initial_state=SimpleState(value=42),
             target=RenderTarget.HTML,
@@ -78,7 +78,7 @@ class TestApp:
         env.get_template.return_value = tmpl
 
         app = App(
-            template="t.txt",
+            template="t.kida",
             reducer=simple_reducer,
             initial_state=SimpleState(value=7),
             env=env,
@@ -88,8 +88,8 @@ class TestApp:
         assert isinstance(result, SimpleState)
 
     def test_get_template_name_no_flow(self):
-        app = App(template="my.txt", reducer=simple_reducer, initial_state=None)
-        assert app._get_template_name(SimpleState()) == "my.txt"
+        app = App(template="my.kida", reducer=simple_reducer, initial_state=None)
+        assert app._get_template_name(SimpleState()) == "my.kida"
 
     def test_get_template_name_with_flow(self):
         from milo.flow import FlowScreen, FlowState
@@ -97,23 +97,23 @@ class TestApp:
         def r(s, a):
             return s or 0
 
-        a = FlowScreen("screen_a", "a.txt", r)
-        b = FlowScreen("screen_b", "b.txt", r)
+        a = FlowScreen("screen_a", "a.kida", r)
+        b = FlowScreen("screen_b", "b.kida", r)
         app = App.from_flow(a >> b)
 
         flow_state = FlowState(current_screen="screen_a", screen_states={})
-        assert app._get_template_name(flow_state) == "a.txt"
+        assert app._get_template_name(flow_state) == "a.kida"
 
         flow_state_b = FlowState(current_screen="screen_b", screen_states={})
-        assert app._get_template_name(flow_state_b) == "b.txt"
+        assert app._get_template_name(flow_state_b) == "b.kida"
 
     def test_get_env_uses_provided(self):
         fake_env = MagicMock()
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=fake_env)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None, env=fake_env)
         assert app._get_env() is fake_env
 
     def test_get_env_creates_default(self):
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None)
         env = app._get_env()
         assert env is not None
 
@@ -121,7 +121,7 @@ class TestApp:
         """_render_state should log errors to stderr, not raise."""
         bad_env = MagicMock()
         bad_env.get_template.side_effect = Exception("template error")
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=bad_env)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None, env=bad_env)
         with patch("sys.stderr") as mock_stderr:
             app._render_state(SimpleState(), bad_env, None)
             mock_stderr.write.assert_called_once()
@@ -131,7 +131,7 @@ class TestApp:
         """_render_once should log errors to stderr, not raise."""
         bad_env = MagicMock()
         bad_env.get_template.side_effect = Exception("template error")
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=bad_env)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None, env=bad_env)
         with patch("sys.stderr") as mock_stderr:
             app._render_once(SimpleState())
             mock_stderr.write.assert_called_once()
@@ -147,7 +147,7 @@ class TestApp:
         env.get_template.return_value = tmpl
 
         app = App(
-            template="t.txt", reducer=simple_reducer, initial_state=SimpleState(value=9), env=env
+            template="t.kida", reducer=simple_reducer, initial_state=SimpleState(value=9), env=env
         )
 
         written = []
@@ -167,7 +167,7 @@ class TestApp:
         env.get_template.return_value = tmpl
         renderer = MagicMock()
 
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=env)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None, env=env)
         app._render_state(SimpleState(value=3), env, renderer)
         renderer.update.assert_called_once()
 
@@ -180,7 +180,7 @@ class TestApp:
         env = MagicMock()
         env.get_template.return_value = tmpl
 
-        app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=env)
+        app = App(template="t.kida", reducer=simple_reducer, initial_state=None, env=env)
         renderer = MagicMock()
         app._render_state(SimpleState(value=5), env, renderer)
         renderer.update.assert_called_once()
@@ -203,8 +203,8 @@ class TestApp:
 
         from milo.flow import FlowScreen
 
-        a = FlowScreen("a", "a.txt", r)
-        b = FlowScreen("b", "b.txt", r)
+        a = FlowScreen("a", "a.kida", r)
+        b = FlowScreen("b", "b.kida", r)
         app = App.from_flow(a >> b, env=env)
 
         flow_state = FlowState(
@@ -231,19 +231,19 @@ class TestExitTemplate:
         env = MagicMock()
 
         def get_template(name):
-            if name == "exit.txt":
+            if name == "exit.kida":
                 return exit_tmpl
             return main_tmpl
 
         env.get_template.side_effect = get_template
 
         app = App(
-            template="t.txt",
+            template="t.kida",
             reducer=simple_reducer,
             initial_state=SimpleState(value=42),
             target=RenderTarget.HTML,
             env=env,
-            exit_template="exit.txt",
+            exit_template="exit.kida",
         )
         written = []
         mock_stdout = MagicMock()
@@ -263,7 +263,7 @@ class TestExitTemplate:
         env.get_template.return_value = tmpl
 
         app = App(
-            template="t.txt",
+            template="t.kida",
             reducer=simple_reducer,
             initial_state=SimpleState(),
             target=RenderTarget.HTML,
@@ -284,19 +284,19 @@ class TestExitTemplate:
         env = MagicMock()
 
         def get_template(name):
-            if name == "exit.txt":
+            if name == "exit.kida":
                 raise Exception("exit template missing")
             return main_tmpl
 
         env.get_template.side_effect = get_template
 
         app = App(
-            template="t.txt",
+            template="t.kida",
             reducer=simple_reducer,
             initial_state=SimpleState(),
             target=RenderTarget.HTML,
             env=env,
-            exit_template="exit.txt",
+            exit_template="exit.kida",
         )
         with patch("sys.stdout"), patch("sys.stderr") as mock_stderr:
             app.run()  # should not raise
@@ -312,7 +312,7 @@ class TestExitTemplate:
         env = MagicMock()
         env.get_template.return_value = tmpl
 
-        result = App.render("t.txt", SimpleState(value=5), env=env)
+        result = App.render("t.kida", SimpleState(value=5), env=env)
         assert result == "hello=5"
 
 
@@ -327,7 +327,7 @@ class TestRun:
 
         with patch("milo.app.is_tty", return_value=False), patch("sys.stdout"):
             result = run(
-                template="t.txt",
+                template="t.kida",
                 reducer=simple_reducer,
                 initial_state=SimpleState(),
                 env=env,
@@ -364,7 +364,7 @@ class TestRenderHtml:
         env = MagicMock()
         env.get_template.return_value = tmpl
 
-        html = render_html("my_state", "t.txt", env=env)
+        html = render_html("my_state", "t.kida", env=env)
         assert "<!DOCTYPE html>" in html
         assert "body=my_state" in html
 

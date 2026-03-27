@@ -1,7 +1,7 @@
 {#- Component primitives for CLI output.
 
     Usage:
-        {% from "components/_defs.txt" import section, status_line, kv_pair, ... %}
+        {% from "components/_defs.kida" import section, status_line, kv_pair, ... %}
 
     All defs produce styled terminal strings. Use with kida's
     autoescape="terminal" mode.
