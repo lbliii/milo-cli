@@ -200,12 +200,14 @@ def _list_resources(cli: CLI) -> list[dict[str, Any]]:
     """Generate MCP resources/list response from registered resources."""
     resources = []
     for _uri, res in cli.walk_resources():
-        resources.append({
-            "uri": res.uri,
-            "name": res.name,
-            "description": res.description,
-            "mimeType": res.mime_type,
-        })
+        resources.append(
+            {
+                "uri": res.uri,
+                "name": res.name,
+                "description": res.description,
+                "mimeType": res.mime_type,
+            }
+        )
     return resources
 
 
@@ -224,11 +226,7 @@ def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
 
     text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
 
-    return {
-        "contents": [
-            {"uri": uri, "text": text, "mimeType": res.mime_type}
-        ]
-    }
+    return {"contents": [{"uri": uri, "text": text, "mimeType": res.mime_type}]}
 
 
 def _list_prompts(cli: CLI) -> list[dict[str, Any]]:
@@ -257,11 +255,7 @@ def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
     try:
         result = p.handler(**arguments)
     except Exception as e:
-        return {
-            "messages": [
-                {"role": "user", "content": {"type": "text", "text": f"Error: {e}"}}
-            ]
-        }
+        return {"messages": [{"role": "user", "content": {"type": "text", "text": f"Error: {e}"}}]}
 
     # If handler returns list of dicts, treat as messages
     if isinstance(result, list):
@@ -269,11 +263,7 @@ def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
 
     # If handler returns a string, wrap as single user message
     if isinstance(result, str):
-        return {
-            "messages": [
-                {"role": "user", "content": {"type": "text", "text": result}}
-            ]
-        }
+        return {"messages": [{"role": "user", "content": {"type": "text", "text": result}}]}
 
     return {
         "messages": [

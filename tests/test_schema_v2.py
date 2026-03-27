@@ -10,6 +10,7 @@ from milo.schema import _type_to_schema, function_to_schema
 
 # --- Test Enum ---
 
+
 class Color(enum.Enum):
     RED = "red"
     GREEN = "green"
@@ -33,11 +34,13 @@ class TestEnum:
 
     def test_enum_in_function(self) -> None:
         def f(color: Color) -> None: ...
+
         schema = function_to_schema(f)
         assert schema["properties"]["color"] == {"type": "string", "enum": ["red", "green", "blue"]}
 
 
 # --- Test Literal ---
+
 
 class TestLiteral:
     def test_string_literal(self) -> None:
@@ -50,11 +53,13 @@ class TestLiteral:
 
     def test_literal_in_function(self) -> None:
         def f(mode: Literal["fast", "slow"]) -> None: ...
+
         schema = function_to_schema(f)
         assert schema["properties"]["mode"] == {"enum": ["fast", "slow"]}
 
 
 # --- Test dataclass ---
+
 
 @dataclass
 class Address:
@@ -89,12 +94,14 @@ class TestDataclass:
 
     def test_dataclass_in_function(self) -> None:
         def f(addr: Address) -> None: ...
+
         schema = function_to_schema(f)
         assert schema["properties"]["addr"]["type"] == "object"
         assert "street" in schema["properties"]["addr"]["properties"]
 
 
 # --- Test TypedDict ---
+
 
 class Config(TypedDict, total=False):
     host: str
@@ -122,6 +129,7 @@ class TestTypedDict:
 
 # --- Test Union ---
 
+
 class TestUnion:
     def test_union_two_types(self) -> None:
         schema = _type_to_schema(str | int)
@@ -131,11 +139,13 @@ class TestUnion:
 
     def test_union_in_function(self) -> None:
         def f(val: str | int) -> None: ...
+
         schema = function_to_schema(f)
         assert "anyOf" in schema["properties"]["val"]
 
 
 # --- Test list[complex_T] ---
+
 
 class TestListComplex:
     def test_list_of_dataclass(self) -> None:
@@ -152,6 +162,7 @@ class TestListComplex:
 
 # --- Test dict[str, V] ---
 
+
 class TestDictAdditionalProperties:
     def test_dict_str_int(self) -> None:
         schema = _type_to_schema(dict[str, int])
@@ -164,6 +175,7 @@ class TestDictAdditionalProperties:
 
 
 # --- Test cycle detection ---
+
 
 @dataclass
 class TreeNode:
@@ -182,6 +194,7 @@ class TestCycleDetection:
 
 
 # --- Test nested combinations ---
+
 
 class TestNested:
     def test_list_of_optional_int(self) -> None:

@@ -32,7 +32,9 @@ def _load() -> dict[str, Any]:
         return {"version": 1, "clis": {}}
     try:
         return json.loads(_REGISTRY_FILE.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        return {"version": 1, "clis": {}}
+    except OSError:
         return {"version": 1, "clis": {}}
 
 
@@ -171,9 +173,7 @@ def health_check(name: str) -> HealthResult:
         )
     except Exception as e:
         elapsed = (time.monotonic() - start) * 1000
-        return HealthResult(
-            name=name, reachable=False, latency_ms=round(elapsed, 2), error=str(e)
-        )
+        return HealthResult(name=name, reachable=False, latency_ms=round(elapsed, 2), error=str(e))
 
 
 def check_all() -> list[HealthResult]:

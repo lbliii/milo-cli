@@ -116,7 +116,9 @@ class ChildProcess:
                 try:
                     self._proc.terminate()
                     self._proc.wait(timeout=5)
-                except (ProcessLookupError, subprocess.TimeoutExpired):
+                except ProcessLookupError:
+                    pass
+                except subprocess.TimeoutExpired:
                     import contextlib
 
                     with contextlib.suppress(ProcessLookupError):

@@ -363,7 +363,9 @@ def _proxy_prompt(
     if not child:
         return {"messages": []}
 
-    return child.send_call("prompts/get", {"name": original_name, "arguments": params.get("arguments", {})})
+    return child.send_call(
+        "prompts/get", {"name": original_name, "arguments": params.get("arguments", {})}
+    )
 
 
 def _write_result(req_id: Any, result: dict[str, Any]) -> None:

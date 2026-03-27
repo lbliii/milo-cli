@@ -47,7 +47,12 @@ class TestToolInfo:
             info.name = "y"  # type: ignore[misc]
 
     def test_fields(self) -> None:
-        info = ToolInfo(name="greet", description="Say hello", input_schema={"type": "object"}, output_schema={"type": "string"})
+        info = ToolInfo(
+            name="greet",
+            description="Say hello",
+            input_schema={"type": "object"},
+            output_schema={"type": "string"},
+        )
         assert info.name == "greet"
         assert info.output_schema == {"type": "string"}
 

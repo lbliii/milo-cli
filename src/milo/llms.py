@@ -167,8 +167,6 @@ def _detect_workflows(cli: CLI) -> list[str]:
             props_b = set(cmd_b.schema.get("properties", {}).keys())
             overlap = props_a & props_b
             if overlap:
-                workflows.append(
-                    f"`{name_a}` → `{name_b}` (shared: {', '.join(sorted(overlap))})"
-                )
+                workflows.append(f"`{name_a}` → `{name_b}` (shared: {', '.join(sorted(overlap))})")
 
     return workflows

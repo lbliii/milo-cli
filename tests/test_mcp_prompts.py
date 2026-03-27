@@ -16,7 +16,10 @@ def cli() -> CLI:
     @app.prompt("deploy-checklist", description="Pre-deploy steps")
     def checklist(environment: str) -> list[dict]:
         return [
-            {"role": "user", "content": {"type": "text", "text": f"Deploy checklist for {environment}"}},
+            {
+                "role": "user",
+                "content": {"type": "text", "text": f"Deploy checklist for {environment}"},
+            },
         ]
 
     @app.prompt("greeting", description="Generate a greeting")

@@ -18,16 +18,12 @@ from milo.observability import (
 
 class TestRequestLog:
     def test_frozen(self) -> None:
-        entry = RequestLog(
-            correlation_id="abc", method="tools/call", name="greet", latency_ms=10.0
-        )
+        entry = RequestLog(correlation_id="abc", method="tools/call", name="greet", latency_ms=10.0)
         with pytest.raises(AttributeError):
             entry.method = "other"  # type: ignore[misc]
 
     def test_defaults(self) -> None:
-        entry = RequestLog(
-            correlation_id="abc", method="tools/call", name="greet", latency_ms=10.0
-        )
+        entry = RequestLog(correlation_id="abc", method="tools/call", name="greet", latency_ms=10.0)
         assert entry.error == ""
         assert entry.cli_name == ""
         assert entry.timestamp == 0.0
@@ -67,9 +63,7 @@ class TestRequestLogger:
         logger = RequestLogger(max_size=3)
         for i in range(10):
             logger.record(
-                RequestLog(
-                    correlation_id="id", method="m", name=f"t-{i}", latency_ms=1.0
-                )
+                RequestLog(correlation_id="id", method="m", name=f"t-{i}", latency_ms=1.0)
             )
         recent = logger.recent(100)
         assert len(recent) == 3

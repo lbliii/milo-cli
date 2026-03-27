@@ -56,7 +56,9 @@ class TestHealthCheck:
                 }
             },
         }
-        response = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}})
+        response = json.dumps(
+            {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
+        )
         mock_run.return_value.stdout = response
         mock_run.return_value.returncode = 0
 
@@ -68,6 +70,7 @@ class TestHealthCheck:
     @patch("milo.registry._load")
     def test_timeout(self, mock_load, mock_run) -> None:
         import subprocess
+
         mock_load.return_value = {
             "version": 1,
             "clis": {"myapp": {"command": ["python", "app.py"]}},
