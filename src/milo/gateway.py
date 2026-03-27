@@ -66,7 +66,7 @@ def _run_gateway() -> None:
     all_tools, tool_routing = _discover_tools(clis)
     tool_names = [t["name"] for t in all_tools]
 
-    _stderr(f"milo gateway ready")
+    _stderr("milo gateway ready")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
     _stderr(f"  CLIs:      {len(clis)} ({', '.join(clis.keys()) if clis else 'none'})")
     _stderr(f"  Tools:     {len(all_tools)}")

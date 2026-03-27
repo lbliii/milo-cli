@@ -25,17 +25,15 @@ def run_mcp_server(cli: CLI) -> None:
     _stderr(f"MCP server ready — {cli.name}")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
     _stderr(f"  Tools:     {len(tools)} ({', '.join(tool_names)})")
-    _stderr(f"  Transport: stdin/stdout (JSON-RPC, one request per line)")
+    _stderr("  Transport: stdin/stdout (JSON-RPC, one request per line)")
     _stderr("")
     _stderr("Send requests as JSON, for example:")
-    _stderr(f'  {{"jsonrpc":"2.0","id":1,"method":"initialize"}}')
-    _stderr(f'  {{"jsonrpc":"2.0","id":2,"method":"tools/list"}}')
+    _stderr('  {"jsonrpc":"2.0","id":1,"method":"initialize"}')
+    _stderr('  {"jsonrpc":"2.0","id":2,"method":"tools/list"}')
     if tool_names:
         example_tool = tool_names[0]
         example_schema = tools[0].get("inputSchema", {})
-        example_args = {
-            k: "..." for k in example_schema.get("properties", {})
-        }
+        example_args = dict.fromkeys(example_schema.get("properties", {}), "...")
         args_json = json.dumps(example_args) if example_args else "{}"
         _stderr(
             f'  {{"jsonrpc":"2.0","id":3,"method":"tools/call",'
