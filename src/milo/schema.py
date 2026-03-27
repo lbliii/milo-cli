@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
+import enum
 import inspect
 import types
 import typing
 from collections.abc import Callable
-from typing import Any, Union, get_args, get_origin
+from typing import Any, Literal, Union, get_args, get_origin
 
 _TYPE_MAP: dict[type, str] = {
     str: "string",
@@ -21,7 +23,8 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
 
     Parameters with defaults are optional (not in required).
     X | None unions unwrapped to base type.
-    Supports: str, int, float, bool, list[X], dict[str, X], X | None.
+    Supports: str, int, float, bool, list[X], dict[str, X], X | None,
+    Enum, Literal, dataclass, TypedDict, Union.
     """
     sig = inspect.signature(func)
     # Resolve string annotations (from __future__ import annotations)
@@ -62,8 +65,9 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     return result
 
 
-def _type_to_schema(annotation: Any) -> dict[str, Any]:
+def _type_to_schema(annotation: Any, _seen: set[int] | None = None) -> dict[str, Any]:
     """Convert Python type annotation to JSON Schema fragment."""
+    # Primitive types
     if annotation in _TYPE_MAP:
         return {"type": _TYPE_MAP[annotation]}
 
@@ -73,17 +77,94 @@ def _type_to_schema(annotation: Any) -> dict[str, Any]:
     if annotation is list:
         return {"type": "array"}
 
+    # Enum subclass
+    if isinstance(annotation, type) and issubclass(annotation, enum.Enum):
+        values = [m.value for m in annotation]
+        if all(isinstance(v, int) for v in values):
+            return {"type": "integer", "enum": values}
+        return {"type": "string", "enum": values}
+
+    # Literal
     origin = get_origin(annotation)
+    if origin is Literal:
+        return {"enum": list(get_args(annotation))}
+
+    # dataclass
+    if dataclasses.is_dataclass(annotation) and isinstance(annotation, type):
+        if _seen is None:
+            _seen = set()
+        type_id = id(annotation)
+        if type_id in _seen:
+            return {"type": "object"}  # cycle detected
+        _seen = _seen | {type_id}
+        props = {}
+        req = []
+        hints = typing.get_type_hints(annotation)
+        for f in dataclasses.fields(annotation):
+            field_type = hints.get(f.name, str)
+            props[f.name] = _type_to_schema(field_type, _seen)
+            if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
+                req.append(f.name)
+        result: dict[str, Any] = {"type": "object", "properties": props}
+        if req:
+            result["required"] = req
+        return result
+
+    # TypedDict
+    if _is_typed_dict(annotation):
+        if _seen is None:
+            _seen = set()
+        type_id = id(annotation)
+        if type_id in _seen:
+            return {"type": "object"}
+        _seen = _seen | {type_id}
+        hints = typing.get_type_hints(annotation)
+        props = {}
+        for fname, ftype in hints.items():
+            props[fname] = _type_to_schema(ftype, _seen)
+        result = {"type": "object", "properties": props}
+        # TypedDict required keys
+        req_keys = getattr(annotation, "__required_keys__", set())
+        if req_keys:
+            result["required"] = sorted(req_keys)
+        return result
+
+    # Union (non-Optional, non-None)
+    if origin is Union or origin is types.UnionType:
+        args = get_args(annotation)
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) > 1:
+            if _seen is None:
+                _seen = set()
+            return {"anyOf": [_type_to_schema(a, _seen) for a in non_none]}
+        if len(non_none) == 1:
+            return _type_to_schema(non_none[0], _seen)
+
+    # list[T] with recursive item schema
     if origin is list:
         args = get_args(annotation)
-        if args and args[0] in _TYPE_MAP:
-            return {"type": "array", "items": {"type": _TYPE_MAP[args[0]]}}
+        if args:
+            return {"type": "array", "items": _type_to_schema(args[0], _seen)}
         return {"type": "array"}
 
+    # dict[str, V] with additionalProperties
     if origin is dict:
+        args = get_args(annotation)
+        if args and len(args) == 2:
+            return {"type": "object", "additionalProperties": _type_to_schema(args[1], _seen)}
         return {"type": "object"}
 
     return {"type": "string"}
+
+
+def _is_typed_dict(annotation: Any) -> bool:
+    """Check if annotation is a TypedDict subclass."""
+    return (
+        isinstance(annotation, type)
+        and issubclass(annotation, dict)
+        and hasattr(annotation, "__annotations__")
+        and hasattr(annotation, "__required_keys__")
+    )
 
 
 def _is_optional(annotation: Any) -> bool:

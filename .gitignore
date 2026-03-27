@@ -13,3 +13,4 @@ build/
 public/
 reports/
 .context/
+.tasks.json

@@ -6,6 +6,7 @@ import argparse
 import difflib
 import importlib
 import inspect
+import os
 import sys
 import threading
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from milo.schema import function_to_schema
 if TYPE_CHECKING:
     from milo.context import Context
     from milo.groups import Group
+    from milo.middleware import MiddlewareStack
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +35,27 @@ class GlobalOption:
 
 
 @dataclass(frozen=True, slots=True)
+class ResourceDef:
+    """A registered MCP resource."""
+
+    uri: str
+    name: str
+    description: str
+    handler: Callable[..., Any]
+    mime_type: str = "text/plain"
+
+
+@dataclass(frozen=True, slots=True)
+class PromptDef:
+    """A registered MCP prompt."""
+
+    name: str
+    description: str
+    handler: Callable[..., Any]
+    arguments: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class CommandDef:
     """A registered CLI command."""
 
@@ -43,6 +66,7 @@ class CommandDef:
     aliases: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     hidden: bool = False
+    examples: tuple[dict[str, Any], ...] = ()
 
 
 class LazyCommandDef:
@@ -62,6 +86,7 @@ class LazyCommandDef:
         "_schema",
         "aliases",
         "description",
+        "examples",
         "hidden",
         "import_path",
         "name",
@@ -78,6 +103,7 @@ class LazyCommandDef:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
     ) -> None:
         self.name = name
         self.description = description
@@ -85,6 +111,7 @@ class LazyCommandDef:
         self.aliases = tuple(aliases)
         self.tags = tuple(tags)
         self.hidden = hidden
+        self.examples = tuple(examples)
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -129,6 +156,7 @@ class LazyCommandDef:
                 aliases=self.aliases,
                 tags=self.tags,
                 hidden=self.hidden,
+                examples=self.examples,
             )
             return self._resolved
 
@@ -179,6 +207,9 @@ class CLI:
         self._groups: dict[str, Group] = {}
         self._group_alias_map: dict[str, str] = {}
         self._global_options: list[GlobalOption] = []
+        self._resources: dict[str, ResourceDef] = {}
+        self._prompts: dict[str, PromptDef] = {}
+        self._middleware: MiddlewareStack | None = None
 
     def global_option(
         self,
@@ -216,6 +247,7 @@ class CLI:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
     ) -> Callable:
         """Register a function as a CLI command.
 
@@ -239,6 +271,7 @@ class CLI:
                 aliases=tuple(aliases),
                 tags=tuple(tags),
                 hidden=hidden,
+                examples=tuple(examples),
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -258,19 +291,12 @@ class CLI:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
     ) -> LazyCommandDef:
         """Register a lazy-loaded command.
 
         The handler module is not imported until the command is invoked.
         This keeps CLI startup fast for large command sets.
-
-        Usage::
-
-            cli.lazy_command(
-                "build",
-                "myapp.commands.site:build_handler",
-                description="Build the site",
-            )
         """
         cmd = LazyCommandDef(
             name=name,
@@ -280,11 +306,100 @@ class CLI:
             aliases=aliases,
             tags=tags,
             hidden=hidden,
+            examples=examples,
         )
         self._commands[name] = cmd
         for alias in aliases:
             self._alias_map[alias] = name
         return cmd
+
+    def resource(
+        self,
+        uri: str,
+        *,
+        name: str = "",
+        description: str = "",
+        mime_type: str = "text/plain",
+    ) -> Callable:
+        """Register a function as an MCP resource.
+
+        Usage::
+
+            @cli.resource("config://app", description="App config")
+            def get_config() -> dict: ...
+        """
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            resource_name = name or func.__name__
+            res = ResourceDef(
+                uri=uri,
+                name=resource_name,
+                description=description,
+                handler=func,
+                mime_type=mime_type,
+            )
+            self._resources[uri] = res
+            return func
+
+        return decorator
+
+    def prompt(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        arguments: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+    ) -> Callable:
+        """Register a function as an MCP prompt.
+
+        Usage::
+
+            @cli.prompt("deploy-checklist", description="Pre-deploy steps")
+            def checklist(environment: str) -> list[dict]: ...
+        """
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            # Auto-derive arguments from function signature if not provided
+            args = tuple(arguments)
+            if not args:
+                sig = inspect.signature(func)
+                derived = []
+                for pname, param in sig.parameters.items():
+                    arg: dict[str, Any] = {"name": pname}
+                    if param.default is not inspect.Parameter.empty:
+                        arg["required"] = False
+                    else:
+                        arg["required"] = True
+                    derived.append(arg)
+                args = tuple(derived)
+
+            p = PromptDef(
+                name=name,
+                description=description,
+                handler=func,
+                arguments=args,
+            )
+            self._prompts[name] = p
+            return func
+
+        return decorator
+
+    def middleware(self, fn: Callable) -> Callable:
+        """Register a middleware function.
+
+        Usage::
+
+            @cli.middleware
+            def log_calls(ctx, call, next_fn):
+                result = next_fn(call)
+                return result
+        """
+        if self._middleware is None:
+            from milo.middleware import MiddlewareStack
+
+            self._middleware = MiddlewareStack()
+        self._middleware.use(fn)
+        return fn
 
     def group(
         self,
@@ -316,6 +431,56 @@ class CLI:
         self._groups[group.name] = group
         for alias in group.aliases:
             self._group_alias_map[alias] = group.name
+
+    def mount(self, prefix: str, other: CLI) -> None:
+        """Mount another CLI as a command group. In-process, no subprocess.
+
+        Usage::
+
+            main = CLI(name="main")
+            sub = CLI(name="sub")
+            main.mount("sub", sub)
+            # sub's commands are now at main.sub.*
+        """
+        from milo.groups import Group as GroupClass
+
+        grp = GroupClass(prefix, description=other.description)
+
+        # Mount commands
+        for cmd_name, cmd in other._commands.items():
+            grp._commands[cmd_name] = cmd
+            if hasattr(cmd, "aliases"):
+                for alias in cmd.aliases:
+                    grp._alias_map[alias] = cmd_name
+
+        # Mount sub-groups
+        for gname, g in other._groups.items():
+            grp._groups[gname] = g
+            for alias in g.aliases:
+                grp._group_alias_map[alias] = gname
+
+        self._groups[prefix] = grp
+
+        # Mount resources with prefix
+        for uri, res in other._resources.items():
+            prefixed_uri = f"{prefix}/{uri}"
+            self._resources[prefixed_uri] = ResourceDef(
+                uri=prefixed_uri,
+                name=res.name,
+                description=res.description,
+                handler=res.handler,
+                mime_type=res.mime_type,
+            )
+
+        # Mount prompts with prefix
+        for pname, p in other._prompts.items():
+            prefixed_name = f"{prefix}.{pname}"
+            self._prompts[prefixed_name] = PromptDef(
+                name=prefixed_name,
+                description=p.description,
+                handler=p.handler,
+                arguments=p.arguments,
+            )
 
     @property
     def commands(self) -> dict[str, CommandDef | LazyCommandDef]:
@@ -379,6 +544,14 @@ class CLI:
         for group in self._groups.values():
             result.extend(group.walk_commands())
         return result
+
+    def walk_resources(self) -> list[tuple[str, ResourceDef]]:
+        """Walk all registered resources."""
+        return list(self._resources.items())
+
+    def walk_prompts(self) -> list[tuple[str, PromptDef]]:
+        """Walk all registered prompts."""
+        return list(self._prompts.items())
 
     def build_parser(self) -> argparse.ArgumentParser:
         """Build argparse parser from registered commands and groups."""
@@ -610,8 +783,17 @@ class CLI:
 
         set_context(ctx)
 
-        # Call handler
+        # Call handler (through middleware if present)
         result = cmd.handler(**kwargs)
+
+        # Handle streaming generators
+        from milo.streaming import consume_generator, is_generator_result
+
+        if is_generator_result(result):
+            progress_list, final_value = consume_generator(result)
+            for p in progress_list:
+                sys.stderr.write(f"  {p.status}\n")
+            result = final_value
 
         # Format and output
         write_output(result, fmt=fmt)
@@ -642,11 +824,7 @@ class CLI:
     def _resolve_command_from_args(
         self, args: argparse.Namespace
     ) -> tuple[CommandDef | LazyCommandDef | None, str]:
-        """Walk the parsed args to find the leaf command.
-
-        Argparse stores each group's subcommand in ``_command_<group_name>``.
-        This walks the chain to find the actual command.
-        """
+        """Walk the parsed args to find the leaf command."""
         fmt = getattr(args, "format", "plain")
 
         # Check top-level command
@@ -719,7 +897,16 @@ class CLI:
             for k, v in kwargs.items()
             if k in sig.parameters and not _is_context_param(sig.parameters[k])
         }
-        return cmd.handler(**valid)
+
+        result = cmd.handler(**valid)
+
+        # Handle streaming generators
+        from milo.streaming import consume_generator, is_generator_result
+
+        if is_generator_result(result):
+            _, result = consume_generator(result)
+
+        return result
 
     def suggest_command(self, name: str) -> str | None:
         """Suggest the closest command name for typo correction."""
@@ -734,12 +921,14 @@ class CLI:
         # Build the command to invoke this CLI with --mcp
         # Use sys.argv[0] to get the script/module that was run
         command = [sys.executable, sys.argv[0], "--mcp"]
+        project_root = os.getcwd()
 
         install(
             name=self.name,
             command=command,
             description=self.description,
             version=self.version,
+            project_root=project_root,
         )
 
     def _mcp_uninstall(self) -> None:

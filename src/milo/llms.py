@@ -66,6 +66,36 @@ def generate_llms_txt(cli: CLI) -> str:
             continue
         _format_group(group, lines, depth=2)
 
+    # Resources section
+    resources = cli.walk_resources()
+    if resources:
+        lines.append("## Resources")
+        lines.append("")
+        for _uri, res in resources:
+            lines.append(f"- **{res.uri}** ({res.mime_type}): {res.description}")
+        lines.append("")
+
+    # Prompts section
+    prompts = cli.walk_prompts()
+    if prompts:
+        lines.append("## Prompts")
+        lines.append("")
+        for _name, p in prompts:
+            args_str = ""
+            if p.arguments:
+                arg_names = [a.get("name", "?") for a in p.arguments]
+                args_str = f" ({', '.join(arg_names)})"
+            lines.append(f"- **{p.name}**{args_str}: {p.description}")
+        lines.append("")
+
+    # Workflows section (heuristic relationship detection)
+    workflows = _detect_workflows(cli)
+    if workflows:
+        lines.append("## Workflows")
+        lines.append("")
+        lines.extend(f"- {desc}" for desc in workflows)
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -111,4 +141,32 @@ def _format_command(cmd: CommandDef) -> str:
                 params.append(f"`--{name}` ({param_type})")
         parts.append("\n  Parameters: " + ", ".join(params))
 
+    # Examples
+    examples = getattr(cmd, "examples", ())
+    if examples:
+        parts.append("\n  Examples:")
+        for ex in examples:
+            args_str = " ".join(f"--{k} {v}" for k, v in ex.items())
+            parts.append(f"\n    `{cmd.name} {args_str}`")
+
     return "".join(parts)
+
+
+def _detect_workflows(cli: CLI) -> list[str]:
+    """Heuristically detect command workflows via output→input parameter overlap."""
+    commands = list(cli.walk_commands())
+    workflows: list[str] = []
+
+    for i, (name_a, cmd_a) in enumerate(commands):
+        if cmd_a.hidden:
+            continue
+        props_a = set(cmd_a.schema.get("properties", {}).keys())
+        for name_b, cmd_b in commands[i + 1 :]:
+            if cmd_b.hidden:
+                continue
+            props_b = set(cmd_b.schema.get("properties", {}).keys())
+            overlap = props_a & props_b
+            if overlap:
+                workflows.append(f"`{name_a}` → `{name_b}` (shared: {', '.join(sorted(overlap))})")
+
+    return workflows

@@ -11,15 +11,19 @@ Can also be run directly for debugging:
 
     uv run python -m milo.gateway --mcp
     uv run python -m milo.gateway --list
+    uv run python -m milo.gateway --doctor
+    uv run python -m milo.gateway --status
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
+import threading
+import time
 from typing import Any
 
+from milo._child import ChildProcess
 from milo.registry import list_clis
 
 _MCP_VERSION = "2025-11-25"
@@ -30,6 +34,14 @@ def main() -> None:
     if "--list" in sys.argv:
         _print_registry()
         return
+    if "--doctor" in sys.argv:
+        from milo.registry import doctor
+
+        sys.stdout.write(doctor())
+        return
+    if "--status" in sys.argv:
+        _print_status()
+        return
     if "--mcp" in sys.argv:
         _run_gateway()
         return
@@ -38,6 +50,8 @@ def main() -> None:
     sys.stderr.write("Usage:\n")
     sys.stderr.write("  python -m milo.gateway --mcp      Run as MCP server\n")
     sys.stderr.write("  python -m milo.gateway --list      List registered CLIs\n")
+    sys.stderr.write("  python -m milo.gateway --doctor    Health check all CLIs\n")
+    sys.stderr.write("  python -m milo.gateway --status    Show stats and children\n")
     sys.stderr.write("\nRegister CLIs with: myapp --mcp-install\n")
 
 
@@ -58,65 +72,111 @@ def _print_registry() -> None:
         sys.stdout.write(f"  {cmd}\n\n")
 
 
+def _print_status() -> None:
+    """Print gateway status (placeholder for F7 observability)."""
+    clis = list_clis()
+    sys.stdout.write(f"Registered CLIs: {len(clis)}\n")
+    for name in clis:
+        sys.stdout.write(f"  {name}\n")
+
+
 def _run_gateway() -> None:
-    """Run the MCP gateway server."""
+    """Run the MCP gateway server with persistent child processes."""
     clis = list_clis()
 
+    # Create persistent children for each CLI
+    children: dict[str, ChildProcess] = {}
+    for cli_name, info in clis.items():
+        command = info.get("command", [])
+        if command:
+            children[cli_name] = ChildProcess(cli_name, command)
+
     # Discover tools from all registered CLIs
-    all_tools, tool_routing = _discover_tools(clis)
+    all_tools, tool_routing = _discover_tools(clis, children)
     tool_names = [t["name"] for t in all_tools]
+
+    # Discover resources and prompts
+    all_resources, resource_routing = _discover_resources(clis, children)
+    all_prompts, prompt_routing = _discover_prompts(clis, children)
 
     _stderr("milo gateway ready")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
     _stderr(f"  CLIs:      {len(clis)} ({', '.join(clis.keys()) if clis else 'none'})")
     _stderr(f"  Tools:     {len(all_tools)}")
+    _stderr(f"  Resources: {len(all_resources)}")
+    _stderr(f"  Prompts:   {len(all_prompts)}")
     if tool_names:
         _stderr(f"  Available: {', '.join(tool_names)}")
     _stderr("")
     _stderr("Press Ctrl+C to stop.")
     _stderr("")
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError:
-            _write_error(None, -32700, "Parse error")
-            continue
+    # Start idle reaper thread
+    reaper = threading.Thread(target=_idle_reaper, args=(children,), daemon=True)
+    reaper.start()
 
-        req_id = request.get("id")
-        method = request.get("method", "")
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                request = json.loads(line)
+            except json.JSONDecodeError:
+                _write_error(None, -32700, "Parse error")
+                continue
 
-        try:
-            result = _handle_method(
-                clis, all_tools, tool_routing, method, request.get("params", {})
-            )
-            if result is not None:
-                _write_result(req_id, result)
-        except Exception as e:
-            _write_error(req_id, -32603, str(e))
+            req_id = request.get("id")
+            method = request.get("method", "")
+
+            try:
+                result = _handle_method(
+                    clis,
+                    all_tools,
+                    tool_routing,
+                    all_resources,
+                    resource_routing,
+                    all_prompts,
+                    prompt_routing,
+                    children,
+                    method,
+                    request.get("params", {}),
+                )
+                if result is not None:
+                    _write_result(req_id, result)
+            except Exception as e:
+                _write_error(req_id, -32603, str(e))
+    finally:
+        # Clean up children on exit
+        for child in children.values():
+            child.kill()
+
+
+def _idle_reaper(children: dict[str, ChildProcess]) -> None:
+    """Periodically check and kill idle children."""
+    while True:
+        time.sleep(60)
+        for child in list(children.values()):
+            if child.is_idle():
+                _stderr(f"  Reaping idle child: {child.name}")
+                child.kill()
 
 
 def _discover_tools(
     clis: dict[str, dict[str, Any]],
+    children: dict[str, ChildProcess],
 ) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
-    """Discover tools from all registered CLIs by calling tools/list.
-
-    Returns (tools_list, routing_map) where routing_map maps
-    namespaced tool name -> (cli_name, original_tool_name).
-    """
+    """Discover tools from all registered CLIs via persistent children."""
     all_tools: list[dict[str, Any]] = []
     routing: dict[str, tuple[str, str]] = {}
 
-    for cli_name, info in clis.items():
-        command = info.get("command", [])
-        if not command:
+    for cli_name in clis:
+        child = children.get(cli_name)
+        if not child:
             continue
 
         try:
-            tools = _fetch_tools(command)
+            tools = child.fetch_tools()
         except Exception as e:
             _stderr(f"  Warning: failed to discover {cli_name}: {e}")
             continue
@@ -133,37 +193,73 @@ def _discover_tools(
     return all_tools, routing
 
 
-def _fetch_tools(command: list[str]) -> list[dict[str, Any]]:
-    """Call tools/list on a CLI subprocess and return the tools."""
-    # Send initialize + tools/list, read responses
-    input_lines = (
-        '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n'
-        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
-    )
-    result = subprocess.run(
-        command,
-        input=input_lines,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    # Parse the tools/list response (second line)
-    for line in result.stdout.strip().split("\n"):
-        if not line:
+def _discover_resources(
+    clis: dict[str, dict[str, Any]],
+    children: dict[str, ChildProcess],
+) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    """Discover resources from all registered CLIs."""
+    all_resources: list[dict[str, Any]] = []
+    routing: dict[str, tuple[str, str]] = {}
+
+    for cli_name in clis:
+        child = children.get(cli_name)
+        if not child:
             continue
+
         try:
-            response = json.loads(line)
-            if response.get("id") == 2:
-                return response.get("result", {}).get("tools", [])
-        except json.JSONDecodeError:
+            result = child.send_call("resources/list", {})
+            resources = result.get("resources", [])
+        except Exception:
             continue
-    return []
+
+        for resource in resources:
+            original_uri = resource["uri"]
+            namespaced_uri = f"{cli_name}/{original_uri}"
+            resource["uri"] = namespaced_uri
+            all_resources.append(resource)
+            routing[namespaced_uri] = (cli_name, original_uri)
+
+    return all_resources, routing
+
+
+def _discover_prompts(
+    clis: dict[str, dict[str, Any]],
+    children: dict[str, ChildProcess],
+) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    """Discover prompts from all registered CLIs."""
+    all_prompts: list[dict[str, Any]] = []
+    routing: dict[str, tuple[str, str]] = {}
+
+    for cli_name in clis:
+        child = children.get(cli_name)
+        if not child:
+            continue
+
+        try:
+            result = child.send_call("prompts/list", {})
+            prompts = result.get("prompts", [])
+        except Exception:
+            continue
+
+        for prompt in prompts:
+            original_name = prompt["name"]
+            namespaced = f"{cli_name}.{original_name}"
+            prompt["name"] = namespaced
+            all_prompts.append(prompt)
+            routing[namespaced] = (cli_name, original_name)
+
+    return all_prompts, routing
 
 
 def _handle_method(
     clis: dict[str, dict[str, Any]],
     all_tools: list[dict[str, Any]],
     tool_routing: dict[str, tuple[str, str]],
+    all_resources: list[dict[str, Any]],
+    resource_routing: dict[str, tuple[str, str]],
+    all_prompts: list[dict[str, Any]],
+    prompt_routing: dict[str, tuple[str, str]],
+    children: dict[str, ChildProcess],
     method: str,
     params: dict[str, Any],
 ) -> dict[str, Any] | None:
@@ -173,7 +269,7 @@ def _handle_method(
             cli_names = list(clis.keys())
             return {
                 "protocolVersion": _MCP_VERSION,
-                "capabilities": {"tools": {}},
+                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
                 "serverInfo": {
                     "name": "milo-gateway",
                     "version": "0.1.0",
@@ -189,17 +285,25 @@ def _handle_method(
         case "tools/list":
             return {"tools": all_tools}
         case "tools/call":
-            return _proxy_call(clis, tool_routing, params)
+            return _proxy_call(children, tool_routing, params)
+        case "resources/list":
+            return {"resources": all_resources}
+        case "resources/read":
+            return _proxy_resource(children, resource_routing, params)
+        case "prompts/list":
+            return {"prompts": all_prompts}
+        case "prompts/get":
+            return _proxy_prompt(children, prompt_routing, params)
         case _:
             raise ValueError(f"Unknown method: {method!r}")
 
 
 def _proxy_call(
-    clis: dict[str, dict[str, Any]],
+    children: dict[str, ChildProcess],
     tool_routing: dict[str, tuple[str, str]],
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    """Proxy a tools/call to the appropriate CLI subprocess."""
+    """Proxy a tools/call to the appropriate child process."""
     tool_name = params.get("name", "")
     arguments = params.get("arguments", {})
 
@@ -210,55 +314,58 @@ def _proxy_call(
         }
 
     cli_name, original_name = tool_routing[tool_name]
-    info = clis.get(cli_name)
-    if not info:
+    child = children.get(cli_name)
+    if not child:
         return {
-            "content": [{"type": "text", "text": f"CLI {cli_name!r} not found in registry"}],
+            "content": [{"type": "text", "text": f"CLI {cli_name!r} not available"}],
             "isError": True,
         }
 
-    command = info.get("command", [])
-    call_request = json.dumps(
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": original_name, "arguments": arguments},
+    result = child.send_call("tools/call", {"name": original_name, "arguments": arguments})
+    if "error" in result:
+        return {
+            "content": [{"type": "text", "text": result["error"].get("message", "Unknown error")}],
+            "isError": True,
         }
+    return result
+
+
+def _proxy_resource(
+    children: dict[str, ChildProcess],
+    resource_routing: dict[str, tuple[str, str]],
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Proxy a resources/read to the appropriate child process."""
+    uri = params.get("uri", "")
+    if uri not in resource_routing:
+        return {"contents": []}
+
+    cli_name, original_uri = resource_routing[uri]
+    child = children.get(cli_name)
+    if not child:
+        return {"contents": []}
+
+    return child.send_call("resources/read", {"uri": original_uri})
+
+
+def _proxy_prompt(
+    children: dict[str, ChildProcess],
+    prompt_routing: dict[str, tuple[str, str]],
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Proxy a prompts/get to the appropriate child process."""
+    name = params.get("name", "")
+    if name not in prompt_routing:
+        return {"messages": []}
+
+    cli_name, original_name = prompt_routing[name]
+    child = children.get(cli_name)
+    if not child:
+        return {"messages": []}
+
+    return child.send_call(
+        "prompts/get", {"name": original_name, "arguments": params.get("arguments", {})}
     )
-
-    # Send initialize + tools/call
-    input_lines = f'{{"jsonrpc":"2.0","id":0,"method":"initialize"}}\n{call_request}\n'
-
-    try:
-        result = subprocess.run(
-            command,
-            input=input_lines,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "content": [{"type": "text", "text": f"Timeout calling {cli_name}.{original_name}"}],
-            "isError": True,
-        }
-
-    # Parse the tools/call response (second line)
-    for line in result.stdout.strip().split("\n"):
-        if not line:
-            continue
-        try:
-            response = json.loads(line)
-            if response.get("id") == 1:
-                return response.get("result", {})
-        except json.JSONDecodeError:
-            continue
-
-    return {
-        "content": [{"type": "text", "text": f"No response from {cli_name}"}],
-        "isError": True,
-    }
 
 
 def _write_result(req_id: Any, result: dict[str, Any]) -> None:
