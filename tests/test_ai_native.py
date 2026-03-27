@@ -538,7 +538,7 @@ class TestGateway:
         from milo.gateway import _handle_method
 
         clis = {"app1": {"command": ["python", "app.py"]}}
-        result = _handle_method(clis, [], {}, "initialize", {})
+        result = _handle_method(clis, [], {}, [], {}, [], {}, {}, "initialize", {})
         assert result["protocolVersion"] == "2025-11-25"
         assert result["serverInfo"]["name"] == "milo-gateway"
 
@@ -546,20 +546,20 @@ class TestGateway:
         from milo.gateway import _handle_method
 
         tools = [{"name": "app1.greet", "description": "Say hello"}]
-        result = _handle_method({}, tools, {}, "tools/list", {})
+        result = _handle_method({}, tools, {}, [], {}, [], {}, {}, "tools/list", {})
         assert result["tools"] == tools
 
     def test_handle_method_notifications_initialized(self):
         from milo.gateway import _handle_method
 
-        result = _handle_method({}, [], {}, "notifications/initialized", {})
+        result = _handle_method({}, [], {}, [], {}, [], {}, {}, "notifications/initialized", {})
         assert result is None
 
     def test_handle_method_unknown(self):
         from milo.gateway import _handle_method
 
         with pytest.raises(ValueError, match="Unknown method"):
-            _handle_method({}, [], {}, "unknown/method", {})
+            _handle_method({}, [], {}, [], {}, [], {}, {}, "unknown/method", {})
 
     def test_proxy_call_unknown_tool(self):
         from milo.gateway import _proxy_call
@@ -574,19 +574,19 @@ class TestGateway:
         routing = {"app.greet": ("app", "greet")}
         result = _proxy_call({}, routing, {"name": "app.greet", "arguments": {}})
         assert result["isError"] is True
-        assert "not found" in result["content"][0]["text"]
+        assert "not available" in result["content"][0]["text"]
 
     def test_discover_tools_empty(self):
         from milo.gateway import _discover_tools
 
-        tools, routing = _discover_tools({})
+        tools, routing = _discover_tools({}, {})
         assert tools == []
         assert routing == {}
 
     def test_discover_tools_no_command(self):
         from milo.gateway import _discover_tools
 
-        tools, _routing = _discover_tools({"app": {"command": []}})
+        tools, _routing = _discover_tools({"app": {"command": []}}, {})
         assert tools == []
 
     def test_print_registry_empty(self):

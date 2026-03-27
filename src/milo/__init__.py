@@ -83,6 +83,17 @@ def __getattr__(name: str):
         "format_output": "output",
         "write_output": "output",
         "generate_llms_txt": "llms",
+        # Commands v2 (resources, prompts)
+        "ResourceDef": "commands",
+        "PromptDef": "commands",
+        # Middleware
+        "MCPCall": "middleware",
+        "MiddlewareStack": "middleware",
+        # Streaming
+        "Progress": "streaming",
+        # Observability
+        "RequestLog": "observability",
+        "RequestLogger": "observability",
     }
     if name in _imports:
         import importlib
@@ -132,6 +143,8 @@ __all__ = [
     "InputError",
     "Key",
     "LazyCommandDef",
+    "MCPCall",
+    "MiddlewareStack",
     "MiloError",
     "Phase",
     "PhaseStatus",
@@ -139,10 +152,15 @@ __all__ = [
     "PipelineError",
     "PipelineState",
     "PluginError",
+    "Progress",
+    "PromptDef",
     "Put",
     "Quit",
     "ReducerResult",
     "RenderTarget",
+    "RequestLog",
+    "RequestLogger",
+    "ResourceDef",
     "Screen",
     "Select",
     "SpecialKey",

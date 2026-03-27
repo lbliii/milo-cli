@@ -17,7 +17,8 @@ _SERVER_VERSION = "0.1.0"
 def run_mcp_server(cli: CLI) -> None:
     """Run MCP JSON-RPC server on stdin/stdout.
 
-    Implements the MCP protocol (initialize, tools/list, tools/call).
+    Implements the MCP protocol (initialize, tools/list, tools/call,
+    resources/list, resources/read, prompts/list, prompts/get).
     """
     tools = _list_tools(cli)
     tool_names = [t["name"] for t in tools]
@@ -25,6 +26,8 @@ def run_mcp_server(cli: CLI) -> None:
     _stderr(f"MCP server ready — {cli.name}")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
     _stderr(f"  Tools:     {len(tools)} ({', '.join(tool_names)})")
+    _stderr(f"  Resources: {len(cli._resources)}")
+    _stderr(f"  Prompts:   {len(cli._prompts)}")
     _stderr("  Transport: stdin/stdout (JSON-RPC, one request per line)")
     _stderr("")
     _stderr("Send requests as JSON, for example:")
@@ -73,7 +76,7 @@ def _handle_method(cli: CLI, method: str, params: dict[str, Any]) -> dict[str, A
         case "initialize":
             return {
                 "protocolVersion": _MCP_VERSION,
-                "capabilities": {"tools": {}},
+                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
                 "serverInfo": {
                     "name": cli.name or _SERVER_NAME,
                     "version": cli.version or _SERVER_VERSION,
@@ -88,6 +91,14 @@ def _handle_method(cli: CLI, method: str, params: dict[str, Any]) -> dict[str, A
             return {"tools": _list_tools(cli)}
         case "tools/call":
             return _call_tool(cli, params)
+        case "resources/list":
+            return {"resources": _list_resources(cli)}
+        case "resources/read":
+            return _read_resource(cli, params)
+        case "prompts/list":
+            return {"prompts": _list_prompts(cli)}
+        case "prompts/get":
+            return _get_prompt(cli, params)
         case _:
             raise ValueError(f"Unknown method: {method!r}")
 
@@ -183,6 +194,95 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
         response["structuredContent"] = result
 
     return response
+
+
+def _list_resources(cli: CLI) -> list[dict[str, Any]]:
+    """Generate MCP resources/list response from registered resources."""
+    resources = []
+    for _uri, res in cli.walk_resources():
+        resources.append({
+            "uri": res.uri,
+            "name": res.name,
+            "description": res.description,
+            "mimeType": res.mime_type,
+        })
+    return resources
+
+
+def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
+    """Handle resources/read by calling the resource handler."""
+    uri = params.get("uri", "")
+
+    res = cli._resources.get(uri)
+    if not res:
+        return {"contents": []}
+
+    try:
+        result = res.handler()
+    except Exception as e:
+        return {"contents": [{"uri": uri, "text": f"Error: {e}", "mimeType": "text/plain"}]}
+
+    text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
+
+    return {
+        "contents": [
+            {"uri": uri, "text": text, "mimeType": res.mime_type}
+        ]
+    }
+
+
+def _list_prompts(cli: CLI) -> list[dict[str, Any]]:
+    """Generate MCP prompts/list response from registered prompts."""
+    prompts = []
+    for _name, p in cli.walk_prompts():
+        prompt_info: dict[str, Any] = {
+            "name": p.name,
+            "description": p.description,
+        }
+        if p.arguments:
+            prompt_info["arguments"] = list(p.arguments)
+        prompts.append(prompt_info)
+    return prompts
+
+
+def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
+    """Handle prompts/get by calling the prompt handler."""
+    name = params.get("name", "")
+    arguments = params.get("arguments", {})
+
+    p = cli._prompts.get(name)
+    if not p:
+        return {"messages": []}
+
+    try:
+        result = p.handler(**arguments)
+    except Exception as e:
+        return {
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": f"Error: {e}"}}
+            ]
+        }
+
+    # If handler returns list of dicts, treat as messages
+    if isinstance(result, list):
+        return {"messages": result}
+
+    # If handler returns a string, wrap as single user message
+    if isinstance(result, str):
+        return {
+            "messages": [
+                {"role": "user", "content": {"type": "text", "text": result}}
+            ]
+        }
+
+    return {
+        "messages": [
+            {
+                "role": "user",
+                "content": {"type": "text", "text": json.dumps(result, default=str)},
+            }
+        ]
+    }
 
 
 def _write_result(req_id: Any, result: dict[str, Any]) -> None:
