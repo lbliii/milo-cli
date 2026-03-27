@@ -106,6 +106,26 @@ icon: book-open
 
 :::::{/cards}
 
+## AI Integration
+
+:::::{cards}
+:columns: 2
+:gap: medium
+
+:::::{card} MCP Server & Gateway
+:icon: bot
+:link: ./usage/mcp/
+:description: Expose commands as MCP tools; unify multiple CLIs behind a single gateway
+:::::{/card}
+
+:::::{card} llms.txt
+:icon: file-text
+:link: ./usage/llms/
+:description: Generate AI-readable discovery documents from command definitions
+:::::{/card}
+
+:::::{/cards}
+
 ## Look It Up
 
 :::::{cards}

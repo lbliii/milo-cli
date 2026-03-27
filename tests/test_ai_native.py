@@ -238,7 +238,7 @@ class TestMCP:
     def test_initialize(self):
         cli = self._make_cli()
         result = _handle_method(cli, "initialize", {})
-        assert result["protocolVersion"] == "2024-11-05"
+        assert result["protocolVersion"] == "2025-11-25"
         assert result["capabilities"]["tools"] == {}
 
     def test_list_tools(self):

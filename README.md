@@ -44,6 +44,7 @@ Milo is a framework for building interactive terminal applications in Python 3.1
 - **Dev tools with hot reload** — `milo dev` watches templates and live-reloads on change
 - **Session recording and replay** — Record user sessions to JSONL, replay for debugging or CI regression tests
 - **Styled terminal output** — Kida terminal templates with ANSI colors, progress bars, and live rendering
+- **AI agent integration** — Every CLI is an MCP server; register multiple CLIs behind a single gateway
 
 ---
 
@@ -89,6 +90,9 @@ Requires Python 3.14+
 | **Replay** | Time-travel debugging, speed control, step-by-step mode, CI hash assertions | [Testing →](https://lbliii.github.io/milo/docs/usage/testing/) |
 | **Snapshot Testing** | `assert_renders`, `assert_state`, `assert_saga` for deterministic test coverage | [Testing →](https://lbliii.github.io/milo/docs/usage/testing/) |
 | **Help Rendering** | `HelpRenderer` — drop-in `argparse.HelpFormatter` using Kida templates | [Help →](https://lbliii.github.io/milo/docs/usage/help/) |
+| **MCP Server** | Every CLI doubles as an MCP server — AI agents discover and call commands via JSON-RPC | [MCP →](https://lbliii.github.io/milo/docs/usage/mcp/) |
+| **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo/docs/usage/mcp/) |
+| **llms.txt** | Generate AI-readable discovery documents from CLI command definitions | [llms.txt →](https://lbliii.github.io/milo/docs/usage/llms/) |
 | **Error System** | Structured error hierarchy with namespaced codes (`M-INP-001`, `M-STA-003`) | [Errors →](https://lbliii.github.io/milo/docs/reference/errors/) |
 
 ---
@@ -262,6 +266,37 @@ Set `MILO_UPDATE_SNAPSHOTS=1` to regenerate snapshot files.
 
 </details>
 
+<details>
+<summary><strong>MCP Server & Gateway</strong> — AI agent integration</summary>
+
+Every Milo CLI is automatically an MCP server:
+
+```bash
+# Run as MCP server (stdin/stdout JSON-RPC)
+myapp --mcp
+
+# Register with an AI host directly
+claude mcp add myapp -- uv run python examples/taskman/app.py --mcp
+```
+
+For multiple CLIs, register them and run a single gateway:
+
+```bash
+# Register CLIs
+taskman --mcp-install
+ghub --mcp-install
+
+# Run the unified gateway
+uv run python -m milo.gateway --mcp
+
+# Or register the gateway with your AI host
+claude mcp add milo -- uv run python -m milo.gateway --mcp
+```
+
+The gateway namespaces tools automatically: `taskman.add`, `ghub.repo.list`, etc. Implements MCP 2025-11-25 with `outputSchema`, `structuredContent`, and tool `title` fields.
+
+</details>
+
 ---
 
 ## Architecture
@@ -303,7 +338,7 @@ Set `MILO_UPDATE_SNAPSHOTS=1` to regenerate snapshot files.
 App.run()
   ├── Store(reducer, initial_state)
   ├── KeyReader (raw mode, escape sequences → Key objects)
-  ├── LiveRenderer (kida terminal, flicker-free updates)
+  ├── TerminalRenderer (alternate screen buffer, flicker-free updates)
   ├── Optional: tick thread (@@TICK at interval)
   ├── Optional: SIGWINCH handler (@@RESIZE)
   └── Loop:
@@ -338,6 +373,7 @@ App.run()
 | [Get Started](https://lbliii.github.io/milo/docs/get-started/) | Installation and quickstart |
 | [Usage](https://lbliii.github.io/milo/docs/usage/) | State, sagas, flows, forms, templates |
 | [Testing](https://lbliii.github.io/milo/docs/usage/testing/) | Snapshots, recording, replay |
+| [MCP & AI](https://lbliii.github.io/milo/docs/usage/mcp/) | MCP server, gateway, and llms.txt |
 | [Reference](https://lbliii.github.io/milo/docs/reference/) | Complete API documentation |
 
 ---

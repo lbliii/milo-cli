@@ -1,9 +1,10 @@
-"""App event loop and LiveRenderer integration."""
+"""App event loop and terminal rendering."""
 
 from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -17,6 +18,58 @@ from milo.flow import Flow, FlowState
 from milo.input._platform import is_tty
 from milo.input._reader import KeyReader
 from milo.state import Store
+
+
+class _TerminalRenderer:
+    """In-place terminal renderer using alternate screen buffer.
+
+    Uses cursor-home redraws with line clearing to avoid flicker
+    and prevent frame stacking.
+    """
+
+    def __init__(self) -> None:
+        self._prev_lines = 0
+        self._started = False
+
+    def start(self) -> None:
+        """Enter alternate screen buffer and hide cursor."""
+        sys.stdout.write("\033[?1049h")  # Enter alternate screen
+        sys.stdout.write("\033[?25l")  # Hide cursor
+        sys.stdout.flush()
+        self._started = True
+
+    def update(self, output: str) -> None:
+        """Redraw the screen with new output."""
+        if not self._started:
+            return
+        cols = shutil.get_terminal_size().columns
+        lines = output.split("\n")
+
+        # Move cursor to home position
+        sys.stdout.write("\033[H")
+
+        # Write each line, clearing to end of line
+        for line in lines:
+            # Truncate to terminal width to avoid wrapping artifacts
+            sys.stdout.write(line[:cols])
+            sys.stdout.write("\033[K\n")  # Clear to end of line
+
+        # Clear any leftover lines from previous frame
+        if self._prev_lines > len(lines):
+            for _ in range(self._prev_lines - len(lines)):
+                sys.stdout.write("\033[K\n")
+
+        self._prev_lines = len(lines)
+        sys.stdout.flush()
+
+    def stop(self) -> None:
+        """Show cursor and leave alternate screen buffer."""
+        if not self._started:
+            return
+        self._started = False
+        sys.stdout.write("\033[?25h")  # Show cursor
+        sys.stdout.write("\033[?1049l")  # Leave alternate screen
+        sys.stdout.flush()
 
 
 class App:
@@ -134,17 +187,11 @@ class App:
             tick_thread.start()
 
         env = self._get_env()
-        renderer = None
+        renderer = _TerminalRenderer()
         quit_dispatched = False
 
         try:
-            # Try to use kida LiveRenderer for flicker-free rendering
-            try:
-                from kida import LiveRenderer
-
-                renderer = LiveRenderer(env)  # type: ignore[call-non-callable]
-            except ImportError:
-                pass
+            renderer.start()
 
             # Subscribe to state changes for re-rendering
             def _on_state_change() -> None:
@@ -183,17 +230,11 @@ class App:
         finally:
             if tick_thread is not None:
                 stop_tick.set()
-            if renderer is not None:
-                with contextlib.suppress(Exception):
-                    renderer.stop()
+            with contextlib.suppress(Exception):
+                renderer.stop()
             if original_sigwinch is not None:
                 signal.signal(signal.SIGWINCH, original_sigwinch)
             store.shutdown()
-
-        # Final render if transient, clear screen
-        if self._transient and renderer:
-            with contextlib.suppress(Exception):
-                renderer.clear()
 
         final_state = store.state
 
@@ -221,7 +262,7 @@ class App:
             return self._template_map.get(state.current_screen, self._template_name)
         return self._template_name
 
-    def _render_state(self, state: Any, env: Any, renderer: Any) -> None:
+    def _render_state(self, state: Any, env: Any, renderer: _TerminalRenderer) -> None:
         """Render current state through the template."""
         try:
             template_name = self._get_template_name(state)
@@ -233,12 +274,7 @@ class App:
                 render_state = state.screen_states.get(state.current_screen, state)
 
             output = template.render(state=render_state)
-
-            if renderer is not None:
-                renderer.update(output)
-            else:
-                sys.stdout.write("\033[2J\033[H" + output)
-                sys.stdout.flush()
+            renderer.update(output)
         except Exception as e:
             template_name = self._get_template_name(state)
             msg = format_render_error(e, template_name=template_name, env=env)
