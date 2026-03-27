@@ -1,0 +1,8 @@
+[site]
+title = "Configapp Demo"
+url = "http://localhost:8080"
+description = "A demo of milo's configuration system"
+
+[build]
+output = "dist"
+minify = true

@@ -67,6 +67,12 @@ def _type_to_schema(annotation: Any) -> dict[str, Any]:
     if annotation in _TYPE_MAP:
         return {"type": _TYPE_MAP[annotation]}
 
+    # Handle bare dict/list (unparameterized)
+    if annotation is dict:
+        return {"type": "object"}
+    if annotation is list:
+        return {"type": "array"}
+
     origin = get_origin(annotation)
     if origin is list:
         args = get_args(annotation)
@@ -93,6 +99,29 @@ def _unwrap_optional(annotation: Any) -> Any:
     args = get_args(annotation)
     non_none = [a for a in args if a is not type(None)]
     return non_none[0] if len(non_none) == 1 else str
+
+
+def return_to_schema(func: Callable[..., Any]) -> dict[str, Any] | None:
+    """Generate JSON Schema from function return type annotation.
+
+    Returns None if the function has no return annotation or returns None.
+    """
+    try:
+        hints = typing.get_type_hints(func)
+    except Exception:
+        hints = {}
+
+    ret = hints.get("return", inspect.Parameter.empty)
+    if ret is inspect.Parameter.empty or ret is type(None):
+        return None
+
+    # Unwrap Optional return types
+    if _is_optional(ret):
+        ret = _unwrap_optional(ret)
+        if ret is type(None):
+            return None
+
+    return _type_to_schema(ret)
 
 
 def _is_context_type(annotation: Any, name: str) -> bool:

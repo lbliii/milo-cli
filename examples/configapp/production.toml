@@ -1,0 +1,6 @@
+[site]
+url = "https://example.com"
+
+[build]
+minify = true
+drafts = false

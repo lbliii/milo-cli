@@ -488,6 +488,12 @@ dependencies = [
 docs = [
     { name = "bengal" },
 ]
+watch = [
+    { name = "watchfiles" },
+]
+yaml = [
+    { name = "pyyaml" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -508,8 +514,10 @@ docs = [
 requires-dist = [
     { name = "bengal", marker = "extra == 'docs'", specifier = ">=0.2.6" },
     { name = "kida-templates", specifier = ">=0.3.0" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=6.0" },
+    { name = "watchfiles", marker = "extra == 'watch'", specifier = ">=1.0" },
 ]
-provides-extras = ["docs"]
+provides-extras = ["docs", "yaml", "watch"]
 
 [package.metadata.requires-dev]
 dev = [

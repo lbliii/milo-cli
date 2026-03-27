@@ -1,8 +1,10 @@
-"""Tests for AI-native CLI: schema, commands, output, MCP, llms.txt."""
+"""Tests for AI-native CLI: schema, commands, output, MCP, llms.txt, registry, gateway."""
 
 from __future__ import annotations
 
+import io
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -10,7 +12,7 @@ from milo.commands import CLI, CommandDef
 from milo.llms import generate_llms_txt
 from milo.mcp import _call_tool, _handle_method, _list_tools
 from milo.output import format_output
-from milo.schema import function_to_schema
+from milo.schema import function_to_schema, return_to_schema
 
 # ---------------------------------------------------------------------------
 # Schema tests
@@ -238,7 +240,7 @@ class TestMCP:
     def test_initialize(self):
         cli = self._make_cli()
         result = _handle_method(cli, "initialize", {})
-        assert result["protocolVersion"] == "2024-11-05"
+        assert result["protocolVersion"] == "2025-11-25"
         assert result["capabilities"]["tools"] == {}
 
     def test_list_tools(self):
@@ -336,3 +338,327 @@ class TestLlmsTxt:
         txt = generate_llms_txt(cli)
         assert "public" in txt
         assert "secret" not in txt
+
+
+# ---------------------------------------------------------------------------
+# MCP extended tests (title, outputSchema, structuredContent, banner, notifications)
+# ---------------------------------------------------------------------------
+
+
+class TestMCPExtended:
+    def _make_cli(self):
+        cli = CLI(name="test", description="Test CLI", version="1.0")
+
+        @cli.command("stats", description="Get statistics")
+        def stats() -> dict:
+            """Return usage statistics."""
+            return {"total": 10, "done": 7}
+
+        @cli.command("greet", description="Say hello")
+        def greet(name: str) -> str:
+            return f"Hello, {name}!"
+
+        return cli
+
+    def test_tool_title(self):
+        cli = self._make_cli()
+        tools = _list_tools(cli)
+        stats_tool = next(t for t in tools if t["name"] == "stats")
+        assert "title" in stats_tool
+
+    def test_output_schema(self):
+        cli = self._make_cli()
+        tools = _list_tools(cli)
+        stats_tool = next(t for t in tools if t["name"] == "stats")
+        assert stats_tool["outputSchema"] == {"type": "object"}
+
+    def test_output_schema_string(self):
+        cli = self._make_cli()
+        tools = _list_tools(cli)
+        greet_tool = next(t for t in tools if t["name"] == "greet")
+        assert greet_tool["outputSchema"] == {"type": "string"}
+
+    def test_structured_content(self):
+        cli = self._make_cli()
+        result = _call_tool(cli, {"name": "stats", "arguments": {}})
+        assert result["structuredContent"] == {"total": 10, "done": 7}
+        assert "content" in result
+
+    def test_string_result_no_structured_content(self):
+        cli = self._make_cli()
+        result = _call_tool(cli, {"name": "greet", "arguments": {"name": "World"}})
+        assert "structuredContent" not in result
+        assert result["content"][0]["text"] == "Hello, World!"
+
+    def test_notifications_initialized(self):
+        cli = self._make_cli()
+        result = _handle_method(cli, "notifications/initialized", {})
+        assert result is None
+
+    def test_initialize_includes_server_info(self):
+        cli = self._make_cli()
+        result = _handle_method(cli, "initialize", {})
+        assert result["serverInfo"]["name"] == "test"
+        assert result["serverInfo"]["version"] == "1.0"
+        assert result["serverInfo"]["title"] == "Test CLI"
+        assert result["instructions"] == "Test CLI"
+
+    def test_mcp_banner(self):
+        """run_mcp_server writes banner to stderr."""
+        cli = self._make_cli()
+        import io
+
+        from milo.mcp import run_mcp_server
+
+        with (
+            patch("sys.stdin", io.StringIO("")),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
+            run_mcp_server(cli)
+
+        banner = mock_err.getvalue()
+        assert "MCP server ready" in banner
+        assert "2025-11-25" in banner
+        assert "stats" in banner
+
+
+# ---------------------------------------------------------------------------
+# return_to_schema tests
+# ---------------------------------------------------------------------------
+
+
+class TestReturnToSchema:
+    def test_returns_dict(self):
+        def f() -> dict:
+            pass
+
+        assert return_to_schema(f) == {"type": "object"}
+
+    def test_returns_list(self):
+        def f() -> list:
+            pass
+
+        assert return_to_schema(f) == {"type": "array"}
+
+    def test_returns_str(self):
+        def f() -> str:
+            pass
+
+        assert return_to_schema(f) == {"type": "string"}
+
+    def test_returns_none(self):
+        def f() -> None:
+            pass
+
+        assert return_to_schema(f) is None
+
+    def test_no_annotation(self):
+        def f():
+            pass
+
+        assert return_to_schema(f) is None
+
+    def test_optional_return(self):
+        def f() -> str | None:
+            pass
+
+        assert return_to_schema(f) == {"type": "string"}
+
+
+# ---------------------------------------------------------------------------
+# Registry tests
+# ---------------------------------------------------------------------------
+
+
+class TestRegistry:
+    def test_install_and_list(self, tmp_path):
+        reg_file = tmp_path / "registry.json"
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            from milo.registry import install, list_clis
+
+            install("myapp", ["python", "app.py", "--mcp"], description="My app", version="1.0")
+            clis = list_clis()
+            assert "myapp" in clis
+            assert clis["myapp"]["command"] == ["python", "app.py", "--mcp"]
+            assert clis["myapp"]["description"] == "My app"
+            assert clis["myapp"]["version"] == "1.0"
+
+    def test_uninstall(self, tmp_path):
+        reg_file = tmp_path / "registry.json"
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            from milo.registry import install, list_clis, uninstall
+
+            install("myapp", ["python", "app.py", "--mcp"])
+            assert uninstall("myapp") is True
+            assert "myapp" not in list_clis()
+
+    def test_uninstall_missing(self, tmp_path):
+        reg_file = tmp_path / "registry.json"
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            from milo.registry import uninstall
+
+            assert uninstall("nonexistent") is False
+
+    def test_list_empty(self, tmp_path):
+        reg_file = tmp_path / "registry.json"
+        with (
+            patch("milo.registry._REGISTRY_FILE", reg_file),
+            patch("milo.registry._REGISTRY_DIR", tmp_path),
+        ):
+            from milo.registry import list_clis
+
+            assert list_clis() == {}
+
+    def test_registry_path(self):
+        from milo.registry import registry_path
+
+        path = registry_path()
+        assert path.name == "registry.json"
+
+
+# ---------------------------------------------------------------------------
+# Gateway tests
+# ---------------------------------------------------------------------------
+
+
+class TestGateway:
+    def test_handle_method_initialize(self):
+        from milo.gateway import _handle_method
+
+        clis = {"app1": {"command": ["python", "app.py"]}}
+        result = _handle_method(clis, [], {}, "initialize", {})
+        assert result["protocolVersion"] == "2025-11-25"
+        assert result["serverInfo"]["name"] == "milo-gateway"
+
+    def test_handle_method_tools_list(self):
+        from milo.gateway import _handle_method
+
+        tools = [{"name": "app1.greet", "description": "Say hello"}]
+        result = _handle_method({}, tools, {}, "tools/list", {})
+        assert result["tools"] == tools
+
+    def test_handle_method_notifications_initialized(self):
+        from milo.gateway import _handle_method
+
+        result = _handle_method({}, [], {}, "notifications/initialized", {})
+        assert result is None
+
+    def test_handle_method_unknown(self):
+        from milo.gateway import _handle_method
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            _handle_method({}, [], {}, "unknown/method", {})
+
+    def test_proxy_call_unknown_tool(self):
+        from milo.gateway import _proxy_call
+
+        result = _proxy_call({}, {}, {"name": "unknown.tool", "arguments": {}})
+        assert result["isError"] is True
+        assert "Unknown tool" in result["content"][0]["text"]
+
+    def test_proxy_call_missing_cli(self):
+        from milo.gateway import _proxy_call
+
+        routing = {"app.greet": ("app", "greet")}
+        result = _proxy_call({}, routing, {"name": "app.greet", "arguments": {}})
+        assert result["isError"] is True
+        assert "not found" in result["content"][0]["text"]
+
+    def test_discover_tools_empty(self):
+        from milo.gateway import _discover_tools
+
+        tools, routing = _discover_tools({})
+        assert tools == []
+        assert routing == {}
+
+    def test_discover_tools_no_command(self):
+        from milo.gateway import _discover_tools
+
+        tools, _routing = _discover_tools({"app": {"command": []}})
+        assert tools == []
+
+    def test_print_registry_empty(self):
+        import io
+
+        from milo.gateway import _print_registry
+
+        with (
+            patch("milo.gateway.list_clis", return_value={}),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
+            _print_registry()
+        assert "No CLIs registered" in mock_err.getvalue()
+
+    def test_print_registry_with_clis(self):
+        import io
+
+        from milo.gateway import _print_registry
+
+        clis = {
+            "myapp": {"command": ["python", "app.py"], "description": "My app", "version": "1.0"}
+        }
+        with (
+            patch("milo.gateway.list_clis", return_value=clis),
+            patch("sys.stdout", new_callable=io.StringIO) as mock_out,
+        ):
+            _print_registry()
+        output = mock_out.getvalue()
+        assert "myapp" in output
+        assert "My app" in output
+
+    def test_write_result(self):
+        import io
+
+        from milo.gateway import _write_result
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            _write_result(1, {"tools": []})
+        response = json.loads(mock_out.getvalue())
+        assert response["id"] == 1
+        assert response["result"] == {"tools": []}
+
+    def test_write_error(self):
+        import io
+
+        from milo.gateway import _write_error
+
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+            _write_error(1, -32603, "Internal error")
+        response = json.loads(mock_out.getvalue())
+        assert response["error"]["code"] == -32603
+
+    def test_main_help(self):
+        import io
+
+        from milo.gateway import main
+
+        with (
+            patch("sys.argv", ["gateway"]),
+            patch("sys.stderr", new_callable=io.StringIO) as mock_err,
+        ):
+            main()
+        assert "milo gateway" in mock_err.getvalue()
+
+    def test_main_list(self):
+        import io
+
+        from milo.gateway import main
+
+        with (
+            patch("sys.argv", ["gateway", "--list"]),
+            patch("milo.gateway.list_clis", return_value={}),
+            patch("sys.stderr", new_callable=io.StringIO),
+        ):
+            main()  # Should not raise

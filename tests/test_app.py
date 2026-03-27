@@ -171,7 +171,7 @@ class TestApp:
         app._render_state(SimpleState(value=3), env, renderer)
         renderer.update.assert_called_once()
 
-    def test_render_state_without_renderer(self):
+    def test_render_state_with_renderer_content(self):
         from kida import Environment
 
         tmpl_env = Environment()
@@ -181,12 +181,10 @@ class TestApp:
         env.get_template.return_value = tmpl
 
         app = App(template="t.txt", reducer=simple_reducer, initial_state=None, env=env)
-        written = []
-        mock_stdout = MagicMock()
-        mock_stdout.write = lambda s: written.append(s)
-        with patch("sys.stdout", mock_stdout):
-            app._render_state(SimpleState(value=5), env, None)
-        assert any("val=5" in s for s in written)
+        renderer = MagicMock()
+        app._render_state(SimpleState(value=5), env, renderer)
+        renderer.update.assert_called_once()
+        assert "val=5" in renderer.update.call_args[0][0]
 
     def test_render_once_with_flow_state(self):
         """_render_once extracts screen state from FlowState."""

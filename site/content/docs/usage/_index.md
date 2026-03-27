@@ -37,6 +37,12 @@ flowchart TB
         Navigate[@@NAVIGATE]
     end
 
+    subgraph AI["AI Integration"]
+        MCP[MCP Server]
+        Gateway[Gateway]
+        LLMS[llms.txt]
+    end
+
     Input -->|"@@KEY"| Store
     Store --> Reducer
     Reducer -->|state| Templates
@@ -48,6 +54,8 @@ flowchart TB
     Navigate --> Flow
     Middleware -->|wraps| Store
     Forms -->|form_reducer| Reducer
+    MCP -->|"tools/call"| Reducer
+    Gateway -->|proxies| MCP
 ```
 
 :::{child-cards}

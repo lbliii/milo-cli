@@ -398,6 +398,16 @@ class CLI:
             action="store_true",
             help="Run as MCP server (JSON-RPC on stdin/stdout)",
         )
+        parser.add_argument(
+            "--mcp-install",
+            action="store_true",
+            help="Register this CLI in the milo gateway for AI agent discovery",
+        )
+        parser.add_argument(
+            "--mcp-uninstall",
+            action="store_true",
+            help="Remove this CLI from the milo gateway",
+        )
 
         # Built-in global options
         parser.add_argument(
@@ -564,6 +574,16 @@ class CLI:
             run_mcp_server(self)
             return None
 
+        # --mcp-install mode
+        if getattr(args, "mcp_install", False):
+            self._mcp_install()
+            return None
+
+        # --mcp-uninstall mode
+        if getattr(args, "mcp_uninstall", False):
+            self._mcp_uninstall()
+            return None
+
         # Build execution context from global options
         ctx = self._build_context(args)
 
@@ -706,6 +726,27 @@ class CLI:
         all_names = [path for path, _ in self.walk_commands()]
         matches = difflib.get_close_matches(name, all_names, n=1, cutoff=0.6)
         return matches[0] if matches else None
+
+    def _mcp_install(self) -> None:
+        """Register this CLI in the milo gateway."""
+        from milo.registry import install
+
+        # Build the command to invoke this CLI with --mcp
+        # Use sys.argv[0] to get the script/module that was run
+        command = [sys.executable, sys.argv[0], "--mcp"]
+
+        install(
+            name=self.name,
+            command=command,
+            description=self.description,
+            version=self.version,
+        )
+
+    def _mcp_uninstall(self) -> None:
+        """Remove this CLI from the milo gateway."""
+        from milo.registry import uninstall
+
+        uninstall(self.name)
 
 
 def _is_context_param(param: inspect.Parameter) -> bool:
