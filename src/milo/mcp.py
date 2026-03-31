@@ -6,7 +6,8 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
-from milo._jsonrpc import MCP_VERSION as _MCP_VERSION, _stderr, _write_error, _write_result
+from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
+from milo._jsonrpc import _stderr, _write_error, _write_result
 
 if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef

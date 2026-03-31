@@ -24,7 +24,8 @@ import time
 from typing import Any
 
 from milo._child import ChildProcess
-from milo._jsonrpc import MCP_VERSION as _MCP_VERSION, _stderr, _write_error, _write_result
+from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
+from milo._jsonrpc import _stderr, _write_error, _write_result
 from milo.registry import list_clis
 
 
