@@ -285,6 +285,84 @@ class TestConfigErrors:
             pytest.skip("pyyaml not installed")
 
 
+class TestConfigValidation:
+    def test_valid_config(self):
+        spec = ConfigSpec(
+            defaults={"name": "myapp", "debug": False, "workers": 4},
+        )
+        config = Config.from_dict({"name": "other", "debug": True, "workers": 8})
+        errors = config.validate(spec)
+        assert errors == []
+
+    def test_type_mismatch_string_for_int(self):
+        spec = ConfigSpec(
+            defaults={"workers": 4},
+        )
+        config = Config.from_dict({"workers": "abc"})
+        errors = config.validate(spec)
+        assert len(errors) == 1
+        assert "workers" in errors[0]
+        assert "int" in errors[0]
+
+    def test_type_mismatch_string_for_bool(self):
+        spec = ConfigSpec(
+            defaults={"debug": False},
+        )
+        config = Config.from_dict({"debug": "maybe"})
+        errors = config.validate(spec)
+        assert len(errors) == 1
+        assert "debug" in errors[0]
+
+    def test_valid_string_coercion(self):
+        """Env vars come as strings — valid numeric strings should pass."""
+        spec = ConfigSpec(
+            defaults={"workers": 4},
+        )
+        config = Config.from_dict({"workers": "8"})
+        errors = config.validate(spec)
+        assert errors == []
+
+    def test_nested_validation(self):
+        spec = ConfigSpec(
+            defaults={"build": {"parallel": True, "workers": 4}},
+        )
+        config = Config.from_dict({"build": {"parallel": True, "workers": "abc"}})
+        errors = config.validate(spec)
+        assert len(errors) == 1
+        assert "build.workers" in errors[0]
+
+    def test_no_defaults_returns_empty(self):
+        spec = ConfigSpec()
+        config = Config.from_dict({"anything": "goes"})
+        errors = config.validate(spec)
+        assert errors == []
+
+    def test_missing_key_not_error(self):
+        """Missing keys are not validation errors (they use defaults)."""
+        spec = ConfigSpec(
+            defaults={"name": "app", "debug": False},
+        )
+        config = Config.from_dict({"name": "myapp"})
+        errors = config.validate(spec)
+        assert errors == []
+
+    def test_dict_where_scalar_expected(self):
+        spec = ConfigSpec(
+            defaults={"name": "myapp"},
+        )
+        config = Config.from_dict({"name": {"nested": "bad"}})
+        errors = config.validate(spec)
+        assert len(errors) == 1
+
+    def test_int_for_float_allowed(self):
+        spec = ConfigSpec(
+            defaults={"threshold": 0.5},
+        )
+        config = Config.from_dict({"threshold": 1})
+        errors = config.validate(spec)
+        assert errors == []
+
+
 class TestConfigInit:
     def test_init_toml(self, tmp_path):
         from milo.config import Config, ConfigSpec

@@ -94,11 +94,22 @@ def check_version(
 def format_version_notice(info: VersionInfo, *, prog: str = "") -> str:
     """Format a user-friendly update notice for stderr."""
     name = prog or "this package"
-    return (
-        f"A new version of {name} is available: "
-        f"{info.current} -> {info.latest}\n"
-        f"  pip install --upgrade {name}"
+    installer = _detect_installer()
+    upgrade_cmd = (
+        f"  {installer} install --upgrade {name}"
+        if installer != "uv"
+        else f"  uv pip install --upgrade {name}"
     )
+    return f"A new version of {name} is available: {info.current} -> {info.latest}\n{upgrade_cmd}"
+
+
+def _detect_installer() -> str:
+    """Detect the package installer (uv or pip)."""
+    import shutil
+
+    if shutil.which("uv"):
+        return "uv"
+    return "pip"
 
 
 def _fetch_latest_version(package_name: str) -> str:

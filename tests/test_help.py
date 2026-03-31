@@ -212,3 +212,16 @@ class TestHelpRendererTemplateRendering:
             cli.run(["greet", "--help"])
         out = capsys.readouterr().out
         assert "greet" in out
+
+    def test_version_output_not_corrupted(self, capsys):
+        """--version should output 'prog X.Y.Z', not template-rendered text."""
+        cli = CLI(name="myapp", description="My tool", version="2.3.4")
+
+        @cli.command("greet", description="Greet")
+        def greet(name: str) -> str:
+            return f"Hello, {name}"
+
+        with pytest.raises(SystemExit):
+            cli.run(["--version"])
+        out = capsys.readouterr().out.strip()
+        assert out == "myapp 2.3.4"
