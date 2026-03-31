@@ -1,7 +1,7 @@
 """File picker — scrollable directory browser with saga-driven I/O.
 
 Demonstrates: scroll viewport, saga for directory reads, frozen tuples,
-derived scroll offset, ReducerResult, Quit.
+derived scroll offset, ReducerResult, quit_on combinator, App.from_dir.
 
     uv run python examples/filepicker/app.py
 """
@@ -12,8 +12,7 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey
-from milo.templates import get_env
+from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey, quit_on
 
 VIEWPORT_HEIGHT = 15
 
@@ -124,9 +123,14 @@ def format_size(size: int) -> str:
 
 # ---------------------------------------------------------------------------
 # Reducer
+#
+# Note: This reducer uses quit_on for escape/q, but handles cursor
+# navigation manually because scroll_offset must be derived alongside
+# each cursor move.  with_cursor doesn't know about scroll state.
 # ---------------------------------------------------------------------------
 
 
+@quit_on(SpecialKey.ESCAPE, "q")
 def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit:
     if state is None:
         # Initial state triggers directory load
@@ -139,10 +143,6 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
     match action.type:
         case "@@KEY":
             key: Key = action.payload
-
-            # Quit
-            if key.name == SpecialKey.ESCAPE or key.char == "q":
-                return Quit(replace(state, cancelled=True))
 
             # Navigation
             if key.name == SpecialKey.UP:
@@ -221,20 +221,16 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    # Add format_size as a global so the template can use it
-    env.globals["format_size"] = format_size
-    env.globals["viewport_height"] = VIEWPORT_HEIGHT
-
-    app = App(
+    app = App.from_dir(
+        __file__,
         template="filepicker.kida",
         reducer=reducer,
         initial_state=State(),
-        env=env,
         exit_template="exit.kida",
     )
+
+    # Add format_size as a global so the template can use it
+    app._env.globals["format_size"] = format_size
+    app._env.globals["viewport_height"] = VIEWPORT_HEIGHT
+
     app.run()

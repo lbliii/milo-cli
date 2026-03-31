@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -130,6 +131,46 @@ class Context:
     def debug(self) -> bool:
         """True when -vv (or higher) was passed."""
         return self.verbosity >= 2
+
+    def run_app(
+        self,
+        reducer: Callable,
+        template: str,
+        initial_state: Any = None,
+        *,
+        env: Any = None,
+        exit_template: str = "",
+        tick_rate: float = 0.0,
+    ) -> Any:
+        """Launch an interactive App session and return the final state.
+
+        Bridges CLI command handlers to the Elm-style App event loop.
+        The command blocks until the user quits the App, then returns
+        the final state for the handler to process further.
+
+        Usage in a CLI command::
+
+            @cli.command("pick", description="Pick a file")
+            def pick(directory: str = ".", ctx: Context = None) -> str:
+                state = ctx.run_app(
+                    reducer=picker_reducer,
+                    template="picker.kida",
+                    initial_state=PickerState(root=directory),
+                    env=env,
+                )
+                return state.selected_file
+        """
+        from milo.app import App
+
+        app = App(
+            template=template,
+            reducer=reducer,
+            initial_state=initial_state,
+            env=env,
+            exit_template=exit_template,
+            tick_rate=tick_rate,
+        )
+        return app.run()
 
     @property
     def is_ci(self) -> bool:
