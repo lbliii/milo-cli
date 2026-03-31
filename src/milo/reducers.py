@@ -41,8 +41,9 @@ def quit_on(*keys: str | SpecialKey) -> Callable:
     """Decorator: return Quit(state) when any of the specified keys are pressed.
 
     Keys can be character strings (``"q"``) or SpecialKey enums
-    (``SpecialKey.ESCAPE``).  The inner reducer runs first; if it already
-    returned ``Quit``, the wrapper does nothing.
+    (``SpecialKey.ESCAPE``).  The inner reducer runs first so it can
+    perform app-specific quit logic (e.g. setting flags); if it already
+    returned ``Quit``, the wrapper passes it through unchanged.
 
     Usage::
 
@@ -53,11 +54,14 @@ def quit_on(*keys: str | SpecialKey) -> Callable:
 
     def decorator(reducer: Callable) -> Callable:
         def wrapped(state: Any, action: Action) -> Any:
-            if action.type == "@@KEY" and state is not None:
+            result = reducer(state, action)
+            if isinstance(result, Quit) or result is None:
+                return result
+            if action.type == "@@KEY":
                 key: Key = action.payload
                 if any(_match_key(key, k) for k in keys):
-                    return Quit(state)
-            return reducer(state, action)
+                    return Quit(_unwrap_state(result))
+            return result
 
         return wrapped
 

@@ -102,6 +102,32 @@ class TestQuitOn:
         result = reducer(state, key_action("x"))
         assert result.selected == "x"
 
+    def test_inner_reducer_runs_before_quit(self):
+        """Inner reducer's state modifications are preserved in the Quit."""
+
+        @quit_on("q")
+        def reducer(state, action):
+            if action.type == "@@KEY" and action.payload.char == "q":
+                return replace(state, selected="quitting")
+            return state
+
+        state = ListState()
+        result = reducer(state, key_action("q"))
+        assert isinstance(result, Quit)
+        assert result.state.selected == "quitting"
+
+    def test_inner_quit_preserved(self):
+        """If inner reducer already returns Quit, quit_on passes it through."""
+
+        @quit_on("q")
+        def reducer(state, action):
+            return Quit(state, code=42)
+
+        state = ListState()
+        result = reducer(state, key_action("q"))
+        assert isinstance(result, Quit)
+        assert result.code == 42
+
 
 # ---------------------------------------------------------------------------
 # with_cursor

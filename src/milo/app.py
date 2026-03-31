@@ -159,8 +159,15 @@ class App:
                 f"Templates directory not found: {tpl_path}",
             )
 
+        if "env" in kwargs:
+            raise AppError(
+                ErrorCode.APP_LIFECYCLE,
+                "App.from_dir derives its own template environment and does not "
+                "accept an 'env' argument. Remove the 'env' parameter or construct "
+                "the App directly if you need a custom environment.",
+            )
+
         env = get_env(loader=FileSystemLoader(str(tpl_path)))
-        kwargs.pop("env", None)
 
         if flow is not None:
             return cls(flow=flow, env=env, **kwargs)

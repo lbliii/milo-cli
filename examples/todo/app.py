@@ -76,10 +76,9 @@ def _clamp_cursor(state: State) -> State:
 # ---------------------------------------------------------------------------
 # Reducer
 #
-# Note: This reducer uses quit_on for the normal-mode quit keys, but
-# handles cursor navigation manually because the filtered view means
-# the list length changes dynamically.  with_cursor works best when
-# the items field directly drives the cursor bounds.
+# Note: This reducer handles quit and cursor manually because modal
+# input (ADDING mode captures Escape) and filtered views (dynamic
+# list length) don't fit the quit_on/with_cursor combinators cleanly.
 # ---------------------------------------------------------------------------
 
 

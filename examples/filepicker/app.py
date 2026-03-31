@@ -12,7 +12,7 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey, quit_on
+from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey
 
 VIEWPORT_HEIGHT = 15
 
@@ -124,13 +124,12 @@ def format_size(size: int) -> str:
 # ---------------------------------------------------------------------------
 # Reducer
 #
-# Note: This reducer uses quit_on for escape/q, but handles cursor
-# navigation manually because scroll_offset must be derived alongside
-# each cursor move.  with_cursor doesn't know about scroll state.
+# Note: This reducer handles quit and cursor navigation manually
+# because quit sets cancelled=True on state and scroll_offset must
+# be derived alongside each cursor move.
 # ---------------------------------------------------------------------------
 
 
-@quit_on(SpecialKey.ESCAPE, "q")
 def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit:
     if state is None:
         # Initial state triggers directory load
@@ -143,6 +142,10 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
     match action.type:
         case "@@KEY":
             key: Key = action.payload
+
+            # Quit
+            if key.name == SpecialKey.ESCAPE or key.char == "q":
+                return Quit(replace(state, cancelled=True))
 
             # Navigation
             if key.name == SpecialKey.UP:

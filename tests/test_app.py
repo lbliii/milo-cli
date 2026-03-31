@@ -291,6 +291,22 @@ class TestFromDir:
         app = App.from_dir(str(caller), flow=a >> b)
         assert app._flow is not None
 
+    def test_from_dir_rejects_env_kwarg(self, tmp_path):
+        """from_dir raises AppError if env is passed."""
+        tpl_dir = tmp_path / "templates"
+        tpl_dir.mkdir()
+        (tpl_dir / "t.kida").write_text("x")
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        with pytest.raises(AppError, match="does not accept an 'env' argument"):
+            App.from_dir(
+                str(caller),
+                template="t.kida",
+                reducer=simple_reducer,
+                env=MagicMock(),
+            )
+
 
 class TestExitTemplate:
     def test_exit_template_renders_after_run(self):
