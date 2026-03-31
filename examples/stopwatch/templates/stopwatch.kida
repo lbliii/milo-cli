@@ -1,11 +1,8 @@
-{% from "components/_defs.kida" import header, section, key_hints %}
+{% from "components/_defs.kida" import header, section, key_hints, format_time %}
 {{ header("Stopwatch") }}
 {{ hr() }}
 
-{% set mins = (state.elapsed // 60) | int %}
-{% set secs = (state.elapsed % 60) | int %}
-{% set ms = ((state.elapsed * 100) % 100) | int %}
-  {{ "{:02d}:{:02d}.{:02d}" | format(mins, secs, ms) | bold | green }}
+  {{ format_time(state.elapsed) | bold | green }}
 {% if state.running %}
   {{ "RUNNING" | bold | green }}
 {% else %}
@@ -18,10 +15,7 @@
 {% set visible = state.laps | reverse | list %}
 {% for split in visible[:10] %}
 {% set lap_num = state.laps | length - loop.index0 %}
-{% set m = (split // 60) | int %}
-{% set s = (split % 60) | int %}
-{% set c = ((split * 100) % 100) | int %}
-  {{ "#{}" | format(lap_num) | dim }}  {{ "{:02d}:{:02d}.{:02d}" | format(m, s, c) | cyan }}
+  {{ "#{}" | format(lap_num) | dim }}  {{ format_time(split) | cyan }}
 {% endfor %}
 {% if state.laps | length > 10 %}
   {{ "... and {} more" | format(state.laps | length - 10) | dim }}
@@ -30,15 +24,9 @@
 {% if state.laps | length >= 2 %}
 {% set best = state.laps | min %}
 {% set worst = state.laps | max %}
-{% set bm = (best // 60) | int %}
-{% set bs = (best % 60) | int %}
-{% set bc = ((best * 100) % 100) | int %}
-{% set wm = (worst // 60) | int %}
-{% set ws = (worst % 60) | int %}
-{% set wc = ((worst * 100) % 100) | int %}
 {{ hr() }}
-  {{ "Best " | bold | green }} {{ "{:02d}:{:02d}.{:02d}" | format(bm, bs, bc) | green }}
-  {{ "Worst" | bold | red }} {{ "{:02d}:{:02d}.{:02d}" | format(wm, ws, wc) | red }}
+  {{ "Best " | bold | green }} {{ format_time(best) | green }}
+  {{ "Worst" | bold | red }} {{ format_time(worst) | red }}
 {% endif %}
 
 {% endif %}

@@ -1,4 +1,4 @@
-{% from "components/_defs.kida" import header, key_hints %}
+{% from "components/_defs.kida" import header, key_hints, selectable_list %}
 {{ header("Todo List") }}
 {{ hr() }}
 
@@ -7,13 +7,8 @@
 
 {# --- Todo items --- #}
 {% set visible = filtered_todos(state) %}
-{% if visible %}
-{% for todo in visible %}
-{% if loop.index0 == state.cursor %}  {{ icons.arrow_r | cyan }} {% else %}    {% endif %}{% if todo.done %}{{ icons.check | green }} {{ todo.text | dim }}{% else %}{{ icons.cross | red }} {{ todo.text }}{% endif %}
-{% endfor %}
-{% else %}
-  {{ "No items to show." | dim }}
-{% endif %}
+{% def render_todo(todo, is_selected) %}{% if todo.done %}{{ icons.check | green }} {{ todo.text | dim }}{% else %}{{ icons.cross | red }} {{ todo.text }}{% endif %}{% enddef %}
+{{ selectable_list(visible, state.cursor, render_todo, empty="No items to show.") }}
 
 {# --- Input line (add mode) --- #}
 {% if state.mode.name == "ADDING" %}

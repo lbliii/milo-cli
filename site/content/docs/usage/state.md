@@ -74,6 +74,78 @@ action = Action("@@KEY", payload=key)  # Built-in key action
 
 Milo dispatches several [[docs/reference/actions|built-in actions]] automatically: `@@INIT`, `@@KEY`, `@@TICK`, `@@RESIZE`, `@@QUIT`, `@@NAVIGATE`, `@@HOT_RELOAD`, and `@@EFFECT_RESULT`.
 
+## Reducer combinators
+
+Milo ships decorator combinators that handle the most common reducer patterns — quit keys, cursor navigation, and confirm-to-exit — so you don't have to rewrite them in every app.
+
+### quit_on
+
+Wraps a reducer to exit on specific keys:
+
+```python
+from milo import quit_on, SpecialKey
+
+@quit_on("q", SpecialKey.ESCAPE)
+def reducer(state, action):
+    if state is None:
+        return State()
+    return state
+```
+
+The inner reducer runs first, so any app-specific logic for the quit key is preserved in the final state.
+
+### with_cursor
+
+Adds UP/DOWN arrow navigation over a sequence field:
+
+```python
+from milo import with_cursor
+
+@with_cursor("items")
+def reducer(state, action):
+    if state is None:
+        return State(items=("a", "b", "c"), cursor=0)
+    return state
+```
+
+Options:
+- `cursor_field` — name of the cursor attribute (default: `"cursor"`)
+- `wrap` — wrap around at list boundaries (default: `False`)
+
+### with_confirm
+
+Returns `Quit(state)` when the user presses a confirm key:
+
+```python
+from milo import with_confirm
+
+@with_confirm()  # defaults to Enter
+def reducer(state, action):
+    return state
+```
+
+Pass a character to use a different key: `@with_confirm(" ")` for spacebar.
+
+### Composition
+
+Stack all three for a complete interactive list:
+
+```python
+@with_confirm()
+@with_cursor("items", wrap=True)
+@quit_on("q", SpecialKey.ESCAPE)
+def reducer(state, action):
+    if state is None:
+        return ListState()
+    return state
+```
+
+Decorators compose outside-in. In the example above, `with_confirm` checks first, then `with_cursor` handles arrows, then `quit_on` checks quit keys, and finally your inner reducer runs for everything else.
+
+:::{tip}
+Skip the combinators when your quit or cursor logic is non-standard — for example, if pressing `q` needs to set a `cancelled=True` flag, or if your cursor tracks a filtered view that changes dynamically.
+:::
+
 ## Combining reducers
 
 For larger apps, split state into slices with `combine_reducers`:
