@@ -71,6 +71,9 @@ Requires Python 3.14+
 | `FlowScreen(name, template, reducer)` | Define a named screen |
 | `flow = screen_a >> screen_b` | Chain screens into a flow |
 | `render_html(state, template)` | One-shot static HTML render |
+| `App.from_dir(__file__, ...)` | Auto-discover template directory |
+| `ctx.run_app(reducer, template, state)` | Bridge CLI commands to interactive apps |
+| `quit_on`, `with_cursor`, `with_confirm` | Reducer combinator decorators |
 | `DevServer(app, watch_dirs)` | Hot-reload dev server |
 
 ---
@@ -94,6 +97,12 @@ Requires Python 3.14+
 | **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo/docs/usage/mcp/) |
 | **llms.txt** | Generate AI-readable discovery documents from CLI command definitions | [llms.txt →](https://lbliii.github.io/milo/docs/usage/llms/) |
 | **Error System** | Structured error hierarchy with namespaced codes (`M-INP-001`, `M-STA-003`) | [Errors →](https://lbliii.github.io/milo/docs/reference/errors/) |
+| **Reducer Combinators** | `quit_on`, `with_cursor`, `with_confirm` decorators eliminate boilerplate key handling | [State →](https://lbliii.github.io/milo/docs/usage/state/) |
+| **Shell Completions** | Generate bash/zsh/fish completions from CLI definitions | [CLI →](https://lbliii.github.io/milo/docs/usage/cli/) |
+| **Doctor Diagnostics** | `run_doctor()` validates environment, dependencies, and config health | [CLI →](https://lbliii.github.io/milo/docs/usage/cli/) |
+| **Version Checking** | Automatic PyPI upgrade notices with `check_version()` | [CLI →](https://lbliii.github.io/milo/docs/usage/cli/) |
+| **Context** | Execution context with verbosity, output format, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo/docs/usage/context/) |
+| **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo/docs/usage/config/) |
 
 ---
 
