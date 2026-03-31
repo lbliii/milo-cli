@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from milo._types import Action, Call, Delay, Fork, Put, Select
 
 
@@ -104,3 +106,71 @@ class TestSagaStepping:
 
         e2 = next(gen)
         assert e2 == Put(Action("after_delay"))
+
+
+class TestRetryEffect:
+    def test_retry_dataclass(self):
+        from milo._types import Retry
+
+        r = Retry(fn=lambda: 1, max_attempts=5, backoff="linear")
+        assert r.max_attempts == 5
+        assert r.backoff == "linear"
+        assert r.base_delay == 1.0
+
+    def test_retry_in_saga(self):
+        from milo._types import Retry
+        from milo.state import Store
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("not yet")
+            return "success"
+
+        results = []
+
+        def saga():
+            result = yield Retry(flaky, max_attempts=5, base_delay=0.01)
+            results.append(result)
+
+        def reducer(state, action):
+            return state
+
+        store = Store(reducer, {})
+        store.run_saga(saga())
+        store._executor.shutdown(wait=True)
+
+        assert results == ["success"]
+        assert call_count == 3
+
+    def test_retry_exhausted(self):
+        from milo.state import _execute_retry
+
+        call_count = 0
+
+        def always_fails():
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("fail")
+
+        with pytest.raises(ValueError, match="fail"):
+            _execute_retry(always_fails, (), {}, 3, "fixed", 0.01, 1.0)
+        assert call_count == 3
+
+    def test_retry_exponential_backoff(self):
+        from milo.state import _execute_retry
+
+        attempts = []
+
+        def fail_twice():
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise ValueError("not yet")
+            return "ok"
+
+        result = _execute_retry(fail_twice, (), {}, 5, "exponential", 0.01, 1.0)
+        assert result == "ok"
+        assert len(attempts) == 3

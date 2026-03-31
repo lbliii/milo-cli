@@ -19,6 +19,7 @@ from milo._types import (
     Put,
     Quit,
     ReducerResult,
+    Retry,
     Select,
 )
 
@@ -145,6 +146,11 @@ class Store:
                     case Delay(seconds):
                         time.sleep(seconds)
                         effect = next(saga)
+                    case Retry(fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay):
+                        result = _execute_retry(
+                            fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay
+                        )
+                        effect = saga.send(result)
                     case _:
                         raise StateError(
                             ErrorCode.STA_SAGA,
@@ -227,3 +233,30 @@ def combine_reducers(**reducers: Callable) -> Callable:
         return result
 
     return combined
+
+
+def _execute_retry(
+    fn: Any,
+    args: tuple,
+    kwargs: dict,
+    max_attempts: int,
+    backoff: str,
+    base_delay: float,
+    max_delay: float,
+) -> Any:
+    """Execute a function with retry and backoff."""
+    last_error: Exception = RuntimeError("no attempts made")
+    for attempt in range(max_attempts):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            last_error = e
+            if attempt < max_attempts - 1:
+                if backoff == "exponential":
+                    delay = min(base_delay * (2**attempt), max_delay)
+                elif backoff == "linear":
+                    delay = min(base_delay * (attempt + 1), max_delay)
+                else:  # fixed
+                    delay = base_delay
+                time.sleep(delay)
+    raise last_error  # type: ignore[misc]

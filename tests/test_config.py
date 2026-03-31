@@ -283,3 +283,49 @@ class TestConfigErrors:
             assert config.get("site.title") == "Test"
         except ImportError:
             pytest.skip("pyyaml not installed")
+
+
+class TestConfigInit:
+    def test_init_toml(self, tmp_path):
+        from milo.config import Config, ConfigSpec
+
+        spec = ConfigSpec(
+            sources=("app.toml",),
+            defaults={"name": "myapp", "debug": False},
+        )
+        path = Config.init(spec, root=tmp_path)
+        assert path.exists()
+        assert path.suffix == ".toml"
+        content = path.read_text()
+        assert "myapp" in content
+
+    def test_init_yaml(self, tmp_path):
+        from milo.config import Config, ConfigSpec
+
+        spec = ConfigSpec(
+            sources=("config.yaml",),
+            defaults={"name": "myapp"},
+        )
+        path = Config.init(spec, root=tmp_path, format="yaml")
+        assert path.exists()
+        content = path.read_text()
+        assert "myapp" in content
+
+    def test_init_json(self, tmp_path):
+        from milo.config import Config, ConfigSpec
+
+        spec = ConfigSpec(
+            sources=("config.json",),
+            defaults={"name": "myapp"},
+        )
+        path = Config.init(spec, root=tmp_path, format="json")
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert data["name"] == "myapp"
+
+    def test_init_no_sources(self, tmp_path):
+        from milo.config import Config, ConfigSpec
+
+        spec = ConfigSpec(defaults={"key": "val"})
+        path = Config.init(spec, root=tmp_path)
+        assert path.exists()

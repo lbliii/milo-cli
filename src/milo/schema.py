@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import inspect
+import re as _re
 import types
 import typing
 from collections.abc import Callable
@@ -25,6 +26,10 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     X | None unions unwrapped to base type.
     Supports: str, int, float, bool, list[X], dict[str, X], X | None,
     Enum, Literal, dataclass, TypedDict, Union.
+
+    Parameter descriptions are extracted from the function's docstring
+    (Google, NumPy, or Sphinx style) and included as ``"description"``
+    fields in the schema properties.
     """
     sig = inspect.signature(func)
     # Resolve string annotations (from __future__ import annotations)
@@ -32,6 +37,9 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         hints = typing.get_type_hints(func)
     except Exception:
         hints = {}
+
+    # Extract parameter descriptions from docstring
+    param_docs = _parse_param_docs(func.__doc__) if func.__doc__ else {}
 
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -53,7 +61,13 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         if is_optional:
             annotation = _unwrap_optional(annotation)
 
-        properties[name] = _type_to_schema(annotation)
+        prop = _type_to_schema(annotation)
+
+        # Add description from docstring if available
+        if name in param_docs:
+            prop["description"] = param_docs[name]
+
+        properties[name] = prop
 
         has_default = param.default is not inspect.Parameter.empty
         if not has_default and not is_optional:
@@ -212,3 +226,54 @@ def _is_context_type(annotation: Any, name: str) -> bool:
     if isinstance(annotation, type) and annotation.__name__ == "Context":
         return True
     return isinstance(annotation, str) and annotation in ("Context", "milo.context.Context")
+
+
+_GOOGLE_PARAM_RE = _re.compile(r"^\s{2,}(\w+)\s*(?:\(.*?\))?\s*:\s*(.+?)$", _re.MULTILINE)
+_SPHINX_PARAM_RE = _re.compile(r"^\s*:param\s+(\w+)\s*:\s*(.+?)$", _re.MULTILINE)
+_NUMPY_PARAM_RE = _re.compile(r"^(\w+)\s*:.*?\n\s{4,}(.+?)$", _re.MULTILINE)
+
+
+def _parse_param_docs(docstring: str) -> dict[str, str]:
+    """Extract parameter descriptions from a docstring.
+
+    Supports Google, Sphinx, and NumPy docstring styles::
+
+        # Google style
+        Args:
+            name: The user's name.
+            loud (bool): Whether to shout.
+
+        # Sphinx style
+        :param name: The user's name.
+
+        # NumPy style
+        Parameters
+        ----------
+        name : str
+            The user's name.
+    """
+    result: dict[str, str] = {}
+
+    # Google style: look for "Args:" or "Arguments:" section
+    args_match = _re.search(r"(?:Args|Arguments|Parameters)\s*:\s*\n((?:\s{2,}.+\n?)+)", docstring)
+    if args_match:
+        section = args_match.group(1)
+        for m in _GOOGLE_PARAM_RE.finditer(section):
+            result[m.group(1)] = m.group(2).strip()
+        if result:
+            return result
+
+    # Sphinx style
+    for m in _SPHINX_PARAM_RE.finditer(docstring):
+        result[m.group(1)] = m.group(2).strip()
+    if result:
+        return result
+
+    # NumPy style: look for "Parameters\n----------" section
+    numpy_match = _re.search(r"Parameters\s*\n\s*-{3,}\s*\n((?:.*\n?)+?)(?:\n\s*\n|\Z)", docstring)
+    if numpy_match:
+        section = numpy_match.group(1)
+        for m in _NUMPY_PARAM_RE.finditer(section):
+            result[m.group(1)] = m.group(2).strip()
+
+    return result

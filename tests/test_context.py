@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import sys
+from unittest.mock import patch
+
 import pytest
 
 from milo._errors import (
@@ -312,3 +316,83 @@ class TestEnhancedErrors:
         assert ErrorCode.PIP_PHASE.value == "M-PIP-001"
         assert ErrorCode.PLG_LOAD.value == "M-PLG-001"
         assert ErrorCode.CMD_NOT_FOUND.value == "M-CMD-001"
+
+
+class TestContextEnhancements:
+    def test_dry_run_default(self):
+        ctx = Context()
+        assert ctx.dry_run is False
+
+    def test_dry_run_set(self):
+        ctx = Context(dry_run=True)
+        assert ctx.dry_run is True
+
+    def test_output_file_default(self):
+        ctx = Context()
+        assert ctx.output_file == ""
+
+    def test_is_ci_without_env(self):
+        with patch.dict(os.environ, {}, clear=True):
+            ctx = Context()
+            assert ctx.is_ci is False
+
+    def test_is_ci_with_env(self):
+        with patch.dict(os.environ, {"CI": "true"}):
+            ctx = Context()
+            assert ctx.is_ci is True
+
+    def test_info_writes_to_stderr(self, capsys):
+        ctx = Context(color=False)
+        ctx.info("hello")
+        assert "info: hello" in capsys.readouterr().err
+
+    def test_success_writes_to_stderr(self, capsys):
+        ctx = Context(color=False)
+        ctx.success("done")
+        assert "OK: done" in capsys.readouterr().err
+
+    def test_warning_writes_to_stderr(self, capsys):
+        ctx = Context(color=False)
+        ctx.warning("watch out")
+        assert "warning: watch out" in capsys.readouterr().err
+
+    def test_error_writes_to_stderr(self, capsys):
+        ctx = Context(color=False)
+        ctx.error("bad")
+        assert "error: bad" in capsys.readouterr().err
+
+    def test_warning_shown_when_quiet(self, capsys):
+        ctx = Context(verbosity=-1, color=False)
+        ctx.warning("still shown")
+        assert "warning: still shown" in capsys.readouterr().err
+
+    def test_info_suppressed_when_quiet(self, capsys):
+        ctx = Context(verbosity=-1, color=False)
+        ctx.info("hidden")
+        assert capsys.readouterr().err == ""
+
+    def test_confirm_dry_run_returns_false(self):
+        ctx = Context(dry_run=True, color=False)
+        assert ctx.confirm("Delete?") is False
+
+    def test_confirm_non_interactive_returns_default(self):
+        ctx = Context(color=False)
+        # If stdin is not a TTY (e.g., in tests), returns default
+        if not sys.stdin.isatty():
+            assert ctx.confirm("Delete?", default=True) is True
+            assert ctx.confirm("Delete?", default=False) is False
+
+    def test_progress_context_manager(self, capsys):
+        ctx = Context(color=False)
+        with ctx.progress(total=10, label="Test") as p:
+            for _ in range(10):
+                p.update(1)
+        # Should write something to stderr
+        err = capsys.readouterr().err
+        assert "Test" in err
+
+    def test_progress_quiet_mode(self, capsys):
+        ctx = Context(verbosity=-1, color=False)
+        with ctx.progress(total=5) as p:
+            p.update(5)
+        assert capsys.readouterr().err == ""

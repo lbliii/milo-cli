@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from unittest.mock import patch
 
 import pytest
 
-from milo.commands import CLI, CommandDef
+from milo.commands import CLI, CommandDef, InvokeResult
+from milo.context import Context
 from milo.llms import generate_llms_txt
 from milo.mcp import _call_tool, _handle_method, _list_tools
 from milo.output import format_output
@@ -662,3 +664,214 @@ class TestGateway:
             patch("sys.stderr", new_callable=io.StringIO),
         ):
             main()  # Should not raise
+
+
+class TestCLIDryRun:
+    def test_dry_run_flag_parsed(self):
+        cli = CLI(name="test")
+
+        @cli.command("greet", description="Greet")
+        def greet(name: str = "World", ctx: Context = None) -> str:
+            return f"dry={ctx.dry_run}"
+
+        result = cli.run(["--dry-run", "greet"])
+        assert result == "dry=True"
+
+    def test_dry_run_short_flag(self):
+        cli = CLI(name="test")
+
+        @cli.command("greet", description="Greet")
+        def greet(ctx: Context = None) -> str:
+            return f"dry={ctx.dry_run}"
+
+        result = cli.run(["-n", "greet"])
+        assert result == "dry=True"
+
+
+class TestCLIOutputFile:
+    def test_output_to_file(self, tmp_path):
+        cli = CLI(name="test")
+
+        @cli.command("hello", description="Hello")
+        def hello() -> str:
+            return "hello world"
+
+        outfile = tmp_path / "out.txt"
+        cli.run(["--output-file", str(outfile), "hello"])
+        assert outfile.read_text().strip() == "hello world"
+
+
+class TestCLIInvoke:
+    def test_invoke_captures_output(self):
+        cli = CLI(name="test")
+
+        @cli.command("greet", description="Greet")
+        def greet(name: str = "World") -> str:
+            return f"Hello, {name}!"
+
+        result = cli.invoke(["greet", "--name", "Alice"])
+        assert isinstance(result, InvokeResult)
+        assert result.exit_code == 0
+        assert "Hello, Alice!" in result.output
+
+    def test_invoke_captures_errors(self):
+        cli = CLI(name="test")
+
+        @cli.command("fail", description="Fail")
+        def fail() -> str:
+            raise RuntimeError("boom")
+
+        result = cli.invoke(["fail"])
+        assert result.exit_code == 1
+        assert result.exception is not None
+        assert "boom" in str(result.exception)
+
+
+class TestCLIHooks:
+    def test_before_command_hook(self):
+        cli = CLI(name="test")
+        calls = []
+
+        @cli.before_command
+        def hook(ctx, name, kwargs):
+            calls.append(("before", name))
+
+        @cli.command("greet", description="Greet")
+        def greet() -> str:
+            return "hi"
+
+        cli.run(["greet"])
+        assert ("before", "greet") in calls
+
+    def test_after_command_hook(self):
+        cli = CLI(name="test")
+        calls = []
+
+        @cli.after_command
+        def hook(ctx, name, result):
+            calls.append(("after", name, result))
+
+        @cli.command("greet", description="Greet")
+        def greet() -> str:
+            return "hi"
+
+        cli.run(["greet"])
+        assert ("after", "greet", "hi") in calls
+
+
+class TestCLIConfirm:
+    def test_confirm_abort_non_interactive(self, capsys):
+        cli = CLI(name="test")
+
+        @cli.command("delete", description="Delete", confirm="Are you sure?")
+        def delete() -> str:
+            return "deleted"
+
+        # Non-interactive stdin -> confirm returns False -> aborted
+        if not sys.stdin.isatty():
+            result = cli.run(["delete"])
+            assert result is None
+            assert "Aborted" in capsys.readouterr().err
+
+    def test_confirm_skipped_in_dry_run(self, capsys):
+        cli = CLI(name="test")
+
+        @cli.command("delete", description="Delete", confirm="Are you sure?")
+        def delete() -> str:
+            return "deleted"
+
+        # Dry-run skips confirmation gate, runs the command
+        result = cli.run(["-n", "delete"])
+        assert result == "deleted"
+
+
+class TestCLIDidYouMean:
+    def test_suggest_on_typo(self, capsys):
+        cli = CLI(name="test")
+
+        @cli.command("status", description="Status")
+        def status() -> str:
+            return "ok"
+
+        with pytest.raises(SystemExit):
+            cli.run(["stattus"])
+        err = capsys.readouterr().err
+        assert "Did you mean" in err or "status" in err
+
+    def test_suggest_via_invoke(self):
+        cli = CLI(name="test")
+
+        @cli.command("status", description="Status")
+        def status() -> str:
+            return "ok"
+
+        result = cli.invoke(["stattus"])
+        assert result.exit_code != 0
+
+
+class TestGenerateHelpAll:
+    def test_basic_output(self):
+        cli = CLI(name="test", description="Test CLI", version="1.0.0")
+
+        @cli.command("greet", description="Say hello")
+        def greet(name: str) -> str:
+            return f"Hello, {name}"
+
+        site = cli.group("site", description="Site ops")
+
+        @site.command("build", description="Build site")
+        def build() -> str:
+            return "built"
+
+        md = cli.generate_help_all()
+        assert "# test" in md
+        assert "Test CLI" in md
+        assert "greet" in md
+        assert "site" in md
+        assert "build" in md
+        assert "--dry-run" in md
+
+
+class TestCLICompletions:
+    def test_bash_completions(self, capsys):
+        cli = CLI(name="myapp")
+
+        @cli.command("greet", description="Greet")
+        def greet(name: str = "World") -> str:
+            return f"Hello, {name}"
+
+        cli.run(["--completions", "bash"])
+        out = capsys.readouterr().out
+        assert "myapp" in out
+        assert "complete" in out
+
+    def test_zsh_completions(self, capsys):
+        cli = CLI(name="myapp")
+
+        @cli.command("greet", description="Greet")
+        def greet() -> str:
+            return "hi"
+
+        cli.run(["--completions", "zsh"])
+        out = capsys.readouterr().out
+        assert "#compdef" in out
+
+    def test_fish_completions(self, capsys):
+        cli = CLI(name="myapp")
+
+        @cli.command("greet", description="Greet")
+        def greet() -> str:
+            return "hi"
+
+        cli.run(["--completions", "fish"])
+        out = capsys.readouterr().out
+        assert "complete -c myapp" in out
+
+
+class TestSuggestCommand:
+    def test_suggest_group_names(self):
+        cli = CLI(name="test")
+        cli.group("deploy", description="Deploy ops")
+
+        suggestion = cli.suggest_command("deplpy")
+        assert suggestion == "deploy"
