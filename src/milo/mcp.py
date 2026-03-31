@@ -285,5 +285,3 @@ def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
             }
         ]
     }
-
-

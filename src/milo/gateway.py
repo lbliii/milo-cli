@@ -368,7 +368,5 @@ def _proxy_prompt(
     )
 
 
-
-
 if __name__ == "__main__":
     main()
