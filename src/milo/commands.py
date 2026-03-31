@@ -644,7 +644,9 @@ class CLI:
         )
         parser._cli_ref = self
         if self.version:
-            parser.add_argument("--version", action="version", version=f"{self.name} {self.version}")
+            parser.add_argument(
+                "--version", action="version", version=f"{self.name} {self.version}"
+            )
         parser.add_argument(
             "--llms-txt",
             action="store_true",
