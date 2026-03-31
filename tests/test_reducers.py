@@ -343,7 +343,9 @@ class TestComposition:
                 items = list(state.items)
                 if items:
                     items.pop(state.cursor)
-                return replace(state, items=tuple(items), cursor=min(state.cursor, max(0, len(items) - 1)))
+                return replace(
+                    state, items=tuple(items), cursor=min(state.cursor, max(0, len(items) - 1))
+                )
             return state
 
         state = ListState(items=("a", "b", "c"), cursor=1)

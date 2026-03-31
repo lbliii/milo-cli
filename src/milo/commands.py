@@ -41,7 +41,6 @@ __all__ = [
 ]
 
 
-
 class _MiloArgumentParser(argparse.ArgumentParser):
     """ArgumentParser subclass that provides did-you-mean suggestions."""
 
@@ -65,7 +64,6 @@ class _MiloArgumentParser(argparse.ArgumentParser):
                     )
                     sys.exit(2)
         super().error(message)
-
 
 
 class CLI:
@@ -1019,5 +1017,3 @@ class CLI:
         from milo.registry import uninstall
 
         uninstall(self.name)
-
-
