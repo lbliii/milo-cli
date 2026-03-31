@@ -91,6 +91,48 @@
 {%- endfor -%}
 {%- enddef -%}
 
+{#- ── Selectable list: cursor-highlighted item list ─────────────────── -#}
+{%- def selectable_list(items, cursor, render, empty="No items.") -%}
+{%- if items -%}
+{%- for item in items -%}
+{%- if loop.index0 == cursor %}  {{ icons.arrow_r | cyan }} {% else %}    {% endif -%}
+{{ render(item, loop.index0 == cursor) }}
+{% endfor -%}
+{%- else -%}
+  {{ empty | dim }}
+{%- endif -%}
+{%- enddef -%}
+
+{#- ── Scrollable list: viewport slice with overflow indicators ──────── -#}
+{%- def scrollable_list(items, cursor, render, height=15, scroll_offset=0, empty="No items.") -%}
+{%- if items -%}
+{%- set visible_start = scroll_offset -%}
+{%- set visible_end = scroll_offset + height -%}
+{%- if visible_start > 0 -%}
+  {{ ("  ... " ~ (visible_start | string) ~ " more above") | dim }}
+{% endif -%}
+{%- for item in items[visible_start:visible_end] -%}
+{%- set idx = visible_start + loop.index0 -%}
+{%- if idx == cursor %}  {{ icons.arrow_r | cyan }} {% else %}    {% endif -%}
+{{ render(item, idx == cursor) }}
+{% endfor -%}
+{%- set remaining = (items | length) - visible_end -%}
+{%- if remaining > 0 -%}
+  {{ ("  ... " ~ (remaining | string) ~ " more below") | dim }}
+{% endif -%}
+{%- else -%}
+  {{ empty | dim }}
+{%- endif -%}
+{%- enddef -%}
+
+{#- ── Format time: seconds → MM:SS.CC ──────────────────────────────── -#}
+{%- def format_time(seconds) -%}
+{%- set m = (seconds // 60) | int -%}
+{%- set s = (seconds % 60) | int -%}
+{%- set c = ((seconds * 100) % 100) | int -%}
+{{ "{:02d}:{:02d}.{:02d}" | format(m, s, c) }}
+{%- enddef -%}
+
 {#- ── Boxed header with border (round style) ───────────────────────── -#}
 {%- def header_box(name, version="", description="") -%}
 {%- set b = box.round -%}

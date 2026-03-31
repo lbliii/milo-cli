@@ -1,6 +1,7 @@
 """Stopwatch with laps — tick handling, growing state, formatted output.
 
-Demonstrates: tick_rate, @@TICK dispatch, frozen tuples, computed template values.
+Demonstrates: quit_on combinator, tick_rate, @@TICK dispatch,
+frozen tuples, App.from_dir.
 
     uv run python examples/stopwatch/app.py
 """
@@ -8,10 +9,8 @@ Demonstrates: tick_rate, @@TICK dispatch, frozen tuples, computed template value
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from pathlib import Path
 
-from milo import Action, App, Key, Quit, SpecialKey
-from milo.templates import get_env
+from milo import Action, App, Key, Quit, SpecialKey, quit_on
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +24,7 @@ class State:
 TICK_INTERVAL: float = 0.05  # 50 ms per tick
 
 
+@quit_on(SpecialKey.ESCAPE, "q")
 def reducer(state: State | None, action: Action) -> State | Quit:
     if state is None:
         return State()
@@ -38,10 +38,6 @@ def reducer(state: State | None, action: Action) -> State | Quit:
         return state
 
     key: Key = action.payload
-
-    # Quit: Escape or q
-    if key.name == SpecialKey.ESCAPE or key.char == "q":
-        return Quit(state)
 
     # Toggle start/stop: Space
     if key.char == " ":
@@ -66,16 +62,11 @@ def reducer(state: State | None, action: Action) -> State | Quit:
 
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    app = App(
+    app = App.from_dir(
+        __file__,
         template="stopwatch.kida",
         reducer=reducer,
         initial_state=State(),
-        env=env,
         tick_rate=TICK_INTERVAL,
         exit_template="exit.kida",
     )

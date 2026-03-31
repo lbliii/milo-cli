@@ -1,7 +1,7 @@
 """Todo list — an advanced milo app.
 
 Demonstrates: modal input (normal vs add mode), tuple-based collections,
-derived filtering, complex key handling, and template for-loops.
+derived filtering, quit_on combinator, App.from_dir.
 
     uv run python examples/todo/app.py
 """
@@ -10,10 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum, auto
-from pathlib import Path
 
 from milo import Action, App, Key, Quit, SpecialKey
-from milo.templates import get_env
 
 # ---------------------------------------------------------------------------
 # Domain types
@@ -77,6 +75,10 @@ def _clamp_cursor(state: State) -> State:
 
 # ---------------------------------------------------------------------------
 # Reducer
+#
+# Note: This reducer handles quit and cursor manually because modal
+# input (ADDING mode captures Escape) and filtered views (dynamic
+# list length) don't fit the quit_on/with_cursor combinators cleanly.
 # ---------------------------------------------------------------------------
 
 
@@ -176,28 +178,23 @@ def reducer(state: State | None, action: Action) -> State | Quit:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
+    app = App.from_dir(
+        __file__,
+        template="todo.kida",
+        reducer=reducer,
+        initial_state=State(
+            todos=(
+                Todo(text="Read the milo docs"),
+                Todo(text="Build a todo app", done=True),
+                Todo(text="Push to main"),
+            ),
+        ),
+        exit_template="exit.kida",
+    )
 
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-    env.globals["filtered_todos"] = lambda state: [
+    # Expose filtering helper to templates
+    app._env.globals["filtered_todos"] = lambda state: [
         state.todos[i] for i in _filtered_indices(state)
     ]
 
-    # Seed with a few example todos
-    initial = State(
-        todos=(
-            Todo(text="Read the milo docs"),
-            Todo(text="Build a todo app", done=True),
-            Todo(text="Push to main"),
-        ),
-    )
-
-    app = App(
-        template="todo.kida",
-        reducer=reducer,
-        initial_state=initial,
-        env=env,
-        exit_template="exit.kida",
-    )
     app.run()

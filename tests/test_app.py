@@ -219,6 +219,95 @@ class TestApp:
         assert any("screen_a_state" in s for s in written)
 
 
+class TestFromDir:
+    def test_from_dir_with_templates(self, tmp_path):
+        """from_dir discovers templates/ relative to caller file."""
+        tpl_dir = tmp_path / "templates"
+        tpl_dir.mkdir()
+        (tpl_dir / "hello.kida").write_text("hello={{ state.value }}")
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        app = App.from_dir(
+            str(caller),
+            template="hello.kida",
+            reducer=simple_reducer,
+            initial_state=SimpleState(value=10),
+        )
+        with patch("milo.app.is_tty", return_value=False):
+            written = []
+            mock_stdout = MagicMock()
+            mock_stdout.write = lambda s: written.append(s)
+            with patch("sys.stdout", mock_stdout):
+                result = app.run()
+        assert isinstance(result, SimpleState)
+        assert any("hello=10" in s for s in written)
+
+    def test_from_dir_missing_templates_raises(self, tmp_path):
+        """from_dir raises AppError when templates/ does not exist."""
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        with pytest.raises(AppError, match="Templates directory not found"):
+            App.from_dir(
+                str(caller),
+                template="t.kida",
+                reducer=simple_reducer,
+            )
+
+    def test_from_dir_custom_templates_dir(self, tmp_path):
+        """from_dir supports a custom templates directory name."""
+        tpl_dir = tmp_path / "views"
+        tpl_dir.mkdir()
+        (tpl_dir / "page.kida").write_text("page={{ state.value }}")
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        app = App.from_dir(
+            str(caller),
+            template="page.kida",
+            reducer=simple_reducer,
+            initial_state=SimpleState(value=5),
+            templates_dir="views",
+        )
+        assert app._template_name == "page.kida"
+
+    def test_from_dir_with_flow(self, tmp_path):
+        """from_dir works with a Flow."""
+        from milo.flow import FlowScreen
+
+        tpl_dir = tmp_path / "templates"
+        tpl_dir.mkdir()
+        (tpl_dir / "a.kida").write_text("screen a")
+        (tpl_dir / "b.kida").write_text("screen b")
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        def r(s, a):
+            return s or 0
+
+        a = FlowScreen("a", "a.kida", r)
+        b = FlowScreen("b", "b.kida", r)
+        app = App.from_dir(str(caller), flow=a >> b)
+        assert app._flow is not None
+
+    def test_from_dir_rejects_env_kwarg(self, tmp_path):
+        """from_dir raises AppError if env is passed."""
+        tpl_dir = tmp_path / "templates"
+        tpl_dir.mkdir()
+        (tpl_dir / "t.kida").write_text("x")
+        caller = tmp_path / "app.py"
+        caller.touch()
+
+        with pytest.raises(AppError, match="does not accept an 'env' argument"):
+            App.from_dir(
+                str(caller),
+                template="t.kida",
+                reducer=simple_reducer,
+                env=MagicMock(),
+            )
+
+
 class TestExitTemplate:
     def test_exit_template_renders_after_run(self):
         """exit_template renders the final state after the app loop ends."""

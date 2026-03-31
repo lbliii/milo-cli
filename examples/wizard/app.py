@@ -1,6 +1,7 @@
 """Setup wizard — multi-screen flow with forms.
 
-Demonstrates: FlowScreen, Flow (>> operator), make_form_reducer, Quit.
+Demonstrates: FlowScreen, Flow (>> operator), make_form_reducer,
+quit_on combinator, App.from_dir with flows.
 
     uv run python examples/wizard/app.py
 """
@@ -8,7 +9,6 @@ Demonstrates: FlowScreen, Flow (>> operator), make_form_reducer, Quit.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from milo import (
     Action,
@@ -22,6 +22,7 @@ from milo import (
     ReducerResult,
     SpecialKey,
     make_form_reducer,
+    quit_on,
 )
 
 # -- Screen 1: Welcome -------------------------------------------------------
@@ -72,13 +73,10 @@ class DoneState:
     pass
 
 
+@quit_on("q", SpecialKey.ESCAPE)
 def done_reducer(state: DoneState | None, action: Action) -> DoneState | Quit:
     if state is None:
         return DoneState()
-    if action.type == "@@KEY":
-        key: Key = action.payload
-        if key.char == "q" or key.name == SpecialKey.ESCAPE:
-            return Quit(state)
     return state
 
 
@@ -92,12 +90,5 @@ flow = welcome >> config >> done
 
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    from milo.templates import get_env
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    app = App.from_flow(flow, env=env, exit_template="exit.kida")
+    app = App.from_dir(__file__, flow=flow, exit_template="exit.kida")
     app.run()

@@ -120,6 +120,66 @@ class App:
         self._record = record
 
     @classmethod
+    def from_dir(
+        cls,
+        caller_file: str,
+        *,
+        template: str | Any = "",
+        reducer: Callable | None = None,
+        initial_state: Any = None,
+        flow: Flow | None = None,
+        templates_dir: str = "templates",
+        **kwargs: Any,
+    ) -> App:
+        """Create an App that auto-discovers templates relative to *caller_file*.
+
+        Looks for a ``templates/`` directory next to the given file path
+        and creates a kida environment with that directory as the loader
+        root.  Pass ``__file__`` from the calling module.
+
+        Usage::
+
+            app = App.from_dir(
+                __file__,
+                template="counter.kida",
+                reducer=reducer,
+                initial_state=State(),
+            )
+            app.run()
+        """
+        from kida import FileSystemLoader
+
+        from milo.templates import get_env
+
+        base = Path(caller_file).resolve().parent
+        tpl_path = base / templates_dir
+        if not tpl_path.is_dir():
+            raise AppError(
+                ErrorCode.APP_LIFECYCLE,
+                f"Templates directory not found: {tpl_path}",
+            )
+
+        if "env" in kwargs:
+            raise AppError(
+                ErrorCode.APP_LIFECYCLE,
+                "App.from_dir derives its own template environment and does not "
+                "accept an 'env' argument. Remove the 'env' parameter or construct "
+                "the App directly if you need a custom environment.",
+            )
+
+        env = get_env(loader=FileSystemLoader(str(tpl_path)))
+
+        if flow is not None:
+            return cls(flow=flow, env=env, **kwargs)
+        return cls(
+            template=template,
+            reducer=reducer,
+            initial_state=initial_state,
+            env=env,
+            **kwargs,
+        )
+
+    @classmethod
     def from_flow(cls, flow: Flow, **kwargs: Any) -> App:
         """Create App from a declarative Flow."""
         return cls(flow=flow, **kwargs)

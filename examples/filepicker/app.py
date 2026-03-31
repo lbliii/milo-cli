@@ -1,7 +1,7 @@
 """File picker — scrollable directory browser with saga-driven I/O.
 
 Demonstrates: scroll viewport, saga for directory reads, frozen tuples,
-derived scroll offset, ReducerResult, Quit.
+derived scroll offset, ReducerResult, quit_on combinator, App.from_dir.
 
     uv run python examples/filepicker/app.py
 """
@@ -13,7 +13,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey
-from milo.templates import get_env
 
 VIEWPORT_HEIGHT = 15
 
@@ -124,6 +123,10 @@ def format_size(size: int) -> str:
 
 # ---------------------------------------------------------------------------
 # Reducer
+#
+# Note: This reducer handles quit and cursor navigation manually
+# because quit sets cancelled=True on state and scroll_offset must
+# be derived alongside each cursor move.
 # ---------------------------------------------------------------------------
 
 
@@ -221,20 +224,16 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    # Add format_size as a global so the template can use it
-    env.globals["format_size"] = format_size
-    env.globals["viewport_height"] = VIEWPORT_HEIGHT
-
-    app = App(
+    app = App.from_dir(
+        __file__,
         template="filepicker.kida",
         reducer=reducer,
         initial_state=State(),
-        env=env,
         exit_template="exit.kida",
     )
+
+    # Add format_size as a global so the template can use it
+    app._env.globals["format_size"] = format_size
+    app._env.globals["viewport_height"] = VIEWPORT_HEIGHT
+
     app.run()

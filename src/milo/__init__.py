@@ -104,6 +104,10 @@ def __getattr__(name: str):
         "DoctorReport": "doctor",
         "run_doctor": "doctor",
         "format_doctor_report": "doctor",
+        # Reducer combinators
+        "quit_on": "reducers",
+        "with_cursor": "reducers",
+        "with_confirm": "reducers",
         # Version check
         "VersionInfo": "version_check",
         "check_version": "version_check",
@@ -199,8 +203,11 @@ __all__ = [
     "get_context",
     "install_completions",
     "make_form_reducer",
+    "quit_on",
     "render_html",
     "run",
     "run_doctor",
+    "with_confirm",
+    "with_cursor",
     "write_output",
 ]

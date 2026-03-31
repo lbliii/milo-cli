@@ -396,3 +396,61 @@ class TestContextEnhancements:
         with ctx.progress(total=5) as p:
             p.update(5)
         assert capsys.readouterr().err == ""
+
+
+# ---------------------------------------------------------------------------
+# Context.run_app (CLI-to-App bridge)
+# ---------------------------------------------------------------------------
+
+
+class TestRunApp:
+    def test_run_app_returns_final_state(self):
+        """run_app launches an App and returns the final state."""
+        from dataclasses import dataclass as dc
+        from unittest.mock import MagicMock, patch
+
+        @dc(frozen=True)
+        class PickState:
+            picked: str = "hello"
+
+        def picker_reducer(state, action):
+            if state is None:
+                return PickState()
+            return state
+
+        from kida import Environment
+
+        tmpl_env = Environment()
+        tmpl = tmpl_env.from_string("{{ state.picked }}")
+        env = MagicMock()
+        env.get_template.return_value = tmpl
+
+        ctx = Context()
+        with patch("milo.app.is_tty", return_value=False), patch("sys.stdout"):
+            result = ctx.run_app(
+                reducer=picker_reducer,
+                template="picker.kida",
+                initial_state=PickState(),
+                env=env,
+            )
+        assert isinstance(result, PickState)
+        assert result.picked == "hello"
+
+    def test_run_app_passes_env(self):
+        """run_app forwards the env parameter to App."""
+        from unittest.mock import MagicMock, patch
+
+        env = MagicMock()
+        from kida import Environment
+
+        tmpl_env = Environment()
+        tmpl = tmpl_env.from_string("x")
+        env.get_template.return_value = tmpl
+
+        def r(s, a):
+            return s or 0
+
+        ctx = Context()
+        with patch("milo.app.is_tty", return_value=False), patch("sys.stdout"):
+            ctx.run_app(reducer=r, template="t.kida", initial_state=0, env=env)
+        env.get_template.assert_called()

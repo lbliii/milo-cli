@@ -91,6 +91,37 @@ def helper():
 
 `get_context()` uses a `ContextVar` set by the CLI dispatcher. If no context has been set, it returns a default `Context`.
 
+## Running interactive apps from commands
+
+Use `ctx.run_app()` to launch an interactive `App` from within a CLI command handler. The command blocks while the app runs and receives the final state when it exits:
+
+```python
+from dataclasses import dataclass
+from milo import CLI, Context, quit_on, with_cursor, with_confirm, SpecialKey
+
+cli = CLI(name="picker")
+
+@dataclass(frozen=True, slots=True)
+class PickState:
+    items: tuple[str, ...] = ("alpha", "beta", "gamma")
+    cursor: int = 0
+
+@with_confirm()
+@with_cursor("items", wrap=True)
+@quit_on(SpecialKey.ESCAPE)
+def reducer(state, action):
+    if state is None:
+        return PickState()
+    return state
+
+@cli.command("pick", description="Pick an item")
+def pick(ctx: Context = None) -> str:
+    state = ctx.run_app(reducer, template="pick.kida", initial_state=PickState())
+    return state.items[state.cursor]
+```
+
+This bridges the CLI dispatch layer with the Elm Architecture event loop — the command defines *what* to run, the app handles *how* to interact.
+
 ## Context fields
 
 | Field | Type | Description |
