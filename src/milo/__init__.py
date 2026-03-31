@@ -125,11 +125,11 @@ __version__ = "0.1.0"
 __all__ = [
     "BUILTIN_ACTIONS",
     "CLI",
-    "CLIProgress",
     "Action",
     "App",
     "AppError",
     "AppStatus",
+    "CLIProgress",
     "Call",
     "Check",
     "CommandDef",

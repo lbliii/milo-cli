@@ -158,10 +158,7 @@ class Config:
         root = root or Path.cwd()
 
         # Determine filename from first source pattern, or use a default
-        if spec.sources:
-            filename = spec.sources[0].replace("*", "app")
-        else:
-            filename = f"config.{format}"
+        filename = spec.sources[0].replace("*", "app") if spec.sources else f"config.{format}"
 
         filepath = root / filename
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -352,7 +349,6 @@ def _write_yaml_simple(data: dict[str, Any], lines: list[str], indent: int) -> N
             lines.append(f"{prefix}{key}: {'true' if value else 'false'}")
         elif isinstance(value, list):
             lines.append(f"{prefix}{key}:")
-            for item in value:
-                lines.append(f"{prefix}  - {item}")
+            lines.extend(f"{prefix}  - {item}" for item in value)
         else:
             lines.append(f"{prefix}{key}: {value}")

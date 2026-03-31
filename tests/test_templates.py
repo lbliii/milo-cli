@@ -104,8 +104,8 @@ class TestComponentTemplatesIncluded:
 
     def test_pyproject_includes_components(self):
         """pyproject.toml should include components/*.kida in package-data."""
-        from pathlib import Path
         import tomllib
+        from pathlib import Path
 
         pyproject = Path(__file__).parent.parent / "pyproject.toml"
         with open(pyproject, "rb") as f:

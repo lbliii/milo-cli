@@ -118,7 +118,7 @@ class TestRetryEffect:
         assert r.base_delay == 1.0
 
     def test_retry_in_saga(self):
-        from milo._types import Action, Retry
+        from milo._types import Retry
         from milo.state import Store
 
         call_count = 0
@@ -147,7 +147,6 @@ class TestRetryEffect:
         assert call_count == 3
 
     def test_retry_exhausted(self):
-        from milo._types import Retry
         from milo.state import _execute_retry
 
         call_count = 0

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import sys
+from unittest.mock import patch
+
 import pytest
 
 from milo._errors import (
@@ -12,12 +16,8 @@ from milo._errors import (
     PluginError,
     format_error,
 )
-import os
-import sys
-from unittest.mock import patch
-
 from milo.commands import CLI
-from milo.context import CLIProgress, Context, get_context, set_context
+from milo.context import Context, get_context, set_context
 
 # ---------------------------------------------------------------------------
 # Context basics

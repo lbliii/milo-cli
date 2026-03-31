@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -57,9 +56,7 @@ def generate_zsh_completion(cli: CLI) -> str:
 
     flag_cases = []
     for cmd, info in commands.items():
-        flags = []
-        for flag in info["flags"]:
-            flags.append(f"            '{flag}[{info.get('description', '')}]'")
+        flags = [f"            '{flag}[{info.get('description', '')}]'" for flag in info["flags"]]
         if flags:
             flag_block = "\n".join(flags)
             flag_cases.append(f"        {cmd})\n            _arguments \\\n{flag_block}\n            ;;")
@@ -135,7 +132,7 @@ def _collect_completions(cli: CLI) -> dict[str, dict[str, Any]]:
         # Include dynamic completion callbacks if registered
         completers: dict[str, Any] = {}
         if hasattr(cmd, "_completers"):
-            completers = cmd._completers
+            completers = cmd._completers  # type: ignore[assignment]
 
         result[path] = {
             "description": cmd.description,

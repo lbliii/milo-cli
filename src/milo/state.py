@@ -245,7 +245,7 @@ def _execute_retry(
     max_delay: float,
 ) -> Any:
     """Execute a function with retry and backoff."""
-    last_error: Exception | None = None
+    last_error: Exception = RuntimeError("no attempts made")
     for attempt in range(max_attempts):
         try:
             return fn(*args, **kwargs)

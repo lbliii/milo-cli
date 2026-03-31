@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import inspect
+import re as _re
 import types
 import typing
 from collections.abc import Callable
@@ -226,8 +227,6 @@ def _is_context_type(annotation: Any, name: str) -> bool:
         return True
     return isinstance(annotation, str) and annotation in ("Context", "milo.context.Context")
 
-
-import re as _re
 
 _GOOGLE_PARAM_RE = _re.compile(
     r"^\s{2,}(\w+)\s*(?:\(.*?\))?\s*:\s*(.+?)$", _re.MULTILINE

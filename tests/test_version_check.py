@@ -6,8 +6,6 @@ import json
 import os
 from unittest.mock import patch
 
-from milo.commands import CLI
-
 
 class TestVersionCheck:
     def test_skip_in_ci(self):
@@ -48,11 +46,12 @@ class TestVersionCheck:
         assert "myapp" in notice
 
     def test_cached_check(self, tmp_path):
+        import time
+
         from milo.version_check import check_version
 
         # Write a cached result
         cache_file = tmp_path / "test-pkg.version.json"
-        import time
 
         cache_file.write_text(json.dumps({
             "latest": "0.1.0",
@@ -64,9 +63,9 @@ class TestVersionCheck:
         assert result is None
 
     def test_cached_check_update_available(self, tmp_path):
-        from milo.version_check import check_version
-
         import time
+
+        from milo.version_check import check_version
 
         cache_file = tmp_path / "test-pkg.version.json"
         cache_file.write_text(json.dumps({
@@ -74,6 +73,7 @@ class TestVersionCheck:
             "checked_at": time.time(),
         }))
 
-        result = check_version("test-pkg", "0.1.0", cache_dir=tmp_path)
+        with patch.dict(os.environ, {"CI": "", "NO_UPDATE_CHECK": ""}, clear=False):
+            result = check_version("test-pkg", "0.1.0", cache_dir=tmp_path)
         assert result is not None
         assert result.update_available is True

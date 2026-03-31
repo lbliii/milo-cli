@@ -6,7 +6,7 @@ import argparse
 
 import pytest
 
-from milo.commands import CLI, CommandDef
+from milo.commands import CLI
 from milo.help import HelpRenderer, HelpState
 
 

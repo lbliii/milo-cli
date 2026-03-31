@@ -12,7 +12,7 @@ import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from milo.help import HelpRenderer
 from milo.output import format_output, write_output
@@ -184,7 +184,7 @@ class _MiloArgumentParser(argparse.ArgumentParser):
 
     _cli_ref: CLI | None = None
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:  # type: ignore[override]
         """Override to add did-you-mean for invalid subcommand choices."""
         if "invalid choice:" in message and self._cli_ref is not None:
             # Extract the invalid value
@@ -848,7 +848,7 @@ class CLI:
         if getattr(args, "completions", None):
             from milo.completions import install_completions
 
-            sys.stdout.write(install_completions(self, getattr(args, "completions")))
+            sys.stdout.write(install_completions(self, args.completions))
             return None
 
         # --llms-txt mode
@@ -898,10 +898,9 @@ class CLI:
 
         # Confirmation prompt
         confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
-        if confirm_msg and not ctx.dry_run:
-            if not ctx.confirm(confirm_msg):
-                sys.stderr.write("Aborted.\n")
-                return None
+        if confirm_msg and not ctx.dry_run and not ctx.confirm(confirm_msg):
+            sys.stderr.write("Aborted.\n")
+            return None
 
         # Extract command arguments and inject context
         sig = inspect.signature(cmd.handler)

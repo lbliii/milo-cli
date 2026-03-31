@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
