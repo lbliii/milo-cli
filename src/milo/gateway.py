@@ -24,9 +24,8 @@ import time
 from typing import Any
 
 from milo._child import ChildProcess
+from milo._jsonrpc import MCP_VERSION as _MCP_VERSION, _stderr, _write_error, _write_result
 from milo.registry import list_clis
-
-_MCP_VERSION = "2025-11-25"
 
 
 def main() -> None:
@@ -368,25 +367,6 @@ def _proxy_prompt(
     )
 
 
-def _write_result(req_id: Any, result: dict[str, Any]) -> None:
-    response = {"jsonrpc": "2.0", "id": req_id, "result": result}
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-
-
-def _write_error(req_id: Any, code: int, message: str) -> None:
-    response = {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "error": {"code": code, "message": message},
-    }
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-
-
-def _stderr(message: str) -> None:
-    sys.stderr.write(message + "\n")
-    sys.stderr.flush()
 
 
 if __name__ == "__main__":

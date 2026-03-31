@@ -6,10 +6,11 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from milo._jsonrpc import MCP_VERSION as _MCP_VERSION, _stderr, _write_error, _write_result
+
 if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef
 
-_MCP_VERSION = "2025-11-25"
 _SERVER_NAME = "milo"
 _SERVER_VERSION = "0.1.0"
 
@@ -63,15 +64,25 @@ def run_mcp_server(cli: CLI) -> None:
         method = request.get("method", "")
 
         try:
-            result = _handle_method(cli, method, request.get("params", {}))
+            result = _handle_method(cli, method, request.get("params", {}), cached_tools=tools)
             if result is not None:
                 _write_result(req_id, result)
         except Exception as e:
             _write_error(req_id, -32603, str(e))
 
 
-def _handle_method(cli: CLI, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
-    """Dispatch an MCP method."""
+def _handle_method(
+    cli: CLI,
+    method: str,
+    params: dict[str, Any],
+    *,
+    cached_tools: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Dispatch an MCP method.
+
+    Pass ``cached_tools`` from ``run_mcp_server`` to avoid recomputing the
+    tool list on every ``tools/list`` request.
+    """
     match method:
         case "initialize":
             return {
@@ -88,7 +99,7 @@ def _handle_method(cli: CLI, method: str, params: dict[str, Any]) -> dict[str, A
             # Client confirms initialization — no response required
             return None
         case "tools/list":
-            return {"tools": _list_tools(cli)}
+            return {"tools": cached_tools if cached_tools is not None else _list_tools(cli)}
         case "tools/call":
             return _call_tool(cli, params)
         case "resources/list":
@@ -275,25 +286,3 @@ def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _write_result(req_id: Any, result: dict[str, Any]) -> None:
-    """Write a JSON-RPC success response."""
-    response = {"jsonrpc": "2.0", "id": req_id, "result": result}
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-
-
-def _write_error(req_id: Any, code: int, message: str) -> None:
-    """Write a JSON-RPC error response."""
-    response = {
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "error": {"code": code, "message": message},
-    }
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-
-
-def _stderr(message: str) -> None:
-    """Write an informational line to stderr."""
-    sys.stderr.write(message + "\n")
-    sys.stderr.flush()
