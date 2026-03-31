@@ -171,6 +171,7 @@ class Config:
             _write_yaml(filepath, data)
         elif format == "json" or filepath.suffix == ".json":
             import json
+
             with open(filepath, "w") as f:
                 json.dump(data, f, indent=2)
                 f.write("\n")
@@ -294,9 +295,7 @@ def _write_toml(filepath: Path, data: dict[str, Any]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
-def _write_toml_section(
-    data: dict[str, Any], lines: list[str], prefix: str
-) -> None:
+def _write_toml_section(data: dict[str, Any], lines: list[str], prefix: str) -> None:
     """Recursively write TOML sections."""
     # Write simple values first
     for key, value in data.items():
@@ -328,6 +327,7 @@ def _write_yaml(filepath: Path, data: dict[str, Any]) -> None:
     """Write a dict as YAML."""
     try:
         import yaml  # type: ignore[import-untyped]
+
         with open(filepath, "w") as f:
             yaml.safe_dump(data, f, default_flow_style=False)
     except ImportError:

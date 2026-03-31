@@ -37,9 +37,7 @@ class TestVersionCheck:
     def test_format_version_notice(self):
         from milo.version_check import VersionInfo, format_version_notice
 
-        info = VersionInfo(
-            current="0.1.0", latest="0.2.0", update_available=True
-        )
+        info = VersionInfo(current="0.1.0", latest="0.2.0", update_available=True)
         notice = format_version_notice(info, prog="myapp")
         assert "0.1.0" in notice
         assert "0.2.0" in notice
@@ -53,10 +51,14 @@ class TestVersionCheck:
         # Write a cached result
         cache_file = tmp_path / "test-pkg.version.json"
 
-        cache_file.write_text(json.dumps({
-            "latest": "0.1.0",
-            "checked_at": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": "0.1.0",
+                    "checked_at": time.time(),
+                }
+            )
+        )
 
         # Same version, should return None
         result = check_version("test-pkg", "0.1.0", cache_dir=tmp_path)
@@ -68,10 +70,14 @@ class TestVersionCheck:
         from milo.version_check import check_version
 
         cache_file = tmp_path / "test-pkg.version.json"
-        cache_file.write_text(json.dumps({
-            "latest": "0.2.0",
-            "checked_at": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": "0.2.0",
+                    "checked_at": time.time(),
+                }
+            )
+        )
 
         with patch.dict(os.environ, {"CI": "", "NO_UPDATE_CHECK": ""}, clear=False):
             result = check_version("test-pkg", "0.1.0", cache_dir=tmp_path)

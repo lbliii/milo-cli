@@ -228,15 +228,9 @@ def _is_context_type(annotation: Any, name: str) -> bool:
     return isinstance(annotation, str) and annotation in ("Context", "milo.context.Context")
 
 
-_GOOGLE_PARAM_RE = _re.compile(
-    r"^\s{2,}(\w+)\s*(?:\(.*?\))?\s*:\s*(.+?)$", _re.MULTILINE
-)
-_SPHINX_PARAM_RE = _re.compile(
-    r"^\s*:param\s+(\w+)\s*:\s*(.+?)$", _re.MULTILINE
-)
-_NUMPY_PARAM_RE = _re.compile(
-    r"^(\w+)\s*:.*?\n\s{4,}(.+?)$", _re.MULTILINE
-)
+_GOOGLE_PARAM_RE = _re.compile(r"^\s{2,}(\w+)\s*(?:\(.*?\))?\s*:\s*(.+?)$", _re.MULTILINE)
+_SPHINX_PARAM_RE = _re.compile(r"^\s*:param\s+(\w+)\s*:\s*(.+?)$", _re.MULTILINE)
+_NUMPY_PARAM_RE = _re.compile(r"^(\w+)\s*:.*?\n\s{4,}(.+?)$", _re.MULTILINE)
 
 
 def _parse_param_docs(docstring: str) -> dict[str, str]:
@@ -276,9 +270,7 @@ def _parse_param_docs(docstring: str) -> dict[str, str]:
         return result
 
     # NumPy style: look for "Parameters\n----------" section
-    numpy_match = _re.search(
-        r"Parameters\s*\n\s*-{3,}\s*\n((?:.*\n?)+?)(?:\n\s*\n|\Z)", docstring
-    )
+    numpy_match = _re.search(r"Parameters\s*\n\s*-{3,}\s*\n((?:.*\n?)+?)(?:\n\s*\n|\Z)", docstring)
     if numpy_match:
         section = numpy_match.group(1)
         for m in _NUMPY_PARAM_RE.finditer(section):

@@ -59,11 +59,13 @@ def generate_zsh_completion(cli: CLI) -> str:
         flags = [f"            '{flag}[{info.get('description', '')}]'" for flag in info["flags"]]
         if flags:
             flag_block = "\n".join(flags)
-            flag_cases.append(f"        {cmd})\n            _arguments \\\n{flag_block}\n            ;;")
+            flag_cases.append(
+                f"        {cmd})\n            _arguments \\\n{flag_block}\n            ;;"
+            )
 
     flag_case_block = "\n".join(flag_cases)
 
-    return f'''#compdef {prog}
+    return f"""#compdef {prog}
 # Add to ~/.zshrc: eval "$({prog} --completions zsh)"
 _{prog}() {{
     local -a commands
@@ -87,7 +89,7 @@ _{prog}() {{
     esac
 }}
 _{prog}
-'''
+"""
 
 
 def generate_fish_completion(cli: CLI) -> str:
@@ -95,26 +97,23 @@ def generate_fish_completion(cli: CLI) -> str:
     prog = cli.name
     commands = _collect_completions(cli)
 
-    lines = [f"# fish completion for {prog}",
-             f"# Add to fish config: {prog} --completions fish | source"]
+    lines = [
+        f"# fish completion for {prog}",
+        f"# Add to fish config: {prog} --completions fish | source",
+    ]
 
     for cmd, info in commands.items():
         desc = info.get("description", "").replace("'", "\\'")
-        lines.append(
-            f"complete -c {prog} -n '__fish_use_subcommand' "
-            f"-a '{cmd}' -d '{desc}'"
-        )
+        lines.append(f"complete -c {prog} -n '__fish_use_subcommand' -a '{cmd}' -d '{desc}'")
         for flag in info["flags"]:
             flag_name = flag.lstrip("-")
             if flag.startswith("--"):
                 lines.append(
-                    f"complete -c {prog} -n '__fish_seen_subcommand_from {cmd}' "
-                    f"-l '{flag_name}'"
+                    f"complete -c {prog} -n '__fish_seen_subcommand_from {cmd}' -l '{flag_name}'"
                 )
             elif flag.startswith("-"):
                 lines.append(
-                    f"complete -c {prog} -n '__fish_seen_subcommand_from {cmd}' "
-                    f"-s '{flag_name}'"
+                    f"complete -c {prog} -n '__fish_seen_subcommand_from {cmd}' -s '{flag_name}'"
                 )
 
     return "\n".join(lines) + "\n"

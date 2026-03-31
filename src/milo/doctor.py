@@ -54,26 +54,33 @@ def run_doctor(
 
     # Python version
     py = sys.version_info
-    checks.append(Check(
-        name="python",
-        status="ok",
-        message=f"Python {py.major}.{py.minor}.{py.micro}",
-    ))
+    checks.append(
+        Check(
+            name="python",
+            status="ok",
+            message=f"Python {py.major}.{py.minor}.{py.micro}",
+        )
+    )
 
     # milo version
     try:
         import milo
-        checks.append(Check(
-            name="milo",
-            status="ok",
-            message=f"milo {milo.__version__}",
-        ))
+
+        checks.append(
+            Check(
+                name="milo",
+                status="ok",
+                message=f"milo {milo.__version__}",
+            )
+        )
     except Exception:
-        checks.append(Check(
-            name="milo",
-            status="fail",
-            message="Cannot import milo",
-        ))
+        checks.append(
+            Check(
+                name="milo",
+                status="fail",
+                message="Cannot import milo",
+            )
+        )
 
     # Config files
     if config_spec:
@@ -83,59 +90,73 @@ def run_doctor(
 
             matched = globmod.glob(str(Path.cwd() / pattern))
             if matched:
-                checks.append(Check(
-                    name=f"config:{pattern}",
-                    status="ok",
-                    message=f"Found {len(matched)} file(s)",
-                ))
+                checks.append(
+                    Check(
+                        name=f"config:{pattern}",
+                        status="ok",
+                        message=f"Found {len(matched)} file(s)",
+                    )
+                )
             else:
-                checks.append(Check(
-                    name=f"config:{pattern}",
-                    status="warn",
-                    message=f"No files match '{pattern}'",
-                    suggestion=f"Create a config file matching '{pattern}'",
-                ))
+                checks.append(
+                    Check(
+                        name=f"config:{pattern}",
+                        status="warn",
+                        message=f"No files match '{pattern}'",
+                        suggestion=f"Create a config file matching '{pattern}'",
+                    )
+                )
 
     # Required env vars
     for var in required_env:
         if os.environ.get(var):
-            checks.append(Check(
-                name=f"env:{var}",
-                status="ok",
-                message="Set",
-            ))
+            checks.append(
+                Check(
+                    name=f"env:{var}",
+                    status="ok",
+                    message="Set",
+                )
+            )
         else:
-            checks.append(Check(
-                name=f"env:{var}",
-                status="fail",
-                message="Not set",
-                suggestion=f"export {var}=<value>",
-            ))
+            checks.append(
+                Check(
+                    name=f"env:{var}",
+                    status="fail",
+                    message="Not set",
+                    suggestion=f"export {var}=<value>",
+                )
+            )
 
     # Required tools
     for tool in required_tools:
         path = shutil.which(tool)
         if path:
-            checks.append(Check(
-                name=f"tool:{tool}",
-                status="ok",
-                message=path,
-            ))
+            checks.append(
+                Check(
+                    name=f"tool:{tool}",
+                    status="ok",
+                    message=path,
+                )
+            )
         else:
-            checks.append(Check(
-                name=f"tool:{tool}",
-                status="fail",
-                message="Not found on PATH",
-                suggestion=f"Install {tool} or add it to PATH",
-            ))
+            checks.append(
+                Check(
+                    name=f"tool:{tool}",
+                    status="fail",
+                    message="Not found on PATH",
+                    suggestion=f"Install {tool} or add it to PATH",
+                )
+            )
 
     # Commands registered
     cmd_count = len(list(cli.walk_commands()))
-    checks.append(Check(
-        name="commands",
-        status="ok",
-        message=f"{cmd_count} command(s) registered",
-    ))
+    checks.append(
+        Check(
+            name="commands",
+            status="ok",
+            message=f"{cmd_count} command(s) registered",
+        )
+    )
 
     # Custom checks
     for check_fn in custom_checks:
@@ -144,11 +165,13 @@ def run_doctor(
             if isinstance(result, Check):
                 checks.append(result)
         except Exception as e:
-            checks.append(Check(
-                name=getattr(check_fn, "__name__", "custom"),
-                status="fail",
-                message=str(e),
-            ))
+            checks.append(
+                Check(
+                    name=getattr(check_fn, "__name__", "custom"),
+                    status="fail",
+                    message=str(e),
+                )
+            )
 
     ok = sum(1 for c in checks if c.status == "ok")
     warnings = sum(1 for c in checks if c.status == "warn")
@@ -180,8 +203,6 @@ def format_doctor_report(report: DoctorReport, *, color: bool = True) -> str:
             lines.append(f"    hint: {check.suggestion}")
 
     lines.append("")
-    lines.append(
-        f"{report.ok} passed, {report.warnings} warnings, {report.failures} failures"
-    )
+    lines.append(f"{report.ok} passed, {report.warnings} warnings, {report.failures} failures")
 
     return "\n".join(lines)

@@ -157,9 +157,7 @@ class TestRetryEffect:
             raise ValueError("fail")
 
         with pytest.raises(ValueError, match="fail"):
-            _execute_retry(
-                always_fails, (), {}, 3, "fixed", 0.01, 1.0
-            )
+            _execute_retry(always_fails, (), {}, 3, "fixed", 0.01, 1.0)
         assert call_count == 3
 
     def test_retry_exponential_backoff(self):
@@ -173,8 +171,6 @@ class TestRetryEffect:
                 raise ValueError("not yet")
             return "ok"
 
-        result = _execute_retry(
-            fail_twice, (), {}, 5, "exponential", 0.01, 1.0
-        )
+        result = _execute_retry(fail_twice, (), {}, 5, "exponential", 0.01, 1.0)
         assert result == "ok"
         assert len(attempts) == 3

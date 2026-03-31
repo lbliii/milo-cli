@@ -69,10 +69,14 @@ def check_version(
     # Cache the result
     try:
         cache.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps({
-            "latest": latest,
-            "checked_at": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": latest,
+                    "checked_at": time.time(),
+                }
+            )
+        )
     except Exception:
         pass
 

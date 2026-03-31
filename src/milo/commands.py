@@ -189,6 +189,7 @@ class _MiloArgumentParser(argparse.ArgumentParser):
         if "invalid choice:" in message and self._cli_ref is not None:
             # Extract the invalid value
             import re
+
             match = re.search(r"invalid choice: '([^']+)'", message)
             if match:
                 typo = match.group(1)
