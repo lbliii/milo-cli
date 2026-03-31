@@ -212,6 +212,24 @@ class Delay:
     seconds: float
 
 
+@dataclass(frozen=True, slots=True)
+class Retry:
+    """Call a function with retry and backoff on failure.
+
+    Usage in a saga::
+
+        result = yield Retry(fetch_data, args=(url,), max_attempts=3, backoff="exponential")
+    """
+
+    fn: Callable
+    args: tuple = ()
+    kwargs: dict = field(default_factory=dict)
+    max_attempts: int = 3
+    backoff: str = "exponential"  # "exponential", "linear", "fixed"
+    base_delay: float = 1.0
+    max_delay: float = 30.0
+
+
 # ---------------------------------------------------------------------------
 # Reducer result (state + optional sagas)
 # ---------------------------------------------------------------------------

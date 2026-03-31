@@ -6,7 +6,10 @@ import enum
 from dataclasses import dataclass, field
 from typing import Literal, TypedDict
 
-from milo.schema import _type_to_schema, function_to_schema
+import pytest
+
+from milo.commands import CLI
+from milo.schema import _parse_param_docs, _type_to_schema, function_to_schema
 
 # --- Test Enum ---
 
@@ -205,3 +208,109 @@ class TestNested:
         schema = _type_to_schema(dict[str, list[int]])
         assert schema["type"] == "object"
         assert schema["additionalProperties"]["type"] == "array"
+
+
+class TestSchemaHelpText:
+    def test_docstring_descriptions_in_schema(self):
+        """function_to_schema should extract param descriptions from docstrings."""
+
+        def serve(host: str = "localhost", port: int = 8000) -> str:
+            """Start the development server.
+
+            Args:
+                host: The hostname to bind to.
+                port: The port number to listen on.
+            """
+            return f"{host}:{port}"
+
+        schema = function_to_schema(serve)
+        props = schema["properties"]
+        assert props["host"]["description"] == "The hostname to bind to."
+        assert props["port"]["description"] == "The port number to listen on."
+
+    def test_sphinx_style_docstring(self):
+        """Sphinx-style :param: directives."""
+
+        def build(output: str = "_site", drafts: bool = False) -> str:
+            """Build the static site.
+
+            :param output: The output directory.
+            :param drafts: Include draft pages.
+            """
+            return output
+
+        schema = function_to_schema(build)
+        assert schema["properties"]["output"]["description"] == "The output directory."
+        assert schema["properties"]["drafts"]["description"] == "Include draft pages."
+
+    def test_numpy_style_docstring(self):
+        """NumPy-style parameter docs."""
+
+        def process(count: int, mode: str = "fast") -> str:
+            """Process items.
+
+            Parameters
+            ----------
+            count : int
+                Number of items to process.
+            mode : str
+                Processing mode (fast or slow).
+            """
+            return f"{count}:{mode}"
+
+        schema = function_to_schema(process)
+        assert schema["properties"]["count"]["description"] == "Number of items to process."
+        assert schema["properties"]["mode"]["description"] == "Processing mode (fast or slow)."
+
+    def test_no_docstring_no_description(self):
+        """Functions without docstrings should not crash."""
+
+        def plain(name: str) -> str:
+            return name
+
+        schema = function_to_schema(plain)
+        assert "description" not in schema["properties"]["name"]
+
+    def test_help_text_propagated_to_argparse(self, capsys):
+        """Verify that help text from docstrings shows up in --help output."""
+        cli = CLI(name="test")
+
+        @cli.command("serve", description="Start server")
+        def serve(host: str = "localhost", port: int = 8000) -> str:
+            """Start the development server.
+
+            Args:
+                host: The hostname to bind to.
+                port: The port number.
+            """
+            return f"{host}:{port}"
+
+        with pytest.raises(SystemExit):
+            cli.run(["serve", "--help"])
+        out = capsys.readouterr().out
+        # The help text from the docstring should appear
+        assert "hostname" in out.lower() or "host" in out.lower()
+
+    def test_parse_param_docs_empty(self):
+        """Empty or no-param docstrings return empty dict."""
+        assert _parse_param_docs("Just a description.") == {}
+        assert _parse_param_docs("") == {}
+
+    def test_parse_param_docs_google(self):
+        result = _parse_param_docs("""Do something.
+
+        Args:
+            name: The user's name.
+            count (int): How many times.
+        """)
+        assert result["name"] == "The user's name."
+        assert result["count"] == "How many times."
+
+    def test_parse_param_docs_sphinx(self):
+        result = _parse_param_docs("""Do something.
+
+        :param name: The user's name.
+        :param count: How many times.
+        """)
+        assert result["name"] == "The user's name."
+        assert result["count"] == "How many times."

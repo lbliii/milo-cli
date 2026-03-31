@@ -271,3 +271,41 @@ class TestLazyImports:
         assert "Action" in milo.__all__
         assert "App" in milo.__all__
         assert "Store" in milo.__all__
+
+
+class TestNewExports:
+    def test_retry_export(self):
+        import milo
+        assert hasattr(milo, "Retry")
+
+    def test_invoke_result_export(self):
+        import milo
+        assert hasattr(milo, "InvokeResult")
+
+    def test_cli_progress_export(self):
+        import milo
+        assert hasattr(milo, "CLIProgress")
+
+    def test_check_export(self):
+        import milo
+        assert hasattr(milo, "Check")
+
+    def test_doctor_report_export(self):
+        import milo
+        assert hasattr(milo, "DoctorReport")
+
+    def test_run_doctor_export(self):
+        import milo
+        assert hasattr(milo, "run_doctor")
+
+    def test_version_info_export(self):
+        import milo
+        assert hasattr(milo, "VersionInfo")
+
+    def test_check_version_export(self):
+        import milo
+        assert hasattr(milo, "check_version")
+
+    def test_install_completions_export(self):
+        import milo
+        assert hasattr(milo, "install_completions")

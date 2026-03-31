@@ -143,6 +143,45 @@ class Config:
     def __repr__(self) -> str:
         return f"Config({list(self._data.keys())})"
 
+    @staticmethod
+    def init(
+        spec: ConfigSpec,
+        *,
+        root: Path | None = None,
+        format: str = "toml",
+    ) -> Path:
+        """Generate a starter config file from a ConfigSpec.
+
+        Writes spec.defaults to the first source pattern's filename.
+        Returns the path of the created file.
+        """
+        root = root or Path.cwd()
+
+        # Determine filename from first source pattern, or use a default
+        if spec.sources:
+            filename = spec.sources[0].replace("*", "app")
+        else:
+            filename = f"config.{format}"
+
+        filepath = root / filename
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        data = spec.defaults or {}
+
+        if format == "toml" or filepath.suffix == ".toml":
+            _write_toml(filepath, data)
+        elif format in ("yaml", "yml") or filepath.suffix in (".yaml", ".yml"):
+            _write_yaml(filepath, data)
+        elif format == "json" or filepath.suffix == ".json":
+            import json
+            with open(filepath, "w") as f:
+                json.dump(data, f, indent=2)
+                f.write("\n")
+        else:
+            _write_toml(filepath, data)
+
+        return filepath
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -248,3 +287,72 @@ def _expand_dotted(flat: dict[str, Any]) -> dict[str, Any]:
             current = current.setdefault(part, {})
         current[parts[-1]] = value
     return result
+
+
+def _write_toml(filepath: Path, data: dict[str, Any]) -> None:
+    """Write a dict as TOML (stdlib-only, simple values)."""
+    lines: list[str] = []
+    _write_toml_section(data, lines, prefix="")
+    with open(filepath, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def _write_toml_section(
+    data: dict[str, Any], lines: list[str], prefix: str
+) -> None:
+    """Recursively write TOML sections."""
+    # Write simple values first
+    for key, value in data.items():
+        if isinstance(value, dict):
+            continue
+        lines.append(f"{key} = {_toml_value(value)}")
+
+    # Then nested tables
+    for key, value in data.items():
+        if isinstance(value, dict):
+            section = f"{prefix}{key}" if prefix else key
+            lines.append(f"\n[{section}]")
+            _write_toml_section(value, lines, prefix=f"{section}.")
+
+
+def _toml_value(value: Any) -> str:
+    """Format a Python value as TOML."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        items = ", ".join(_toml_value(v) for v in value)
+        return f"[{items}]"
+    return f'"{value}"'
+
+
+def _write_yaml(filepath: Path, data: dict[str, Any]) -> None:
+    """Write a dict as YAML."""
+    try:
+        import yaml  # type: ignore[import-untyped]
+        with open(filepath, "w") as f:
+            yaml.safe_dump(data, f, default_flow_style=False)
+    except ImportError:
+        # Fallback: simple YAML writer
+        lines: list[str] = []
+        _write_yaml_simple(data, lines, indent=0)
+        with open(filepath, "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+
+def _write_yaml_simple(data: dict[str, Any], lines: list[str], indent: int) -> None:
+    """Simple YAML writer for basic types."""
+    prefix = "  " * indent
+    for key, value in data.items():
+        if isinstance(value, dict):
+            lines.append(f"{prefix}{key}:")
+            _write_yaml_simple(value, lines, indent + 1)
+        elif isinstance(value, bool):
+            lines.append(f"{prefix}{key}: {'true' if value else 'false'}")
+        elif isinstance(value, list):
+            lines.append(f"{prefix}{key}:")
+            for item in value:
+                lines.append(f"{prefix}  - {item}")
+        else:
+            lines.append(f"{prefix}{key}: {value}")

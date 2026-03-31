@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -37,6 +37,53 @@ class HelpRenderer(argparse.HelpFormatter):
     ) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
         self._prog = prog
+        self._captured_groups: list[dict[str, Any]] = []
+        self._current_group_title: str = ""
+        self._current_group_actions: list[argparse.Action] = []
+        self._description_text: str = ""
+
+    def add_text(self, text: str | None) -> None:
+        """Capture description text before passing to base."""
+        if text and not self._description_text:
+            self._description_text = text
+        super().add_text(text)
+
+    def start_section(self, heading: str | None) -> None:
+        """Track the current section heading."""
+        self._current_group_title = heading or ""
+        self._current_group_actions = []
+        super().start_section(heading)
+
+    def add_arguments(self, actions: Any) -> None:
+        """Capture actions for the current section."""
+        self._current_group_actions.extend(actions)
+        super().add_arguments(actions)
+
+    def end_section(self) -> None:
+        """Finalize the current section and store its actions."""
+        if self._current_group_actions:
+            actions = [
+                {
+                    "option_strings": action.option_strings,
+                    "dest": action.dest,
+                    "help": action.help or "",
+                    "default": action.default,
+                    "required": getattr(action, "required", False),
+                    "choices": action.choices,
+                    "nargs": action.nargs,
+                    "metavar": action.metavar,
+                }
+                for action in self._current_group_actions
+            ]
+            self._captured_groups.append(
+                {
+                    "title": self._current_group_title,
+                    "actions": actions,
+                }
+            )
+        self._current_group_title = ""
+        self._current_group_actions = []
+        super().end_section()
 
     def format_help(self) -> str:
         """Format help using kida template if available, else fall back to default."""
@@ -52,33 +99,10 @@ class HelpRenderer(argparse.HelpFormatter):
         env = get_env()
         template = env.get_template("help.kida")
 
-        groups = []
-        for action_group in self._action_groups:  # type: ignore[attr-defined]
-            actions = [
-                {
-                    "option_strings": action.option_strings,
-                    "dest": action.dest,
-                    "help": action.help or "",
-                    "default": action.default,
-                    "required": getattr(action, "required", False),
-                    "choices": action.choices,
-                    "nargs": action.nargs,
-                    "metavar": action.metavar,
-                }
-                for action in action_group._group_actions
-            ]
-            if actions:
-                groups.append(
-                    {
-                        "title": action_group.title or "",
-                        "actions": actions,
-                    }
-                )
-
         state = HelpState(
             prog=self._prog,
-            description=self._root_section.heading or "",
-            groups=tuple(groups),
+            description=self._description_text,
+            groups=tuple(self._captured_groups),
         )
 
         return template.render(state=state)

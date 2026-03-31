@@ -25,6 +25,7 @@ def __getattr__(name: str):
         "Select": "_types",
         "Fork": "_types",
         "Delay": "_types",
+        "Retry": "_types",
         "BUILTIN_ACTIONS": "_types",
         # Errors
         "MiloError": "_errors",
@@ -62,6 +63,7 @@ def __getattr__(name: str):
         "CLI": "commands",
         "CommandDef": "commands",
         "LazyCommandDef": "commands",
+        "InvokeResult": "commands",
         # Groups
         "Group": "groups",
         "GroupDef": "groups",
@@ -69,6 +71,7 @@ def __getattr__(name: str):
         # Context
         "Context": "context",
         "get_context": "context",
+        "CLIProgress": "context",
         # Config
         "Config": "config",
         "ConfigSpec": "config",
@@ -94,6 +97,16 @@ def __getattr__(name: str):
         # Observability
         "RequestLog": "observability",
         "RequestLogger": "observability",
+        # Completions
+        "install_completions": "completions",
+        # Doctor
+        "Check": "doctor",
+        "DoctorReport": "doctor",
+        "run_doctor": "doctor",
+        "format_doctor_report": "doctor",
+        # Version check
+        "VersionInfo": "version_check",
+        "check_version": "version_check",
     }
     if name in _imports:
         import importlib
@@ -112,11 +125,13 @@ __version__ = "0.1.0"
 __all__ = [
     "BUILTIN_ACTIONS",
     "CLI",
+    "CLIProgress",
     "Action",
     "App",
     "AppError",
     "AppStatus",
     "Call",
+    "Check",
     "CommandDef",
     "Config",
     "ConfigError",
@@ -124,6 +139,7 @@ __all__ = [
     "Context",
     "Delay",
     "DevServer",
+    "DoctorReport",
     "ErrorCode",
     "FieldSpec",
     "FieldState",
@@ -141,6 +157,7 @@ __all__ = [
     "HelpRenderer",
     "HookRegistry",
     "InputError",
+    "InvokeResult",
     "Key",
     "LazyCommandDef",
     "MCPCall",
@@ -161,23 +178,29 @@ __all__ = [
     "RequestLog",
     "RequestLogger",
     "ResourceDef",
+    "Retry",
     "Screen",
     "Select",
     "SpecialKey",
     "StateError",
     "Store",
     "Transition",
+    "VersionInfo",
+    "check_version",
     "combine_reducers",
     "form",
     "form_reducer",
+    "format_doctor_report",
     "format_error",
     "format_output",
     "format_render_error",
     "function_to_schema",
     "generate_llms_txt",
     "get_context",
+    "install_completions",
     "make_form_reducer",
     "render_html",
     "run",
+    "run_doctor",
     "write_output",
 ]

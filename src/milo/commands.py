@@ -6,6 +6,7 @@ import argparse
 import difflib
 import importlib
 import inspect
+import io
 import os
 import sys
 import threading
@@ -13,7 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from milo.output import write_output
+from milo.help import HelpRenderer
+from milo.output import format_output, write_output
 from milo.schema import function_to_schema
 
 if TYPE_CHECKING:
@@ -67,6 +69,8 @@ class CommandDef:
     tags: tuple[str, ...] = ()
     hidden: bool = False
     examples: tuple[dict[str, Any], ...] = ()
+    confirm: str = ""
+    """If non-empty, prompt for confirmation before running."""
 
 
 class LazyCommandDef:
@@ -85,6 +89,7 @@ class LazyCommandDef:
         "_resolved",
         "_schema",
         "aliases",
+        "confirm",
         "description",
         "examples",
         "hidden",
@@ -104,6 +109,7 @@ class LazyCommandDef:
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+        confirm: str = "",
     ) -> None:
         self.name = name
         self.description = description
@@ -112,6 +118,7 @@ class LazyCommandDef:
         self.tags = tuple(tags)
         self.hidden = hidden
         self.examples = tuple(examples)
+        self.confirm = confirm
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -157,8 +164,43 @@ class LazyCommandDef:
                 tags=self.tags,
                 hidden=self.hidden,
                 examples=self.examples,
+                confirm=self.confirm,
             )
             return self._resolved
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeResult:
+    """Result of CLI.invoke() for testing."""
+
+    output: str
+    exit_code: int
+    result: Any = None
+    exception: Exception | None = None
+
+
+class _MiloArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser subclass that provides did-you-mean suggestions."""
+
+    _cli_ref: CLI | None = None
+
+    def error(self, message: str) -> None:
+        """Override to add did-you-mean for invalid subcommand choices."""
+        if "invalid choice:" in message and self._cli_ref is not None:
+            # Extract the invalid value
+            import re
+            match = re.search(r"invalid choice: '([^']+)'", message)
+            if match:
+                typo = match.group(1)
+                suggestion = self._cli_ref.suggest_command(typo)
+                if suggestion:
+                    self.print_usage(sys.stderr)
+                    sys.stderr.write(
+                        f"{self.prog}: error: unknown command {typo!r}. "
+                        f"Did you mean {suggestion!r}?\n"
+                    )
+                    sys.exit(2)
+        super().error(message)
 
 
 class CLI:
@@ -210,6 +252,8 @@ class CLI:
         self._resources: dict[str, ResourceDef] = {}
         self._prompts: dict[str, PromptDef] = {}
         self._middleware: MiddlewareStack | None = None
+        self._before_command: list[Callable] = []
+        self._after_command: list[Callable] = []
 
     def global_option(
         self,
@@ -239,6 +283,35 @@ class CLI:
             )
         )
 
+    def before_command(self, fn: Callable) -> Callable:
+        """Register a hook that runs before every command.
+
+        The hook receives (ctx, command_name, kwargs) and can modify kwargs.
+
+        Usage::
+
+            @cli.before_command
+            def check_auth(ctx, command_name, kwargs):
+                if not os.environ.get("API_KEY"):
+                    raise SystemExit("API_KEY not set")
+        """
+        self._before_command.append(fn)
+        return fn
+
+    def after_command(self, fn: Callable) -> Callable:
+        """Register a hook that runs after every command.
+
+        The hook receives (ctx, command_name, result).
+
+        Usage::
+
+            @cli.after_command
+            def log_result(ctx, command_name, result):
+                ctx.log(f"{command_name} completed", level=1)
+        """
+        self._after_command.append(fn)
+        return fn
+
     def command(
         self,
         name: str,
@@ -248,6 +321,7 @@ class CLI:
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+        confirm: str = "",
     ) -> Callable:
         """Register a function as a CLI command.
 
@@ -255,6 +329,9 @@ class CLI:
         - argparse argument generation
         - MCP tool schema
         - help text
+
+        Args:
+            confirm: If set, prompt user with this message before executing.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -272,6 +349,7 @@ class CLI:
                 tags=tuple(tags),
                 hidden=hidden,
                 examples=tuple(examples),
+                confirm=confirm,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -292,6 +370,7 @@ class CLI:
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+        confirm: str = "",
     ) -> LazyCommandDef:
         """Register a lazy-loaded command.
 
@@ -307,6 +386,7 @@ class CLI:
             tags=tags,
             hidden=hidden,
             examples=examples,
+            confirm=confirm,
         )
         self._commands[name] = cmd
         for alias in aliases:
@@ -555,10 +635,12 @@ class CLI:
 
     def build_parser(self) -> argparse.ArgumentParser:
         """Build argparse parser from registered commands and groups."""
-        parser = argparse.ArgumentParser(
+        parser = _MiloArgumentParser(
             prog=self.name,
             description=self.description,
+            formatter_class=HelpRenderer,
         )
+        parser._cli_ref = self
         if self.version:
             parser.add_argument("--version", action="version", version=f"%(prog)s {self.version}")
         parser.add_argument(
@@ -581,6 +663,13 @@ class CLI:
             action="store_true",
             help="Remove this CLI from the milo gateway",
         )
+        parser.add_argument(
+            "--completions",
+            choices=["bash", "zsh", "fish"],
+            default=None,
+            metavar="SHELL",
+            help="Output shell completion script (bash, zsh, fish)",
+        )
 
         # Built-in global options
         parser.add_argument(
@@ -602,6 +691,21 @@ class CLI:
             action="store_true",
             default=False,
             help="Disable color output",
+        )
+        parser.add_argument(
+            "-n",
+            "--dry-run",
+            action="store_true",
+            default=False,
+            help="Show what would happen without making changes",
+        )
+        parser.add_argument(
+            "-o",
+            "--output-file",
+            dest="_output_file",
+            default="",
+            metavar="FILE",
+            help="Write output to FILE instead of stdout",
         )
 
         # User-defined global options
@@ -641,6 +745,7 @@ class CLI:
                 cmd.name,
                 help=cmd.description,
                 aliases=list(cmd.aliases),
+                formatter_class=HelpRenderer,
             )
             self._add_arguments_from_schema(sub, cmd.schema, cmd)
             sub.add_argument(
@@ -663,6 +768,7 @@ class CLI:
                 group.name,
                 help=group.description,
                 aliases=list(group.aliases),
+                formatter_class=HelpRenderer,
             )
             has_children = group._commands or group._groups
             if has_children:
@@ -725,6 +831,11 @@ class CLI:
             if param_name in required_set and json_type != "boolean":
                 kwargs["required"] = True
 
+            # Help text from schema description (extracted from docstring)
+            desc = param_schema.get("description", "")
+            if desc:
+                kwargs["help"] = desc
+
             flag = f"--{param_name.replace('_', '-')}"
             parser.add_argument(flag, dest=param_name, **kwargs)
 
@@ -732,6 +843,13 @@ class CLI:
         """Parse args and dispatch to the appropriate command."""
         parser = self.build_parser()
         args = parser.parse_args(argv)
+
+        # --completions mode
+        if getattr(args, "completions", None):
+            from milo.completions import install_completions
+
+            sys.stdout.write(install_completions(self, getattr(args, "completions")))
+            return None
 
         # --llms-txt mode
         if getattr(args, "llms_txt", False):
@@ -763,15 +881,31 @@ class CLI:
         # Resolve command from args (may be nested in groups)
         found, fmt = self._resolve_command_from_args(args)
         if not found:
+            # Did-you-mean suggestion for typos
+            cmd_name = getattr(args, "_command", None)
+            if cmd_name:
+                suggestion = self.suggest_command(cmd_name)
+                if suggestion:
+                    sys.stderr.write(
+                        f"Unknown command: {cmd_name!r}. Did you mean {suggestion!r}?\n"
+                    )
+                    return None
             parser.print_help()
             return None
 
         # Resolve lazy commands
         cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
 
+        # Confirmation prompt
+        confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
+        if confirm_msg and not ctx.dry_run:
+            if not ctx.confirm(confirm_msg):
+                sys.stderr.write("Aborted.\n")
+                return None
+
         # Extract command arguments and inject context
         sig = inspect.signature(cmd.handler)
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         for param_name, param in sig.parameters.items():
             if param_name == "ctx" or _is_context_param(param):
                 kwargs[param_name] = ctx
@@ -782,6 +916,10 @@ class CLI:
         from milo.context import set_context
 
         set_context(ctx)
+
+        # Before-command hooks
+        for hook in self._before_command:
+            hook(ctx, cmd.name, kwargs)
 
         # Call handler (through middleware if present)
         result = cmd.handler(**kwargs)
@@ -795,10 +933,57 @@ class CLI:
                 sys.stderr.write(f"  {p.status}\n")
             result = final_value
 
-        # Format and output
-        write_output(result, fmt=fmt)
+        # After-command hooks
+        for hook in self._after_command:
+            hook(ctx, cmd.name, result)
+
+        # Format and output (to file or stdout)
+        output_file = ctx.output_file
+        if output_file:
+            formatted = format_output(result, fmt=fmt)
+            with open(output_file, "w") as f:
+                f.write(formatted + "\n")
+        else:
+            write_output(result, fmt=fmt)
 
         return result
+
+    def invoke(self, argv: list[str]) -> InvokeResult:
+        """Run a command and capture output for testing.
+
+        Usage::
+
+            result = cli.invoke(["greet", "--name", "Alice"])
+            assert result.exit_code == 0
+            assert "Alice" in result.output
+        """
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = captured
+        sys.stderr = captured
+
+        exit_code = 0
+        result = None
+        exception = None
+
+        try:
+            result = self.run(argv)
+        except SystemExit as e:
+            exit_code = e.code if isinstance(e.code, int) else 1
+        except Exception as e:
+            exception = e
+            exit_code = 1
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        return InvokeResult(
+            output=captured.getvalue(),
+            exit_code=exit_code,
+            result=result,
+            exception=exception,
+        )
 
     def _build_context(self, args: argparse.Namespace) -> Context:
         """Build a Context from parsed global options."""
@@ -818,6 +1003,8 @@ class CLI:
             verbosity=verbosity,
             format=getattr(args, "format", "plain"),
             color=not getattr(args, "no_color", False),
+            dry_run=getattr(args, "dry_run", False),
+            output_file=getattr(args, "_output_file", ""),
             globals=user_globals,
         )
 
@@ -911,8 +1098,101 @@ class CLI:
     def suggest_command(self, name: str) -> str | None:
         """Suggest the closest command name for typo correction."""
         all_names = [path for path, _ in self.walk_commands()]
+        # Also include group names for suggestions
+        all_names.extend(self._groups.keys())
+        all_names.extend(self._group_alias_map.keys())
         matches = difflib.get_close_matches(name, all_names, n=1, cutoff=0.6)
         return matches[0] if matches else None
+
+    def generate_help_all(self) -> str:
+        """Generate a full command tree reference in markdown."""
+        lines: list[str] = []
+        lines.append(f"# {self.name}")
+        if self.description:
+            lines.append(f"\n{self.description}")
+        if self.version:
+            lines.append(f"\nVersion: {self.version}")
+        lines.append("")
+
+        # Global options
+        lines.append("## Global Options\n")
+        lines.append("| Flag | Description | Default |")
+        lines.append("|------|-------------|---------|")
+        lines.append("| `-v, --verbose` | Increase verbosity | `0` |")
+        lines.append("| `-q, --quiet` | Suppress non-error output | `false` |")
+        lines.append("| `--no-color` | Disable color output | `false` |")
+        lines.append("| `-n, --dry-run` | Preview without changes | `false` |")
+        lines.append("| `-o, --output FILE` | Write output to file | |")
+        for opt in self._global_options:
+            flag = f"`--{opt.name.replace('_', '-')}`"
+            if opt.short:
+                flag = f"`{opt.short}, {flag[1:]}"
+            default = f"`{opt.default}`" if opt.default is not None else ""
+            lines.append(f"| {flag} | {opt.description} | {default} |")
+        lines.append("")
+
+        # Commands
+        if self._commands:
+            lines.append("## Commands\n")
+            for cmd in self._commands.values():
+                if cmd.hidden:
+                    continue
+                self._format_cmd_markdown(cmd, lines)
+
+        # Groups
+        for group in self._groups.values():
+            if group.hidden:
+                continue
+            self._format_group_markdown(group, lines, depth=2)
+
+        return "\n".join(lines)
+
+    def _format_cmd_markdown(
+        self,
+        cmd: CommandDef | LazyCommandDef,
+        lines: list[str],
+        prefix: str = "",
+    ) -> None:
+        """Format a single command as markdown."""
+        full_name = f"{prefix}{cmd.name}" if prefix else cmd.name
+        lines.append(f"### `{full_name}`\n")
+        if cmd.description:
+            lines.append(f"{cmd.description}\n")
+        if cmd.aliases:
+            lines.append(f"Aliases: {', '.join(f'`{a}`' for a in cmd.aliases)}\n")
+
+        props = cmd.schema.get("properties", {})
+        required = set(cmd.schema.get("required", []))
+        if props:
+            lines.append("| Option | Type | Required | Default |")
+            lines.append("|--------|------|----------|---------|")
+            for name, schema in props.items():
+                ptype = schema.get("type", "string")
+                req = "yes" if name in required else ""
+                lines.append(f"| `--{name.replace('_', '-')}` | {ptype} | {req} | |")
+            lines.append("")
+
+    def _format_group_markdown(
+        self,
+        group: Group,
+        lines: list[str],
+        depth: int,
+    ) -> None:
+        """Format a group and its commands as markdown."""
+        heading = "#" * depth
+        lines.append(f"{heading} {group.name}\n")
+        if group.description:
+            lines.append(f"{group.description}\n")
+
+        for cmd in group._commands.values():
+            if cmd.hidden:
+                continue
+            self._format_cmd_markdown(cmd, lines, prefix=f"{group.name} ")
+
+        for sub in group._groups.values():
+            if sub.hidden:
+                continue
+            self._format_group_markdown(sub, lines, depth=depth + 1)
 
     def _mcp_install(self) -> None:
         """Register this CLI in the milo gateway."""
