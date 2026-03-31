@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from milo.help import HelpRenderer
+from milo.help import HelpRenderer, help_formatter_with_examples
 from milo.output import format_output, write_output
 from milo.schema import function_to_schema
 
@@ -177,6 +177,7 @@ class InvokeResult:
     exit_code: int
     result: Any = None
     exception: Exception | None = None
+    stderr: str = ""
 
 
 class _MiloArgumentParser(argparse.ArgumentParser):
@@ -643,7 +644,9 @@ class CLI:
         )
         parser._cli_ref = self
         if self.version:
-            parser.add_argument("--version", action="version", version=f"%(prog)s {self.version}")
+            parser.add_argument(
+                "--version", action="version", version=f"{self.name} {self.version}"
+            )
         parser.add_argument(
             "--llms-txt",
             action="store_true",
@@ -742,11 +745,14 @@ class CLI:
         for cmd in commands.values():
             if cmd.hidden:
                 continue
+            fmt_class = (
+                help_formatter_with_examples(tuple(cmd.examples)) if cmd.examples else HelpRenderer
+            )
             sub = subparsers.add_parser(
                 cmd.name,
                 help=cmd.description,
                 aliases=list(cmd.aliases),
-                formatter_class=HelpRenderer,
+                formatter_class=fmt_class,
             )
             self._add_arguments_from_schema(sub, cmd.schema, cmd)
             sub.add_argument(
@@ -922,7 +928,25 @@ class CLI:
             hook(ctx, cmd.name, kwargs)
 
         # Call handler (through middleware if present)
-        result = cmd.handler(**kwargs)
+        try:
+            result = cmd.handler(**kwargs)
+        except SystemExit:
+            raise
+        except KeyboardInterrupt:
+            sys.stderr.write("\nInterrupted.\n")
+            sys.exit(130)
+        except Exception as exc:
+            from milo._errors import MiloError, format_error
+
+            if isinstance(exc, MiloError):
+                ctx.error(format_error(exc))
+            else:
+                ctx.error(f"{type(exc).__name__}: {exc}")
+            if ctx.debug:
+                import traceback
+
+                traceback.print_exc(file=sys.stderr)
+            sys.exit(1)
 
         # Handle streaming generators
         from milo.streaming import consume_generator, is_generator_result
@@ -951,17 +975,22 @@ class CLI:
     def invoke(self, argv: list[str]) -> InvokeResult:
         """Run a command and capture output for testing.
 
+        Stdout and stderr are captured separately. ``output`` contains
+        stdout (command results), ``stderr`` contains log/error messages.
+
         Usage::
 
             result = cli.invoke(["greet", "--name", "Alice"])
             assert result.exit_code == 0
             assert "Alice" in result.output
+            assert result.stderr == ""  # no warnings
         """
-        captured = io.StringIO()
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = captured
-        sys.stderr = captured
+        sys.stdout = captured_out
+        sys.stderr = captured_err
 
         exit_code = 0
         result = None
@@ -979,10 +1008,11 @@ class CLI:
             sys.stderr = old_stderr
 
         return InvokeResult(
-            output=captured.getvalue(),
+            output=captured_out.getvalue(),
             exit_code=exit_code,
             result=result,
             exception=exception,
+            stderr=captured_err.getvalue(),
         )
 
     def _build_context(self, args: argparse.Namespace) -> Context:
@@ -1126,7 +1156,7 @@ class CLI:
         for opt in self._global_options:
             flag = f"`--{opt.name.replace('_', '-')}`"
             if opt.short:
-                flag = f"`{opt.short}, {flag[1:]}"
+                flag = f"`{opt.short}, --{opt.name.replace('_', '-')}`"
             default = f"`{opt.default}`" if opt.default is not None else ""
             lines.append(f"| {flag} | {opt.description} | {default} |")
         lines.append("")
@@ -1171,6 +1201,15 @@ class CLI:
                 req = "yes" if name in required else ""
                 lines.append(f"| `--{name.replace('_', '-')}` | {ptype} | {req} | |")
             lines.append("")
+
+        if cmd.examples:
+            lines.append("**Examples:**\n")
+            lines.append("```")
+            for ex in cmd.examples:
+                lines.append(f"$ {ex.get('command', '')}")
+                if ex.get("description"):
+                    lines.append(f"# {ex['description']}")
+            lines.append("```\n")
 
     def _format_group_markdown(
         self,

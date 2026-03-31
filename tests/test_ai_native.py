@@ -723,8 +723,7 @@ class TestCLIInvoke:
 
         result = cli.invoke(["fail"])
         assert result.exit_code == 1
-        assert result.exception is not None
-        assert "boom" in str(result.exception)
+        assert "boom" in result.stderr
 
 
 class TestCLIHooks:
@@ -875,3 +874,105 @@ class TestSuggestCommand:
 
         suggestion = cli.suggest_command("deplpy")
         assert suggestion == "deploy"
+
+
+class TestInvokeSeparateStreams:
+    def test_stdout_and_stderr_separated(self):
+        cli = CLI(name="test")
+
+        @cli.command("greet", description="Greet")
+        def greet(name: str = "World", ctx: Context = None) -> str:
+            ctx.info("greeting user")
+            return f"Hello, {name}!"
+
+        result = cli.invoke(["greet", "--name", "Alice"])
+        assert result.exit_code == 0
+        assert "Hello, Alice!" in result.output
+        assert "greeting user" in result.stderr
+        assert "greeting user" not in result.output
+
+    def test_error_in_stderr(self):
+        cli = CLI(name="test")
+
+        @cli.command("fail", description="Fail")
+        def fail() -> str:
+            raise ValueError("bad input")
+
+        result = cli.invoke(["fail"])
+        assert result.exit_code == 1
+        assert "bad input" in result.stderr
+        assert result.output == ""
+
+    def test_milo_error_formatted(self):
+        from milo._errors import ErrorCode, MiloError
+
+        cli = CLI(name="test")
+
+        @cli.command("fail", description="Fail")
+        def fail() -> str:
+            raise MiloError(
+                ErrorCode.CFG_PARSE,
+                "Invalid config",
+                suggestion="Check your config.toml",
+            )
+
+        result = cli.invoke(["fail"])
+        assert result.exit_code == 1
+        assert "M-CFG-001" in result.stderr
+        assert "Invalid config" in result.stderr
+        assert "Check your config.toml" in result.stderr
+
+
+class TestExamplesInHelp:
+    def test_examples_rendered_in_help(self):
+        cli = CLI(name="myapp", description="My tool")
+
+        @cli.command(
+            "deploy",
+            description="Deploy the app",
+            examples=(
+                {"command": "myapp deploy --env production", "description": "Deploy to prod"},
+                {
+                    "command": "myapp deploy --env staging --dry-run",
+                    "description": "Preview staging deploy",
+                },
+            ),
+        )
+        def deploy(env: str = "local") -> str:
+            return f"Deployed to {env}"
+
+        result = cli.invoke(["deploy", "--help"])
+        # Help is on stdout (argparse writes --help to stdout)
+        combined = result.output + result.stderr
+        assert "myapp deploy --env production" in combined
+
+    def test_examples_in_generate_help_all(self):
+        cli = CLI(name="myapp", description="My tool")
+
+        @cli.command(
+            "deploy",
+            description="Deploy the app",
+            examples=(
+                {"command": "myapp deploy --env production", "description": "Deploy to prod"},
+            ),
+        )
+        def deploy(env: str = "local") -> str:
+            return f"Deployed to {env}"
+
+        md = cli.generate_help_all()
+        assert "myapp deploy --env production" in md
+        assert "Deploy to prod" in md
+
+
+class TestGenerateHelpAllBacktickFix:
+    def test_global_option_short_flag_formatting(self):
+        cli = CLI(name="myapp")
+        cli.global_option("env", short="-e", default="local", description="Environment")
+
+        @cli.command("build", description="Build")
+        def build() -> str:
+            return "built"
+
+        md = cli.generate_help_all()
+        # Should have matched backticks, not an unclosed backtick
+        assert "`-e, --env`" in md

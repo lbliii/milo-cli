@@ -137,6 +137,65 @@ class Config:
         """Convert to a Store-compatible state dict."""
         return self.as_dict()
 
+    def validate(self, spec: ConfigSpec) -> list[str]:
+        """Validate config values against the spec's defaults for type consistency.
+
+        Returns a list of error messages. An empty list means validation passed.
+        Type expectations are inferred from the default values in ``spec.defaults``.
+        """
+        errors: list[str] = []
+        if not spec.defaults:
+            return errors
+        self._validate_types(spec.defaults, self._data, errors, prefix="")
+        return errors
+
+    @staticmethod
+    def _validate_types(
+        defaults: dict[str, Any],
+        actual: dict[str, Any],
+        errors: list[str],
+        prefix: str,
+    ) -> None:
+        """Recursively check that actual values match the types of defaults."""
+        for key, default_val in defaults.items():
+            dotted = f"{prefix}{key}" if prefix else key
+            if key not in actual:
+                continue
+            actual_val = actual[key]
+
+            if isinstance(default_val, dict):
+                if isinstance(actual_val, dict):
+                    Config._validate_types(default_val, actual_val, errors, prefix=f"{dotted}.")
+                else:
+                    errors.append(
+                        f"{dotted}: expected a table/dict, got {type(actual_val).__name__}"
+                    )
+                continue
+
+            # Scalar default but got a dict
+            if isinstance(actual_val, dict):
+                errors.append(f"{dotted}: expected {type(default_val).__name__}, got a table/dict")
+                continue
+
+            expected_type = type(default_val)
+            # Allow int where float is expected
+            if expected_type is float and isinstance(actual_val, int):
+                continue
+            # Coerce string env vars to expected type
+            if isinstance(actual_val, str) and expected_type is not str:
+                try:
+                    if expected_type is bool:
+                        if actual_val.lower() not in ("true", "false", "1", "0", "yes", "no"):
+                            errors.append(f"{dotted}: expected bool, got {actual_val!r}")
+                    elif expected_type is int:
+                        int(actual_val)
+                    elif expected_type is float:
+                        float(actual_val)
+                except ValueError, TypeError:
+                    errors.append(
+                        f"{dotted}: expected {expected_type.__name__}, got {actual_val!r}"
+                    )
+
     def __contains__(self, key: str) -> bool:
         return self.get(key) is not None
 

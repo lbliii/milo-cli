@@ -1,12 +1,15 @@
 """Configapp — configuration system with TOML files, profiles, and overlays.
 
-Demonstrates: ConfigSpec, Config.load(), dot-notation access, origin tracking.
+Demonstrates: ConfigSpec, Config.load(), dot-notation access, origin tracking,
+Config.validate(), Config.init() scaffolding.
 
     uv run python examples/configapp/app.py show
     uv run python examples/configapp/app.py show --key site.title
     uv run python examples/configapp/app.py origin --key site.url
     uv run python examples/configapp/app.py show --profile writer
     uv run python examples/configapp/app.py show --format json
+    uv run python examples/configapp/app.py validate
+    uv run python examples/configapp/app.py init --dir /tmp/newproject
 """
 
 from __future__ import annotations
@@ -24,10 +27,12 @@ spec = ConfigSpec(
         "site": {
             "title": "My Site",
             "url": "http://localhost:8080",
+            "description": "",
         },
         "build": {
             "output": "_site",
             "drafts": False,
+            "minify": False,
         },
     },
     profiles={
@@ -46,7 +51,7 @@ cli = CLI(
 )
 
 cli.global_option("profile", short="-p", description="Config profile to activate")
-cli.global_option("overlay", short="-o", description="Environment overlay to apply")
+cli.global_option("overlay", short="-O", description="Environment overlay to apply")
 
 
 def _load_config(ctx: Context) -> Config:
@@ -83,6 +88,32 @@ def dump(ctx: Context = None) -> dict:
     """Dump the merged config as a flat state dict for the Store."""
     config = _load_config(ctx)
     return config.to_state()
+
+
+@cli.command("validate", description="Validate config against the spec")
+def validate(ctx: Context = None) -> dict:
+    """Check that all config values match the types defined in spec.defaults."""
+    config = _load_config(ctx)
+    errors = config.validate(spec)
+    if errors:
+        for err in errors:
+            ctx.warning(err)
+        return {"valid": False, "errors": errors}
+    ctx.success("Config is valid")
+    return {"valid": True, "errors": []}
+
+
+@cli.command("init", description="Scaffold a new config file from defaults")
+def init(dir: str = ".", ctx: Context = None) -> dict:
+    """Create a config file from spec defaults in the given directory."""
+    target = Path(dir)
+    if ctx.dry_run:
+        ctx.warning(f"Dry-run: would create config in {target}")
+        return {"action": "dry-run", "dir": str(target)}
+
+    path = Config.init(spec, root=target)
+    ctx.success(f"Created {path}")
+    return {"action": "created", "path": str(path)}
 
 
 if __name__ == "__main__":

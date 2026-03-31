@@ -16,6 +16,7 @@ class HelpState:
     epilog: str = ""
     usage: str = ""
     groups: tuple[dict[str, Any], ...] = ()
+    examples: tuple[dict[str, Any], ...] = ()
 
 
 class HelpRenderer(argparse.HelpFormatter):
@@ -41,6 +42,7 @@ class HelpRenderer(argparse.HelpFormatter):
         self._current_group_title: str = ""
         self._current_group_actions: list[argparse.Action] = []
         self._description_text: str = ""
+        self._examples: tuple[dict[str, Any], ...] = ()
 
     def add_text(self, text: str | None) -> None:
         """Capture description text before passing to base."""
@@ -93,7 +95,15 @@ class HelpRenderer(argparse.HelpFormatter):
             return super().format_help()
 
     def _render_with_template(self) -> str:
-        """Render help through the kida help template."""
+        """Render help through the kida help template.
+
+        Argparse reuses formatter_class for non-help output (--version,
+        add_subparsers prog extraction).  In those cases no action groups
+        are captured, so we fall back to the default argparse formatter.
+        """
+        if not self._captured_groups:
+            raise ValueError("no content for template")
+
         from milo.templates import get_env
 
         env = get_env()
@@ -103,6 +113,26 @@ class HelpRenderer(argparse.HelpFormatter):
             prog=self._prog,
             description=self._description_text,
             groups=tuple(self._captured_groups),
+            examples=self._examples,
         )
 
         return template.render(state=state)
+
+
+def help_formatter_with_examples(
+    examples: tuple[dict[str, Any], ...],
+) -> type[HelpRenderer]:
+    """Create a HelpRenderer subclass that includes command examples."""
+
+    class _HelpRendererWithExamples(HelpRenderer):
+        def __init__(
+            self,
+            prog: str,
+            indent_increment: int = 2,
+            max_help_position: int = 24,
+            width: int | None = None,
+        ) -> None:
+            super().__init__(prog, indent_increment, max_help_position, width)
+            self._examples = examples
+
+    return _HelpRendererWithExamples

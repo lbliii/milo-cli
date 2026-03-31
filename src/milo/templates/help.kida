@@ -5,3 +5,9 @@
 {% for action in group.actions %}  {% if action.option_strings %}{{ action.option_strings | join(", ") | green }}{% else %}{{ action.dest | cyan }}{% endif %}{% if action.metavar %} {{ action.metavar | dim }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" %} {{ ("(default: " ~ action.default ~ ")") | dim }}{% endif %}
 {% endfor %}
 {% endfor %}
+{% if state.examples %}
+{{ "examples" | yellow | bold }}:
+{% for ex in state.examples %}  {{ ("$ " ~ ex.command) | green }}{% if ex.description %}
+    {{ ex.description | dim }}{% endif %}
+{% endfor %}
+{% endif %}

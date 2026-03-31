@@ -83,3 +83,21 @@ class TestVersionCheck:
             result = check_version("test-pkg", "0.1.0", cache_dir=tmp_path)
         assert result is not None
         assert result.update_available is True
+
+    def test_format_version_notice_detects_uv(self):
+        from milo.version_check import VersionInfo, format_version_notice
+
+        info = VersionInfo(current="0.1.0", latest="0.2.0", update_available=True)
+        with patch("milo.version_check._detect_installer", return_value="uv"):
+            notice = format_version_notice(info, prog="myapp")
+        assert "uv pip install --upgrade myapp" in notice
+        assert "pip install --upgrade" in notice
+
+    def test_format_version_notice_falls_back_to_pip(self):
+        from milo.version_check import VersionInfo, format_version_notice
+
+        info = VersionInfo(current="0.1.0", latest="0.2.0", update_available=True)
+        with patch("milo.version_check._detect_installer", return_value="pip"):
+            notice = format_version_notice(info, prog="myapp")
+        assert "pip install --upgrade myapp" in notice
+        assert "uv" not in notice
