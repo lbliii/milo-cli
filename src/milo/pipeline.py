@@ -250,14 +250,16 @@ class Pipeline:
         """Return the topological execution order of phases."""
         dep_graph = {p.name: set(p.depends_on) for p in self.phases}
         order: list[str] = []
+        seen: set[str] = set()
         remaining = set(dep_graph.keys())
 
         while remaining:
-            ready = [n for n in remaining if dep_graph[n].issubset(set(order))]
+            ready = [n for n in remaining if dep_graph[n].issubset(seen)]
             if not ready:
                 break
             order.extend(sorted(ready))
-            remaining -= set(ready)
+            seen.update(ready)
+            remaining.difference_update(ready)
 
         return order
 

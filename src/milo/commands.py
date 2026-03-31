@@ -205,6 +205,35 @@ class _MiloArgumentParser(argparse.ArgumentParser):
         super().error(message)
 
 
+def _make_command_def(
+    name: str,
+    func: Callable,
+    *,
+    description: str = "",
+    aliases: tuple[str, ...] = (),
+    tags: tuple[str, ...] = (),
+    hidden: bool = False,
+    examples: tuple[dict[str, Any], ...] = (),
+    confirm: str = "",
+) -> CommandDef:
+    """Build a CommandDef from a function and decorator kwargs."""
+    schema = function_to_schema(func)
+    desc = description or func.__doc__ or ""
+    if "\n" in desc:
+        desc = desc.strip().split("\n")[0].strip()
+    return CommandDef(
+        name=name,
+        description=desc,
+        handler=func,
+        schema=schema,
+        aliases=aliases,
+        tags=tags,
+        hidden=hidden,
+        examples=examples,
+        confirm=confirm,
+    )
+
+
 class CLI:
     """Command-line application with typed commands and nested groups.
 
@@ -337,16 +366,10 @@ class CLI:
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            schema = function_to_schema(func)
-            desc = description or func.__doc__ or ""
-            if "\n" in desc:
-                desc = desc.strip().split("\n")[0].strip()
-
-            cmd = CommandDef(
-                name=name,
-                description=desc,
-                handler=func,
-                schema=schema,
+            cmd = _make_command_def(
+                name,
+                func,
+                description=description,
                 aliases=tuple(aliases),
                 tags=tuple(tags),
                 hidden=hidden,

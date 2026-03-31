@@ -6,8 +6,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from milo.schema import function_to_schema
-
 
 @dataclass(frozen=True, slots=True)
 class GroupDef:
@@ -67,24 +65,22 @@ class Group:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+        confirm: str = "",
     ) -> Callable:
         """Register a function as a command within this group."""
-        from milo.commands import CommandDef
+        from milo.commands import _make_command_def
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            schema = function_to_schema(func)
-            desc = description or func.__doc__ or ""
-            if "\n" in desc:
-                desc = desc.strip().split("\n")[0].strip()
-
-            cmd = CommandDef(
-                name=name,
-                description=desc,
-                handler=func,
-                schema=schema,
+            cmd = _make_command_def(
+                name,
+                func,
+                description=description,
                 aliases=tuple(aliases),
                 tags=tuple(tags),
                 hidden=hidden,
+                examples=tuple(examples),
+                confirm=confirm,
             )
             self._commands[name] = cmd
             for alias in aliases:

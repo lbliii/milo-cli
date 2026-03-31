@@ -113,14 +113,8 @@ def fingerprint(command: list[str], project_root: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()
 
 
-def health_check(name: str) -> HealthResult:
-    """Ping a registered CLI with initialize and measure latency."""
-    data = _load()
-    clis = data.get("clis", {})
-    if name not in clis:
-        return HealthResult(name=name, reachable=False, latency_ms=0.0, error="Not registered")
-
-    info = clis[name]
+def _health_check_entry(name: str, info: dict[str, Any]) -> HealthResult:
+    """Ping a single CLI entry using pre-loaded registry info."""
     command = info.get("command", [])
     if not command:
         return HealthResult(name=name, reachable=False, latency_ms=0.0, error="No command")
@@ -176,10 +170,20 @@ def health_check(name: str) -> HealthResult:
         return HealthResult(name=name, reachable=False, latency_ms=round(elapsed, 2), error=str(e))
 
 
-def check_all() -> list[HealthResult]:
+def health_check(name: str) -> HealthResult:
+    """Ping a registered CLI with initialize and measure latency."""
+    data = _load()
+    clis = data.get("clis", {})
+    if name not in clis:
+        return HealthResult(name=name, reachable=False, latency_ms=0.0, error="Not registered")
+    return _health_check_entry(name, clis[name])
+
+
+def check_all(clis: dict[str, dict[str, Any]] | None = None) -> list[HealthResult]:
     """Run health checks on all registered CLIs."""
-    clis = list_clis()
-    return [health_check(name) for name in clis]
+    if clis is None:
+        clis = list_clis()
+    return [_health_check_entry(name, info) for name, info in clis.items()]
 
 
 def doctor() -> str:
@@ -194,7 +198,7 @@ def doctor() -> str:
     lines.append(f"CLIs: {len(clis)}")
     lines.append("")
 
-    results = check_all()
+    results = check_all(clis)
     for r in results:
         status = "OK" if r.reachable else "FAIL"
         stale_marker = " [STALE]" if r.stale else ""
