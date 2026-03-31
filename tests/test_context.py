@@ -409,8 +409,6 @@ class TestRunApp:
         from dataclasses import dataclass as dc
         from unittest.mock import MagicMock, patch
 
-        from milo._types import Quit
-
         @dc(frozen=True)
         class PickState:
             picked: str = "hello"

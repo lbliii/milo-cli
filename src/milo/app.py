@@ -148,6 +148,7 @@ class App:
             app.run()
         """
         from kida import FileSystemLoader
+
         from milo.templates import get_env
 
         base = Path(caller_file).resolve().parent

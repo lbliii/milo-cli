@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-import pytest
-
 from milo._types import Action, Key, Quit, ReducerResult, SpecialKey
 from milo.reducers import quit_on, with_confirm, with_cursor
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
