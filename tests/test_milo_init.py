@@ -258,7 +258,7 @@ class TestLazyImports:
     def test_version(self):
         import milo
 
-        assert milo.__version__ == "0.1.0"
+        assert milo.__version__ == "0.1.1"
 
     def test_py_mod_gil(self):
         import milo
