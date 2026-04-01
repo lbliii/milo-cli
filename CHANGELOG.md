@@ -2,6 +2,27 @@
 
 All notable changes to Milo are documented here.
 
+## 0.2.0 — Unreleased
+
+### Added
+
+- **Commands** — Lightweight `Cmd` effect type as a simpler alternative to sagas for one-shot side effects. A `Cmd` is a plain function `() -> Action | None` that runs on the thread pool.
+- **Batch and Sequence combinators** — `Batch(*cmds)` runs commands concurrently; `Sequence(*cmds)` runs them serially. Both support recursive nesting.
+- **`compact_cmds()`** — Helper to strip `None` entries from command tuples.
+- **`TickCmd(interval)`** — Self-sustaining tick pattern. Schedules a single `@@TICK` after *interval* seconds. Return another `TickCmd` from `@@TICK` to keep ticking; omit to stop. Gives per-component, dynamic tick control.
+- **`ViewState`** — Declarative terminal state (`alt_screen`, `cursor_visible`, `window_title`, `mouse_mode`). Returned via `ReducerResult(state, view=ViewState(...))`. The renderer diffs previous vs. current and applies only the changes.
+- **Message filter** — `App(filter=fn)` accepts a function `(state, action) -> action | None` that intercepts actions before dispatch. Return `None` to drop, return a different action to transform.
+- **Saga error recovery** — Unhandled saga exceptions now dispatch `@@SAGA_ERROR` instead of being swallowed silently. Payload: `{"error": "message", "type": "ExceptionTypeName"}`.
+- **Cmd error recovery** — Unhandled `Cmd` exceptions dispatch `@@CMD_ERROR` with the same payload shape.
+- **Bulletproof terminal cleanup** — Each step in `App.run()` finally block is individually guarded so a failure in one does not prevent the rest from running.
+
+### Changed
+
+- **`ReducerResult`** — now accepts `cmds` and `view` fields alongside `sagas`
+- **`Quit`** — now accepts `cmds` and `view` fields alongside `sagas`
+- **`combine_reducers`** — collects `cmds` and `view` from child reducers
+- **`_TerminalRenderer`** — supports `apply_view_state()` for declarative terminal feature control
+
 ## 0.1.1 — 2026-03-31
 
 ### Added

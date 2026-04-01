@@ -72,7 +72,7 @@ action = Action("ADD_TODO", payload="Buy milk")
 action = Action("@@KEY", payload=key)  # Built-in key action
 ```
 
-Milo dispatches several [[docs/reference/actions|built-in actions]] automatically: `@@INIT`, `@@KEY`, `@@TICK`, `@@RESIZE`, `@@QUIT`, `@@NAVIGATE`, `@@HOT_RELOAD`, and `@@EFFECT_RESULT`.
+Milo dispatches several [[docs/reference/actions|built-in actions]] automatically: `@@INIT`, `@@KEY`, `@@TICK`, `@@RESIZE`, `@@QUIT`, `@@NAVIGATE`, `@@HOT_RELOAD`, `@@EFFECT_RESULT`, `@@SAGA_ERROR`, and `@@CMD_ERROR`.
 
 ## Reducer combinators
 
@@ -246,3 +246,50 @@ store.subscribe(on_change)
 :::{tip}
 Listeners fire after every dispatch. For expensive operations (API calls, file writes), trigger them from [[docs/usage/sagas|sagas]] instead — sagas run on the thread pool and won't block rendering.
 :::
+
+## Side effects from reducers
+
+`ReducerResult` is the bridge between pure reducers and side effects. It carries the new state plus optional sagas, commands, and view state:
+
+```python
+from milo import ReducerResult, Cmd, TickCmd, ViewState
+
+def reducer(state, action):
+    if action.type == "FETCH":
+        return ReducerResult(
+            {**state, "loading": True},
+            sagas=(fetch_saga,),                  # Generator-based effects
+            cmds=(Cmd(quick_check),),             # Lightweight thunks
+            view=ViewState(cursor_visible=False),  # Terminal state
+        )
+    return state
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | Any | The new state |
+| `sagas` | `tuple[Callable, ...]` | Generator-based effects (multi-step) |
+| `cmds` | `tuple[Cmd \| Batch \| Sequence \| TickCmd, ...]` | Lightweight command thunks |
+| `view` | `ViewState \| None` | Declarative terminal state changes |
+
+For details on commands, see [[docs/usage/commands-effects|Commands]]. For sagas, see [[docs/usage/sagas|Sagas]].
+
+## Message filter
+
+The `App` accepts an optional `filter` function that intercepts actions before they reach the store. Return `None` to drop the action, or return a (possibly different) action to transform it:
+
+```python
+def block_quit_while_saving(state, action):
+    if action.type == "@@QUIT" and state.get("saving"):
+        return None  # Swallow quit during save
+    return action
+
+app = App(
+    template="app.kida",
+    reducer=reducer,
+    initial_state=None,
+    filter=block_quit_while_saving,
+)
+```
+
+Filters are simpler than middleware for the common case of conditionally dropping or rewriting actions. Use middleware when you need to wrap the full dispatch chain.

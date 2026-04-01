@@ -25,6 +25,13 @@ Milo dispatches these actions automatically during the application lifecycle. Yo
 | `@@HOT_RELOAD` | Template file change | `file_path` | Dispatched by `DevServer` when a watched template file changes. |
 | `@@EFFECT_RESULT` | Saga completion | `result` | Dispatched when a saga's `Call` effect completes. |
 | `@@QUIT` | Ctrl+C | — | Dispatched when the user presses Ctrl+C. The app exits after processing this action. |
+| `@@SAGA_ERROR` | Saga exception | `{error, type}` | Dispatched when an unhandled exception occurs in a saga. Payload includes the error message and exception type name. |
+| `@@CMD_ERROR` | Cmd exception | `{error, type}` | Dispatched when an unhandled exception occurs in a `Cmd` thunk. Same payload shape as `@@SAGA_ERROR`. |
+| `@@PIPELINE_START` | Pipeline begins | `pipeline_name` | Dispatched when a `Pipeline` starts execution. |
+| `@@PIPELINE_COMPLETE` | Pipeline finishes | `pipeline_name` | Dispatched when a `Pipeline` completes all phases. |
+| `@@PHASE_START` | Phase begins | `phase_name` | Dispatched when a pipeline phase starts. |
+| `@@PHASE_COMPLETE` | Phase finishes | `phase_name` | Dispatched when a pipeline phase completes successfully. |
+| `@@PHASE_FAILED` | Phase fails | `phase_name` | Dispatched when a pipeline phase fails. |
 
 :::{tip}
 All built-in action types are prefixed with `@@` to avoid collisions with your custom actions. You can access them programmatically via the `BUILTIN_ACTIONS` constant.

@@ -1,0 +1,33 @@
+{% from "components/_defs.kida" import header, status_line, kv_pair, key_hints %}
+{% set frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏") %}
+{{ header("Multi-Fetch Spinner") }}
+{{ hr() }}
+
+{% if state.status == "idle" %}
+  Press {{ "Enter" | green }} to fetch {{ 3 }} URLs concurrently.
+
+{% elif state.status == "loading" %}
+  {{ frames[state.tick % 10] | cyan | bold }}  Fetching {{ 3 }} URLs...  ({{ state.results | length }}/3 done)
+
+  {% for r in state.results %}
+  {% if r.error %}
+    {{ "✗" | red }}  {{ r.url | dim }}  {{ r.error | red }}
+  {% else %}
+    {{ "✓" | green }}  {{ r.url | dim }}  {{ r.status }}
+  {% endif %}
+  {% endfor %}
+
+{% elif state.status == "done" %}
+  {{ status_line("success", "All fetches complete") }}
+
+  {% for r in state.results %}
+  {% if r.error %}
+    {{ "✗" | red }}  {{ r.url }}  {{ r.error | dim }}
+  {% else %}
+    {{ "✓" | green }}  {{ r.url }}  {{ r.status | bold }}
+  {% endif %}
+  {% endfor %}
+{% endif %}
+
+{{ hr() }}
+{{ key_hints([{"key": "enter", "action": "fetch"}, {"key": "esc", "action": "quit"}]) }}

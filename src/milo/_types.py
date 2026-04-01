@@ -80,6 +80,8 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
         "@@PHASE_START",
         "@@PHASE_COMPLETE",
         "@@PHASE_FAILED",
+        "@@SAGA_ERROR",
+        "@@CMD_ERROR",
     }
 )
 
@@ -231,7 +233,101 @@ class Retry:
 
 
 # ---------------------------------------------------------------------------
-# Reducer result (state + optional sagas)
+# Commands (lightweight alternative to sagas)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Cmd:
+    """Lightweight command: a thunk that returns an Action (or None).
+
+    Simpler than sagas for one-shot effects::
+
+        def fetch_cmd():
+            data = fetch_json(url)
+            return Action("FETCH_DONE", payload=data)
+
+        return ReducerResult(state, cmds=(Cmd(fetch_cmd),))
+    """
+
+    fn: Callable  # () -> Action | None
+
+
+@dataclass(frozen=True, slots=True)
+class Batch:
+    """Run commands concurrently with no ordering guarantees.
+
+    Usage::
+
+        return ReducerResult(state, cmds=(Batch(cmd_a, cmd_b, cmd_c),))
+    """
+
+    cmds: tuple[Cmd | "Batch | Sequence", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Sequence:
+    """Run commands serially, in order.
+
+    Each command's result is dispatched before the next starts::
+
+        return ReducerResult(state, cmds=(Sequence(cmd_a, cmd_b),))
+    """
+
+    cmds: tuple[Cmd | "Batch | Sequence", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TickCmd:
+    """Schedule a single @@TICK after *interval* seconds.
+
+    Return from a reducer to start ticking. Return another TickCmd
+    when you receive @@TICK to keep the loop going; omit to stop::
+
+        case "@@TICK":
+            if state.loading:
+                return ReducerResult(new_state, cmds=(TickCmd(0.15),))
+            return new_state
+    """
+
+    interval: float
+
+
+def compact_cmds(*cmds: Cmd | Batch | Sequence | TickCmd | None) -> tuple:
+    """Strip None entries and simplify command tuples.
+
+    Returns an empty tuple for no commands, a single-element tuple for one,
+    and the full tuple otherwise.  Avoids unnecessary allocations for the
+    common zero-or-one-command case.
+    """
+    live = tuple(c for c in cmds if c is not None)
+    return live
+
+
+# ---------------------------------------------------------------------------
+# View state (declarative terminal configuration)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ViewState:
+    """Declarative terminal state returned alongside rendered content.
+
+    The renderer diffs previous vs. current ViewState and applies only
+    the changes.  Attach to ReducerResult to control terminal features
+    from your reducer::
+
+        return ReducerResult(state, view=ViewState(cursor_visible=True))
+    """
+
+    alt_screen: bool | None = None
+    cursor_visible: bool | None = None
+    window_title: str | None = None
+    mouse_mode: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Reducer result (state + optional sagas + optional cmds)
 # ---------------------------------------------------------------------------
 
 
@@ -241,6 +337,8 @@ class ReducerResult:
 
     state: Any
     sagas: tuple[Callable, ...] = ()
+    cmds: tuple[Cmd | Batch | Sequence | TickCmd, ...] = ()
+    view: ViewState | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,3 +348,5 @@ class Quit:
     state: Any
     code: int = 0
     sagas: tuple[Callable, ...] = ()
+    cmds: tuple[Cmd | Batch | Sequence | TickCmd, ...] = ()
+    view: ViewState | None = None
