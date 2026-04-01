@@ -4,16 +4,12 @@ ViewState, message filter, saga error recovery, and compact_cmds."""
 from __future__ import annotations
 
 import threading
-import time
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from milo._types import (
     Action,
     Batch,
     Cmd,
-    Put,
     Quit,
     ReducerResult,
     Sequence,
@@ -24,7 +20,6 @@ from milo._types import (
 from milo.app import App, _TerminalRenderer
 from milo.state import Store, combine_reducers
 
-
 # ---------------------------------------------------------------------------
 # Task 1: Saga error recovery
 # ---------------------------------------------------------------------------
@@ -33,11 +28,10 @@ from milo.state import Store, combine_reducers
 class TestSagaErrorRecovery:
     def test_saga_error_dispatches_saga_error_action(self):
         """Unhandled saga exceptions dispatch @@SAGA_ERROR instead of being swallowed."""
-        errors = []
 
         def bad_saga():
             raise ValueError("boom")
-            yield  # make it a generator  # noqa: E501
+            yield  # make it a generator
 
         def reducer(state, action):
             if state is None:
@@ -59,7 +53,7 @@ class TestSagaErrorRecovery:
 
         def bad_saga():
             raise RuntimeError("fail")
-            yield  # noqa: E501
+            yield
 
         def reducer(state, action):
             if state is None:

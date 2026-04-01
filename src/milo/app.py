@@ -357,23 +357,15 @@ class App:
             # Each cleanup step is individually guarded so a failure in one
             # does not prevent the rest from running.
             if tick_thread is not None:
-                try:
+                with contextlib.suppress(Exception):
                     stop_tick.set()
-                except Exception:
-                    pass
-            try:
+            with contextlib.suppress(Exception):
                 renderer.stop()
-            except Exception:
-                pass
             if original_sigwinch is not None:
-                try:
+                with contextlib.suppress(Exception):
                     signal.signal(signal.SIGWINCH, original_sigwinch)
-                except Exception:
-                    pass
-            try:
+            with contextlib.suppress(Exception):
                 store.shutdown()
-            except Exception:
-                pass
 
         final_state = store.state
 

@@ -262,7 +262,7 @@ class Batch:
         return ReducerResult(state, cmds=(Batch(cmd_a, cmd_b, cmd_c),))
     """
 
-    cmds: tuple[Cmd | "Batch | Sequence", ...]
+    cmds: tuple[Cmd | Batch | Sequence, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,7 +274,7 @@ class Sequence:
         return ReducerResult(state, cmds=(Sequence(cmd_a, cmd_b),))
     """
 
-    cmds: tuple[Cmd | "Batch | Sequence", ...]
+    cmds: tuple[Cmd | Batch | Sequence, ...]
 
 
 @dataclass(frozen=True, slots=True)

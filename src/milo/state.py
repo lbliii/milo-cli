@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import threading
 import time
@@ -189,15 +190,13 @@ class Store:
             pass
         except Exception as e:
             # Dispatch error to the store so reducers can handle it
-            try:
+            with contextlib.suppress(Exception):
                 self.dispatch(
                     Action(
                         "@@SAGA_ERROR",
                         payload={"error": str(e), "type": type(e).__name__},
                     )
                 )
-            except Exception:
-                pass  # Avoid infinite loops if dispatch itself fails
 
     def _exec_cmd(self, cmd: Any) -> None:
         """Execute a Cmd, Batch, Sequence, or TickCmd."""
@@ -219,15 +218,13 @@ class Store:
             if result is not None:
                 self.dispatch(result)
         except Exception as e:
-            try:
+            with contextlib.suppress(Exception):
                 self.dispatch(
                     Action(
                         "@@CMD_ERROR",
                         payload={"error": str(e), "type": type(e).__name__},
                     )
                 )
-            except Exception:
-                pass
 
     def _run_sequence(self, cmds: tuple) -> None:
         """Run commands serially, dispatching each result before the next."""
