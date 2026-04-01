@@ -154,14 +154,9 @@ def _format_command(cmd: CommandDef) -> str:
 
 def _detect_workflows(cli: CLI) -> list[str]:
     """Heuristically detect command workflows via output→input parameter overlap."""
-    commands = [
-        (name, cmd) for name, cmd in cli.walk_commands() if not cmd.hidden
-    ]
+    commands = [(name, cmd) for name, cmd in cli.walk_commands() if not cmd.hidden]
     # Pre-compute property sets once — O(N) instead of O(N²)
-    prop_sets = {
-        name: set(cmd.schema.get("properties", {}).keys())
-        for name, cmd in commands
-    }
+    prop_sets = {name: set(cmd.schema.get("properties", {}).keys()) for name, cmd in commands}
     workflows: list[str] = []
     names = list(prop_sets.keys())
 

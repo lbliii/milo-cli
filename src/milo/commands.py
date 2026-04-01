@@ -788,9 +788,7 @@ class CLI:
                 from milo.middleware import MCPCall
 
                 call = MCPCall(method="command", name=cmd.name, arguments=kwargs)
-                result = self._middleware.execute(
-                    ctx, call, lambda c: cmd.handler(**c.arguments)
-                )
+                result = self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
             else:
                 result = cmd.handler(**kwargs)
         except SystemExit:
@@ -982,9 +980,7 @@ class CLI:
             from milo.middleware import MCPCall
 
             call = MCPCall(method="command", name=command_name, arguments=valid)
-            result = self._middleware.execute(
-                None, call, lambda c: cmd.handler(**c.arguments)
-            )
+            result = self._middleware.execute(None, call, lambda c: cmd.handler(**c.arguments))
         else:
             result = cmd.handler(**valid)
 

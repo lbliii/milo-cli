@@ -192,8 +192,7 @@ def check_all(clis: dict[str, dict[str, Any]] | None = None) -> list[HealthResul
     results: dict[str, HealthResult] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(_health_check_entry, name, info): name
-            for name, info in clis.items()
+            pool.submit(_health_check_entry, name, info): name for name, info in clis.items()
         }
         for future in as_completed(futures):
             name = futures[future]
