@@ -6,7 +6,7 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
-from milo import __version__ as _SERVER_VERSION
+from milo import __version__ as _server_version
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import _stderr, _write_error, _write_result
 from milo._mcp_router import dispatch
@@ -35,7 +35,7 @@ class _CLIHandler:
             "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
             "serverInfo": {
                 "name": self._cli.name or _SERVER_NAME,
-                "version": self._cli.version or _SERVER_VERSION,
+                "version": self._cli.version or _server_version,
                 "title": self._cli.description,
             },
             "instructions": self._cli.description,

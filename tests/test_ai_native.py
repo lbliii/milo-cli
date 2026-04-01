@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
+from milo._mcp_router import dispatch as _mcp_dispatch
 from milo.commands import CLI, CommandDef, InvokeResult
 from milo.context import Context
 from milo.llms import generate_llms_txt
-from milo._mcp_router import dispatch as _mcp_dispatch
-from milo.mcp import _CLIHandler, _call_tool, _list_tools
+from milo.mcp import _call_tool, _CLIHandler, _list_tools
 from milo.output import format_output
 from milo.schema import function_to_schema, return_to_schema
 

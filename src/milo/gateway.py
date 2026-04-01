@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from milo import __version__ as _SERVER_VERSION
+from milo import __version__ as _server_version
 from milo._child import ChildProcess
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import _stderr, _write_error, _write_result
@@ -97,12 +97,9 @@ def _run_gateway() -> None:
     # Discover tools, resources, and prompts from all CLIs in parallel
     discovery = _discover_all(clis, children)
     all_tools = discovery.tools
-    tool_routing = discovery.tool_routing
     tool_names = [t["name"] for t in all_tools]
     all_resources = discovery.resources
-    resource_routing = discovery.resource_routing
     all_prompts = discovery.prompts
-    prompt_routing = discovery.prompt_routing
 
     _stderr("milo gateway ready")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
@@ -289,7 +286,7 @@ class _GatewayHandler:
             "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
             "serverInfo": {
                 "name": "milo-gateway",
-                "version": _SERVER_VERSION,
+                "version": _server_version,
                 "title": "Milo Gateway",
             },
             "instructions": (

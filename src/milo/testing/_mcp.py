@@ -7,7 +7,7 @@ from typing import Any
 
 from milo._mcp_router import dispatch
 from milo.commands import CLI
-from milo.mcp import _CLIHandler, _call_tool, _list_tools
+from milo.mcp import _call_tool, _CLIHandler, _list_tools
 
 
 @dataclass(frozen=True, slots=True)
