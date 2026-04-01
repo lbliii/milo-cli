@@ -181,10 +181,10 @@ class Group:
             hidden=self.hidden,
         )
 
-    def walk_commands(self, prefix: str = "") -> list[tuple[str, Any]]:
+    def walk_commands(self, prefix: str = ""):
         """Yield (dotted_path, CommandDef) for all commands in this tree."""
         path_prefix = f"{prefix}{self.name}." if prefix else f"{self.name}."
-        result = [(f"{path_prefix}{cmd.name}", cmd) for cmd in self._commands.values()]
+        for cmd in self._commands.values():
+            yield (f"{path_prefix}{cmd.name}", cmd)
         for group in self._groups.values():
-            result.extend(group.walk_commands(path_prefix))
-        return result
+            yield from group.walk_commands(path_prefix)

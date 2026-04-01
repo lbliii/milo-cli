@@ -87,7 +87,9 @@ def main(argv: list[str] | None = None) -> None:
         prog="milo",
         description="Template-driven CLI applications for free-threaded Python",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    from milo import __version__
+
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     # milo dev

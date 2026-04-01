@@ -154,17 +154,18 @@ def _format_command(cmd: CommandDef) -> str:
 
 def _detect_workflows(cli: CLI) -> list[str]:
     """Heuristically detect command workflows via output→input parameter overlap."""
-    commands = list(cli.walk_commands())
+    commands = [(name, cmd) for name, cmd in cli.walk_commands() if not cmd.hidden]
+    # Pre-compute property sets once — O(N) instead of O(N²)
+    prop_sets = {name: set(cmd.schema.get("properties", {}).keys()) for name, cmd in commands}
     workflows: list[str] = []
+    names = list(prop_sets.keys())
 
-    for i, (name_a, cmd_a) in enumerate(commands):
-        if cmd_a.hidden:
+    for i, name_a in enumerate(names):
+        props_a = prop_sets[name_a]
+        if not props_a:
             continue
-        props_a = set(cmd_a.schema.get("properties", {}).keys())
-        for name_b, cmd_b in commands[i + 1 :]:
-            if cmd_b.hidden:
-                continue
-            props_b = set(cmd_b.schema.get("properties", {}).keys())
+        for name_b in names[i + 1 :]:
+            props_b = prop_sets[name_b]
             overlap = props_a & props_b
             if overlap:
                 workflows.append(f"`{name_a}` → `{name_b}` (shared: {', '.join(sorted(overlap))})")

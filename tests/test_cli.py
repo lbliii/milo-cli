@@ -24,7 +24,9 @@ class TestCli:
             main(["--version"])
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.1.0" in captured.out
+        from milo import __version__
+
+        assert __version__ in captured.out
 
     def test_dev_missing_app(self):
         with pytest.raises(SystemExit):

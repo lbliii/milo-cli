@@ -180,10 +180,26 @@ def health_check(name: str) -> HealthResult:
 
 
 def check_all(clis: dict[str, dict[str, Any]] | None = None) -> list[HealthResult]:
-    """Run health checks on all registered CLIs."""
+    """Run health checks on all registered CLIs in parallel."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if clis is None:
         clis = list_clis()
-    return [_health_check_entry(name, info) for name, info in clis.items()]
+    if not clis:
+        return []
+
+    max_workers = min(8, len(clis))
+    results: dict[str, HealthResult] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_health_check_entry, name, info): name for name, info in clis.items()
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            results[name] = future.result()
+
+    # Preserve original ordering
+    return [results[name] for name in clis]
 
 
 def doctor() -> str:

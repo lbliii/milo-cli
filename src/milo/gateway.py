@@ -21,11 +21,14 @@ import json
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
+from milo import __version__ as _server_version
 from milo._child import ChildProcess
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import _stderr, _write_error, _write_result
+from milo._mcp_router import dispatch
 from milo.registry import list_clis
 
 
@@ -91,13 +94,12 @@ def _run_gateway() -> None:
         if command:
             children[cli_name] = ChildProcess(cli_name, command)
 
-    # Discover tools from all registered CLIs
-    all_tools, tool_routing = _discover_tools(clis, children)
+    # Discover tools, resources, and prompts from all CLIs in parallel
+    discovery = _discover_all(clis, children)
+    all_tools = discovery.tools
     tool_names = [t["name"] for t in all_tools]
-
-    # Discover resources and prompts
-    all_resources, resource_routing = _discover_resources(clis, children)
-    all_prompts, prompt_routing = _discover_prompts(clis, children)
+    all_resources = discovery.resources
+    all_prompts = discovery.prompts
 
     _stderr("milo gateway ready")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
@@ -115,6 +117,8 @@ def _run_gateway() -> None:
     reaper = threading.Thread(target=_idle_reaper, args=(children,), daemon=True)
     reaper.start()
 
+    handler = _GatewayHandler(clis, discovery, children)
+
     try:
         for line in sys.stdin:
             line = line.strip()
@@ -130,18 +134,7 @@ def _run_gateway() -> None:
             method = request.get("method", "")
 
             try:
-                result = _handle_method(
-                    clis,
-                    all_tools,
-                    tool_routing,
-                    all_resources,
-                    resource_routing,
-                    all_prompts,
-                    prompt_routing,
-                    children,
-                    method,
-                    request.get("params", {}),
-                )
+                result = dispatch(handler, method, request.get("params", {}))
                 if result is not None:
                     _write_result(req_id, result)
             except Exception as e:
@@ -162,24 +155,83 @@ def _idle_reaper(children: dict[str, ChildProcess]) -> None:
                 child.kill()
 
 
-def _discover_tools(
+@dataclass
+class GatewayState:
+    """Bundled discovery results for the gateway."""
+
+    tools: list[dict[str, Any]]
+    tool_routing: dict[str, tuple[str, str]]
+    resources: list[dict[str, Any]]
+    resource_routing: dict[str, tuple[str, str]]
+    prompts: list[dict[str, Any]]
+    prompt_routing: dict[str, tuple[str, str]]
+
+
+def _discover_one_child(
+    cli_name: str,
+    child: ChildProcess,
+) -> tuple[str, list[dict], list[dict], list[dict]]:
+    """Discover tools, resources, and prompts from a single child."""
+    tools: list[dict[str, Any]] = []
+    resources: list[dict[str, Any]] = []
+    prompts: list[dict[str, Any]] = []
+
+    try:
+        tools = child.fetch_tools()
+    except Exception as e:
+        _stderr(f"  Warning: failed to discover tools from {cli_name}: {e}")
+
+    try:
+        result = child.send_call("resources/list", {})
+        resources = result.get("resources", [])
+    except Exception:
+        pass
+
+    try:
+        result = child.send_call("prompts/list", {})
+        prompts = result.get("prompts", [])
+    except Exception:
+        pass
+
+    return cli_name, tools, resources, prompts
+
+
+def _discover_all(
     clis: dict[str, dict[str, Any]],
     children: dict[str, ChildProcess],
-) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
-    """Discover tools from all registered CLIs via persistent children."""
+) -> GatewayState:
+    """Discover tools, resources, and prompts from all CLIs in parallel."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     all_tools: list[dict[str, Any]] = []
-    routing: dict[str, tuple[str, str]] = {}
+    tool_routing: dict[str, tuple[str, str]] = {}
+    all_resources: list[dict[str, Any]] = []
+    resource_routing: dict[str, tuple[str, str]] = {}
+    all_prompts: list[dict[str, Any]] = []
+    prompt_routing: dict[str, tuple[str, str]] = {}
 
+    # Discover all children in parallel
+    valid_children = {name: children[name] for name in clis if name in children}
+    if not valid_children:
+        return GatewayState([], {}, [], {}, [], {})
+
+    max_workers = min(8, len(valid_children))
+    results: dict[str, tuple[str, list, list, list]] = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(_discover_one_child, name, child): name
+            for name, child in valid_children.items()
+        }
+        for future in as_completed(futures):
+            cli_name, tools, resources, prompts = future.result()
+            results[cli_name] = (cli_name, tools, resources, prompts)
+
+    # Merge results in original CLI order for deterministic output
     for cli_name in clis:
-        child = children.get(cli_name)
-        if not child:
+        if cli_name not in results:
             continue
-
-        try:
-            tools = child.fetch_tools()
-        except Exception as e:
-            _stderr(f"  Warning: failed to discover {cli_name}: {e}")
-            continue
+        _, tools, resources, prompts = results[cli_name]
 
         for tool in tools:
             original_name = tool["name"]
@@ -188,114 +240,78 @@ def _discover_tools(
             if "title" not in tool:
                 tool["title"] = f"{cli_name}: {tool.get('description', original_name)}"
             all_tools.append(tool)
-            routing[namespaced] = (cli_name, original_name)
-
-    return all_tools, routing
-
-
-def _discover_resources(
-    clis: dict[str, dict[str, Any]],
-    children: dict[str, ChildProcess],
-) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
-    """Discover resources from all registered CLIs."""
-    all_resources: list[dict[str, Any]] = []
-    routing: dict[str, tuple[str, str]] = {}
-
-    for cli_name in clis:
-        child = children.get(cli_name)
-        if not child:
-            continue
-
-        try:
-            result = child.send_call("resources/list", {})
-            resources = result.get("resources", [])
-        except Exception:
-            continue
+            tool_routing[namespaced] = (cli_name, original_name)
 
         for resource in resources:
             original_uri = resource["uri"]
             namespaced_uri = f"{cli_name}/{original_uri}"
             resource["uri"] = namespaced_uri
             all_resources.append(resource)
-            routing[namespaced_uri] = (cli_name, original_uri)
-
-    return all_resources, routing
-
-
-def _discover_prompts(
-    clis: dict[str, dict[str, Any]],
-    children: dict[str, ChildProcess],
-) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
-    """Discover prompts from all registered CLIs."""
-    all_prompts: list[dict[str, Any]] = []
-    routing: dict[str, tuple[str, str]] = {}
-
-    for cli_name in clis:
-        child = children.get(cli_name)
-        if not child:
-            continue
-
-        try:
-            result = child.send_call("prompts/list", {})
-            prompts = result.get("prompts", [])
-        except Exception:
-            continue
+            resource_routing[namespaced_uri] = (cli_name, original_uri)
 
         for prompt in prompts:
             original_name = prompt["name"]
             namespaced = f"{cli_name}.{original_name}"
             prompt["name"] = namespaced
             all_prompts.append(prompt)
-            routing[namespaced] = (cli_name, original_name)
+            prompt_routing[namespaced] = (cli_name, original_name)
 
-    return all_prompts, routing
+    return GatewayState(
+        tools=all_tools,
+        tool_routing=tool_routing,
+        resources=all_resources,
+        resource_routing=resource_routing,
+        prompts=all_prompts,
+        prompt_routing=prompt_routing,
+    )
 
 
-def _handle_method(
-    clis: dict[str, dict[str, Any]],
-    all_tools: list[dict[str, Any]],
-    tool_routing: dict[str, tuple[str, str]],
-    all_resources: list[dict[str, Any]],
-    resource_routing: dict[str, tuple[str, str]],
-    all_prompts: list[dict[str, Any]],
-    prompt_routing: dict[str, tuple[str, str]],
-    children: dict[str, ChildProcess],
-    method: str,
-    params: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Dispatch an MCP method."""
-    match method:
-        case "initialize":
-            cli_names = list(clis.keys())
-            return {
-                "protocolVersion": _MCP_VERSION,
-                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                "serverInfo": {
-                    "name": "milo-gateway",
-                    "version": "0.1.0",
-                    "title": "Milo Gateway",
-                },
-                "instructions": (
-                    f"Gateway to {len(clis)} milo CLIs: {', '.join(cli_names)}. "
-                    "Tools are namespaced as cli_name.command_name."
-                ),
-            }
-        case "notifications/initialized":
-            return None
-        case "tools/list":
-            return {"tools": all_tools}
-        case "tools/call":
-            return _proxy_call(children, tool_routing, params)
-        case "resources/list":
-            return {"resources": all_resources}
-        case "resources/read":
-            return _proxy_resource(children, resource_routing, params)
-        case "prompts/list":
-            return {"prompts": all_prompts}
-        case "prompts/get":
-            return _proxy_prompt(children, prompt_routing, params)
-        case _:
-            raise ValueError(f"Unknown method: {method!r}")
+class _GatewayHandler:
+    """MCPHandler implementation for the gateway (proxy to children)."""
+
+    def __init__(
+        self,
+        clis: dict[str, dict[str, Any]],
+        state: GatewayState,
+        children: dict[str, ChildProcess],
+    ) -> None:
+        self._clis = clis
+        self._state = state
+        self._children = children
+
+    def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+        cli_names = list(self._clis.keys())
+        return {
+            "protocolVersion": _MCP_VERSION,
+            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+            "serverInfo": {
+                "name": "milo-gateway",
+                "version": _server_version,
+                "title": "Milo Gateway",
+            },
+            "instructions": (
+                f"Gateway to {len(self._clis)} milo CLIs: {', '.join(cli_names)}. "
+                "Tools are namespaced as cli_name.command_name."
+            ),
+        }
+
+    def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"tools": self._state.tools}
+
+    def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _proxy_call(self._children, self._state.tool_routing, params)
+
+    def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"resources": self._state.resources}
+
+    def read_resource(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _proxy_resource(self._children, self._state.resource_routing, params)
+
+    def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"prompts": self._state.prompts}
+
+    def get_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _proxy_prompt(self._children, self._state.prompt_routing, params)
 
 
 def _proxy_call(

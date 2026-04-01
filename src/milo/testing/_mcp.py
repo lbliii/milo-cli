@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from milo._mcp_router import dispatch
 from milo.commands import CLI
-from milo.mcp import _call_tool, _handle_method, _list_tools
+from milo.mcp import _call_tool, _CLIHandler, _list_tools
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,10 +34,11 @@ class MCPClient:
 
     def __init__(self, cli: CLI) -> None:
         self._cli = cli
+        self._handler = _CLIHandler(cli)
 
     def initialize(self) -> dict[str, Any]:
         """Send ``initialize`` and return the server info dict."""
-        result = _handle_method(self._cli, "initialize", {})
+        result = dispatch(self._handler, "initialize", {})
         assert result is not None, "initialize must return a result"
         return result
 
@@ -66,22 +68,22 @@ class MCPClient:
 
     def list_resources(self) -> list[dict[str, Any]]:
         """Return all resources (requires F3 resources support)."""
-        result = _handle_method(self._cli, "resources/list", {})
+        result = dispatch(self._handler, "resources/list", {})
         return result.get("resources", []) if result else []
 
     def read_resource(self, uri: str) -> dict[str, Any]:
         """Read a resource by URI (requires F3 resources support)."""
-        result = _handle_method(self._cli, "resources/read", {"uri": uri})
+        result = dispatch(self._handler, "resources/read", {"uri": uri})
         return result or {}
 
     def list_prompts(self) -> list[dict[str, Any]]:
         """Return all prompts (requires F3 prompts support)."""
-        result = _handle_method(self._cli, "prompts/list", {})
+        result = dispatch(self._handler, "prompts/list", {})
         return result.get("prompts", []) if result else []
 
     def get_prompt(self, prompt_name: str, **arguments: Any) -> dict[str, Any]:
         """Get a prompt by name (requires F3 prompts support)."""
-        result = _handle_method(
-            self._cli, "prompts/get", {"name": prompt_name, "arguments": arguments}
+        result = dispatch(
+            self._handler, "prompts/get", {"name": prompt_name, "arguments": arguments}
         )
         return result or {}

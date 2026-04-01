@@ -6,14 +6,59 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any
 
+from milo import __version__ as _server_version
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import _stderr, _write_error, _write_result
+from milo._mcp_router import dispatch
 
 if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef
 
 _SERVER_NAME = "milo"
-_SERVER_VERSION = "0.1.0"
+
+
+def _to_text(result: Any) -> str:
+    """Convert a result to text for MCP content responses."""
+    return result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
+
+
+class _CLIHandler:
+    """MCPHandler implementation for a single CLI (leaf server)."""
+
+    def __init__(self, cli: CLI, cached_tools: list[dict[str, Any]] | None = None) -> None:
+        self._cli = cli
+        self._cached_tools = cached_tools
+
+    def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "protocolVersion": _MCP_VERSION,
+            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+            "serverInfo": {
+                "name": self._cli.name or _SERVER_NAME,
+                "version": self._cli.version or _server_version,
+                "title": self._cli.description,
+            },
+            "instructions": self._cli.description,
+        }
+
+    def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
+        tools = self._cached_tools if self._cached_tools is not None else _list_tools(self._cli)
+        return {"tools": tools}
+
+    def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _call_tool(self._cli, params)
+
+    def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"resources": _list_resources(self._cli)}
+
+    def read_resource(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _read_resource(self._cli, params)
+
+    def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {"prompts": _list_prompts(self._cli)}
+
+    def get_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
+        return _get_prompt(self._cli, params)
 
 
 def run_mcp_server(cli: CLI) -> None:
@@ -51,6 +96,8 @@ def run_mcp_server(cli: CLI) -> None:
     _stderr("Press Ctrl+C to stop.")
     _stderr("")
 
+    handler = _CLIHandler(cli, cached_tools=tools)
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -65,54 +112,11 @@ def run_mcp_server(cli: CLI) -> None:
         method = request.get("method", "")
 
         try:
-            result = _handle_method(cli, method, request.get("params", {}), cached_tools=tools)
+            result = dispatch(handler, method, request.get("params", {}))
             if result is not None:
                 _write_result(req_id, result)
         except Exception as e:
             _write_error(req_id, -32603, str(e))
-
-
-def _handle_method(
-    cli: CLI,
-    method: str,
-    params: dict[str, Any],
-    *,
-    cached_tools: list[dict[str, Any]] | None = None,
-) -> dict[str, Any] | None:
-    """Dispatch an MCP method.
-
-    Pass ``cached_tools`` from ``run_mcp_server`` to avoid recomputing the
-    tool list on every ``tools/list`` request.
-    """
-    match method:
-        case "initialize":
-            return {
-                "protocolVersion": _MCP_VERSION,
-                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                "serverInfo": {
-                    "name": cli.name or _SERVER_NAME,
-                    "version": cli.version or _SERVER_VERSION,
-                    "title": cli.description,
-                },
-                "instructions": cli.description,
-            }
-        case "notifications/initialized":
-            # Client confirms initialization — no response required
-            return None
-        case "tools/list":
-            return {"tools": cached_tools if cached_tools is not None else _list_tools(cli)}
-        case "tools/call":
-            return _call_tool(cli, params)
-        case "resources/list":
-            return {"resources": _list_resources(cli)}
-        case "resources/read":
-            return _read_resource(cli, params)
-        case "prompts/list":
-            return {"prompts": _list_prompts(cli)}
-        case "prompts/get":
-            return _get_prompt(cli, params)
-        case _:
-            raise ValueError(f"Unknown method: {method!r}")
 
 
 def _list_tools(cli: CLI) -> list[dict[str, Any]]:
@@ -194,8 +198,7 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
             "isError": True,
         }
 
-    # Convert result to MCP content with structuredContent for non-string results
-    text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
+    text = _to_text(result)
 
     response: dict[str, Any] = {
         "content": [{"type": "text", "text": text}],
@@ -236,7 +239,7 @@ def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         return {"contents": [{"uri": uri, "text": f"Error: {e}", "mimeType": "text/plain"}]}
 
-    text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
+    text = _to_text(result)
 
     return {"contents": [{"uri": uri, "text": text, "mimeType": res.mime_type}]}
 
