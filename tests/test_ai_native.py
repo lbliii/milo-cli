@@ -12,7 +12,8 @@ import pytest
 from milo.commands import CLI, CommandDef, InvokeResult
 from milo.context import Context
 from milo.llms import generate_llms_txt
-from milo.mcp import _call_tool, _handle_method, _list_tools
+from milo._mcp_router import dispatch as _mcp_dispatch
+from milo.mcp import _CLIHandler, _call_tool, _list_tools
 from milo.output import format_output
 from milo.schema import function_to_schema, return_to_schema
 
@@ -241,7 +242,7 @@ class TestMCP:
 
     def test_initialize(self):
         cli = self._make_cli()
-        result = _handle_method(cli, "initialize", {})
+        result = _mcp_dispatch(_CLIHandler(cli), "initialize", {})
         assert result["protocolVersion"] == "2025-11-25"
         assert result["capabilities"]["tools"] == {}
 
@@ -273,7 +274,7 @@ class TestMCP:
     def test_unknown_method(self):
         cli = self._make_cli()
         with pytest.raises(ValueError, match="Unknown method"):
-            _handle_method(cli, "unknown/method", {})
+            _mcp_dispatch(_CLIHandler(cli), "unknown/method", {})
 
 
 # ---------------------------------------------------------------------------
@@ -394,12 +395,12 @@ class TestMCPExtended:
 
     def test_notifications_initialized(self):
         cli = self._make_cli()
-        result = _handle_method(cli, "notifications/initialized", {})
+        result = _mcp_dispatch(_CLIHandler(cli), "notifications/initialized", {})
         assert result is None
 
     def test_initialize_includes_server_info(self):
         cli = self._make_cli()
-        result = _handle_method(cli, "initialize", {})
+        result = _mcp_dispatch(_CLIHandler(cli), "initialize", {})
         assert result["serverInfo"]["name"] == "test"
         assert result["serverInfo"]["version"] == "1.0"
         assert result["serverInfo"]["title"] == "Test CLI"
@@ -537,31 +538,39 @@ class TestRegistry:
 
 class TestGateway:
     def test_handle_method_initialize(self):
-        from milo.gateway import _handle_method
+        from milo.gateway import GatewayState, _GatewayHandler
 
         clis = {"app1": {"command": ["python", "app.py"]}}
-        result = _handle_method(clis, [], {}, [], {}, [], {}, {}, "initialize", {})
+        state = GatewayState([], {}, [], {}, [], {})
+        handler = _GatewayHandler(clis, state, {})
+        result = _mcp_dispatch(handler, "initialize", {})
         assert result["protocolVersion"] == "2025-11-25"
         assert result["serverInfo"]["name"] == "milo-gateway"
 
     def test_handle_method_tools_list(self):
-        from milo.gateway import _handle_method
+        from milo.gateway import GatewayState, _GatewayHandler
 
         tools = [{"name": "app1.greet", "description": "Say hello"}]
-        result = _handle_method({}, tools, {}, [], {}, [], {}, {}, "tools/list", {})
+        state = GatewayState(tools, {}, [], {}, [], {})
+        handler = _GatewayHandler({}, state, {})
+        result = _mcp_dispatch(handler, "tools/list", {})
         assert result["tools"] == tools
 
     def test_handle_method_notifications_initialized(self):
-        from milo.gateway import _handle_method
+        from milo.gateway import GatewayState, _GatewayHandler
 
-        result = _handle_method({}, [], {}, [], {}, [], {}, {}, "notifications/initialized", {})
+        state = GatewayState([], {}, [], {}, [], {})
+        handler = _GatewayHandler({}, state, {})
+        result = _mcp_dispatch(handler, "notifications/initialized", {})
         assert result is None
 
     def test_handle_method_unknown(self):
-        from milo.gateway import _handle_method
+        from milo.gateway import GatewayState, _GatewayHandler
 
+        state = GatewayState([], {}, [], {}, [], {})
+        handler = _GatewayHandler({}, state, {})
         with pytest.raises(ValueError, match="Unknown method"):
-            _handle_method({}, [], {}, [], {}, [], {}, {}, "unknown/method", {})
+            _mcp_dispatch(handler, "unknown/method", {})
 
     def test_proxy_call_unknown_tool(self):
         from milo.gateway import _proxy_call
@@ -579,17 +588,17 @@ class TestGateway:
         assert "not available" in result["content"][0]["text"]
 
     def test_discover_tools_empty(self):
-        from milo.gateway import _discover_tools
+        from milo.gateway import _discover_all
 
-        tools, routing = _discover_tools({}, {})
-        assert tools == []
-        assert routing == {}
+        state = _discover_all({}, {})
+        assert state.tools == []
+        assert state.tool_routing == {}
 
     def test_discover_tools_no_command(self):
-        from milo.gateway import _discover_tools
+        from milo.gateway import _discover_all
 
-        tools, _routing = _discover_tools({"app": {"command": []}}, {})
-        assert tools == []
+        state = _discover_all({"app": {"command": []}}, {})
+        assert state.tools == []
 
     def test_print_registry_empty(self):
         import io

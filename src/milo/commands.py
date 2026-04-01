@@ -470,17 +470,17 @@ class CLI:
             return self.get_command(cmd_name)
         return current_group.get_command(cmd_name)
 
-    def walk_commands(self) -> list[tuple[str, CommandDef | LazyCommandDef]]:
-        """Walk all commands in the tree, yielding (dotted_path, CommandDef).
+    def walk_commands(self):
+        """Yield all commands in the tree as (dotted_path, CommandDef) tuples.
 
         Top-level commands have simple names. Group commands use dots::
 
             [("greet", greet_cmd), ("site.build", build_cmd), ...]
         """
-        result = [(cmd.name, cmd) for cmd in self._commands.values()]
+        for cmd in self._commands.values():
+            yield (cmd.name, cmd)
         for group in self._groups.values():
-            result.extend(group.walk_commands())
-        return result
+            yield from group.walk_commands()
 
     def walk_resources(self) -> list[tuple[str, ResourceDef]]:
         """Walk all registered resources."""
@@ -782,9 +782,17 @@ class CLI:
         for hook in self._before_command:
             hook(ctx, cmd.name, kwargs)
 
-        # Call handler (through middleware if present)
+        # Call handler through middleware if present
         try:
-            result = cmd.handler(**kwargs)
+            if self._middleware:
+                from milo.middleware import MCPCall
+
+                call = MCPCall(method="command", name=cmd.name, arguments=kwargs)
+                result = self._middleware.execute(
+                    ctx, call, lambda c: cmd.handler(**c.arguments)
+                )
+            else:
+                result = cmd.handler(**kwargs)
         except SystemExit:
             raise
         except KeyboardInterrupt:
@@ -970,7 +978,15 @@ class CLI:
             if k in sig.parameters and not _is_context_param(sig.parameters[k])
         }
 
-        result = cmd.handler(**valid)
+        if self._middleware:
+            from milo.middleware import MCPCall
+
+            call = MCPCall(method="command", name=command_name, arguments=valid)
+            result = self._middleware.execute(
+                None, call, lambda c: cmd.handler(**c.arguments)
+            )
+        else:
+            result = cmd.handler(**valid)
 
         # Handle streaming generators
         from milo.streaming import consume_generator, is_generator_result
