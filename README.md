@@ -74,6 +74,10 @@ Requires Python 3.14+
 | `App.from_dir(__file__, ...)` | Auto-discover template directory |
 | `ctx.run_app(reducer, template, state)` | Bridge CLI commands to interactive apps |
 | `quit_on`, `with_cursor`, `with_confirm` | Reducer combinator decorators |
+| `Cmd(fn)` | Lightweight side effect (runs on thread pool) |
+| `Batch(cmds)`, `Sequence(cmds)` | Concurrent / serial command combinators |
+| `TickCmd(interval)` | Self-sustaining tick (return another to keep ticking) |
+| `ViewState(cursor_visible=True, ...)` | Declarative terminal state |
 | `DevServer(app, watch_dirs)` | Hot-reload dev server |
 
 ---
@@ -83,7 +87,9 @@ Requires Python 3.14+
 | Feature | Description | Docs |
 |---------|-------------|------|
 | **State Management** | Redux-style `Store` with dispatch, listeners, middleware, and saga scheduling | [State →](https://lbliii.github.io/milo/docs/usage/state/) |
-| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay` | [Sagas →](https://lbliii.github.io/milo/docs/usage/sagas/) |
+| **Commands** | Lightweight `Cmd` thunks, `Batch`, `Sequence`, `TickCmd` for one-shot effects | [Commands →](https://lbliii.github.io/milo/docs/usage/commands-effects/) |
+| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry` | [Sagas →](https://lbliii.github.io/milo/docs/usage/sagas/) |
+| **ViewState** | Declarative terminal state (`cursor_visible`, `alt_screen`, `window_title`, `mouse_mode`) | [Commands →](https://lbliii.github.io/milo/docs/usage/commands-effects/) |
 | **Flows** | Multi-screen state machines with `>>` operator and custom transitions | [Flows →](https://lbliii.github.io/milo/docs/usage/flows/) |
 | **Forms** | Text, select, confirm, password fields with validation and TTY fallback | [Forms →](https://lbliii.github.io/milo/docs/usage/forms/) |
 | **Input Handling** | Cross-platform key reader with full escape sequence support (arrows, F-keys, modifiers) | [Input →](https://lbliii.github.io/milo/docs/usage/input/) |
@@ -192,7 +198,21 @@ def reducer(state, action):
     return state
 ```
 
-Effects: `Call(fn, args)`, `Put(action)`, `Select(selector)`, `Fork(saga)`, `Delay(seconds)`.
+Saga effects: `Call(fn, args)`, `Put(action)`, `Select(selector)`, `Fork(saga)`, `Delay(seconds)`, `Retry(fn, ...)`.
+
+For one-shot effects, use `Cmd` instead — no generator needed:
+
+```python
+from milo import Cmd, ReducerResult
+
+def fetch_status():
+    return Action("STATUS", payload=urllib.request.urlopen(url).status)
+
+def reducer(state, action):
+    if action.type == "CHECK":
+        return ReducerResult(state, cmds=(Cmd(fetch_status),))
+    return state
+```
 
 </details>
 
@@ -336,7 +356,7 @@ The gateway namespaces tools automatically: `taskman.add`, `ghub.repo.list`, etc
 1. **Model** — Immutable state (plain dicts or frozen dataclasses)
 2. **View** — Kida templates render state to terminal output
 3. **Update** — Pure `reducer(state, action) -> state` functions
-4. **Effects** — Generator-based sagas scheduled on `ThreadPoolExecutor`
+4. **Effects** — `Cmd` thunks (one-shot) or generator-based sagas (multi-step) on `ThreadPoolExecutor`
 
 </details>
 

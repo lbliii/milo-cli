@@ -19,7 +19,9 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 |------|-------------|
 | `Action(type, payload)` | Frozen dataclass. Dispatched to reducers. |
 | `Key(char, name, ctrl, alt, shift)` | Frozen dataclass. Represents a keypress. |
-| `ReducerResult(state, sagas)` | Returned by reducers to schedule side effects. |
+| `ReducerResult(state, sagas, cmds, view)` | Returned by reducers to schedule side effects. |
+| `Quit(state, code, sagas, cmds, view)` | Signal the app to exit. Return from a reducer to stop the event loop. |
+| `ViewState(alt_screen, cursor_visible, window_title, mouse_mode)` | Declarative terminal state. The renderer diffs previous vs. current and applies only changes. |
 | `FieldSpec(name, label, field_type, choices, default, validator, placeholder)` | Declarative form field configuration. |
 | `FieldState(value, cursor, error, focused)` | Runtime state of a single form field. |
 | `FormState(fields, specs, current, submitted)` | Runtime state of an entire form. |
@@ -27,7 +29,7 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 | `Transition(from_screen, to_screen, on)` | A flow transition rule. |
 | `FlowState(current_screen, screen_states)` | Runtime state of a multi-screen flow. |
 
-## Effect types
+## Saga effect types
 
 | Type | Description |
 |------|-------------|
@@ -36,6 +38,19 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 | `Select(selector)` | Read current state or a slice. |
 | `Fork(saga)` | Launch a concurrent child saga. |
 | `Delay(seconds)` | Sleep for a duration. |
+| `Retry(fn, args, kwargs, max_attempts, backoff, base_delay, max_delay)` | Call with retry and backoff on failure. |
+
+## Command types
+
+Lightweight alternatives to sagas for one-shot effects. See [[docs/usage/commands-effects|Commands]] for usage.
+
+| Type | Description |
+|------|-------------|
+| `Cmd(fn)` | A thunk `() -> Action \| None`. Runs on the thread pool, dispatches the returned action. |
+| `Batch(cmds)` | Run commands concurrently with no ordering guarantees. |
+| `Sequence(cmds)` | Run commands serially, in order. Each result is dispatched before the next starts. |
+| `TickCmd(interval)` | Schedule a single `@@TICK` after *interval* seconds. Return another from `@@TICK` to keep ticking. |
+| `compact_cmds(*cmds)` | Helper: strips `None` entries from a command tuple. |
 
 ## Enums
 
@@ -67,7 +82,7 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 
 | Protocol | Signature |
 |----------|-----------|
-| `Reducer` | `(state, Action) -> state \| ReducerResult` |
+| `Reducer` | `(state, Action) -> state \| ReducerResult \| Quit` |
 | `Saga` | `Generator[effect, result, None]` |
 | `DispatchFn` | `(Action) -> None` |
 | `GetStateFn` | `() -> state` |

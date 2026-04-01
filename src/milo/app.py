@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from milo._errors import AppError, ErrorCode, format_render_error
-from milo._types import Action, AppStatus, RenderTarget
+from milo._types import Action, AppStatus, RenderTarget, ViewState
 from milo.flow import Flow, FlowState
 from milo.input._platform import is_tty
 from milo.input._reader import KeyReader
@@ -24,12 +24,14 @@ class _TerminalRenderer:
     """In-place terminal renderer using alternate screen buffer.
 
     Uses cursor-home redraws with line clearing to avoid flicker
-    and prevent frame stacking.
+    and prevent frame stacking.  Supports declarative ViewState for
+    controlling terminal features (alt screen, cursor, mouse, title).
     """
 
     def __init__(self) -> None:
         self._prev_lines = 0
         self._started = False
+        self._view_state = ViewState(alt_screen=False, cursor_visible=True)
 
     def start(self) -> None:
         """Enter alternate screen buffer and hide cursor."""
@@ -37,6 +39,42 @@ class _TerminalRenderer:
         sys.stdout.write("\033[?25l")  # Hide cursor
         sys.stdout.flush()
         self._started = True
+        self._view_state = ViewState(alt_screen=True, cursor_visible=False)
+
+    def apply_view_state(self, view: ViewState) -> None:
+        """Diff *view* against current state and apply only the changes."""
+        if not self._started:
+            return
+        prev = self._view_state
+        buf = []
+
+        if view.alt_screen is not None and view.alt_screen != prev.alt_screen:
+            buf.append("\033[?1049h" if view.alt_screen else "\033[?1049l")
+
+        if view.cursor_visible is not None and view.cursor_visible != prev.cursor_visible:
+            buf.append("\033[?25h" if view.cursor_visible else "\033[?25l")
+
+        if view.mouse_mode is not None and view.mouse_mode != prev.mouse_mode:
+            buf.append("\033[?1003h" if view.mouse_mode else "\033[?1003l")
+
+        if view.window_title is not None and view.window_title != prev.window_title:
+            buf.append(f"\033]2;{view.window_title}\033\\")
+
+        if buf:
+            sys.stdout.write("".join(buf))
+            sys.stdout.flush()
+
+        # Merge: only overwrite fields that were explicitly set (not None)
+        self._view_state = ViewState(
+            alt_screen=view.alt_screen if view.alt_screen is not None else prev.alt_screen,
+            cursor_visible=(
+                view.cursor_visible if view.cursor_visible is not None else prev.cursor_visible
+            ),
+            mouse_mode=view.mouse_mode if view.mouse_mode is not None else prev.mouse_mode,
+            window_title=(
+                view.window_title if view.window_title is not None else prev.window_title
+            ),
+        )
 
     def update(self, output: str) -> None:
         """Redraw the screen with new output."""
@@ -63,13 +101,23 @@ class _TerminalRenderer:
         sys.stdout.flush()
 
     def stop(self) -> None:
-        """Show cursor and leave alternate screen buffer."""
+        """Show cursor and leave alternate screen buffer.
+
+        Each step is individually guarded so a failure in one does
+        not prevent the remaining cleanup from running.
+        """
         if not self._started:
             return
         self._started = False
-        sys.stdout.write("\033[?25h")  # Show cursor
-        sys.stdout.write("\033[?1049l")  # Leave alternate screen
-        sys.stdout.flush()
+        try:
+            # Disable mouse mode if it was enabled
+            if self._view_state.mouse_mode:
+                sys.stdout.write("\033[?1003l")
+            sys.stdout.write("\033[?25h")  # Show cursor
+            sys.stdout.write("\033[?1049l")  # Leave alternate screen
+            sys.stdout.flush()
+        except Exception:
+            pass  # Best-effort terminal restoration
 
 
 class App:
@@ -93,6 +141,7 @@ class App:
         env: Any = None,
         flow: Flow | None = None,
         exit_template: str = "",
+        filter: Callable | None = None,
     ) -> None:
         self._target = target
         self._tick_rate = tick_rate
@@ -103,6 +152,7 @@ class App:
         self._exit_template = exit_template
         self._status = AppStatus.IDLE
         self._stop = threading.Event()
+        self._filter = filter
 
         # Flow mode: build reducer from flow
         if flow is not None:
@@ -255,6 +305,10 @@ class App:
 
             # Subscribe to state changes for re-rendering
             def _on_state_change() -> None:
+                # Apply ViewState if the reducer set one
+                view = store.view_state
+                if view is not None:
+                    renderer.apply_view_state(view)
                 self._render_state(store.state, env, renderer)
 
             unsubscribe = store.subscribe(_on_state_change)
@@ -273,12 +327,24 @@ class App:
                         if quit_dispatched:
                             break
                         quit_dispatched = True
-                        store.dispatch(Action("@@QUIT"))
+                        action = Action("@@QUIT")
+                        if self._filter:
+                            action = self._filter(store.state, action)
+                        if action is not None:
+                            store.dispatch(action)
                         if store.quit_requested:
                             break
                         continue
 
-                    store.dispatch(Action("@@KEY", payload=key))
+                    action = Action("@@KEY", payload=key)
+
+                    # Apply message filter
+                    if self._filter:
+                        action = self._filter(store.state, action)
+                        if action is None:
+                            continue
+
+                    store.dispatch(action)
 
                     if store.quit_requested:
                         break
@@ -288,13 +354,18 @@ class App:
             unsubscribe()
 
         finally:
+            # Each cleanup step is individually guarded so a failure in one
+            # does not prevent the rest from running.
             if tick_thread is not None:
-                stop_tick.set()
+                with contextlib.suppress(Exception):
+                    stop_tick.set()
             with contextlib.suppress(Exception):
                 renderer.stop()
             if original_sigwinch is not None:
-                signal.signal(signal.SIGWINCH, original_sigwinch)
-            store.shutdown()
+                with contextlib.suppress(Exception):
+                    signal.signal(signal.SIGWINCH, original_sigwinch)
+            with contextlib.suppress(Exception):
+                store.shutdown()
 
         final_state = store.state
 

@@ -158,3 +158,26 @@ Under Python 3.14t free-threading, forked sagas execute with true parallelism.
 :::{tip}
 Keep sagas focused on coordination, not computation. If you need heavy processing, put it in a function and `Call` it — that way the saga remains readable and the function is independently testable.
 :::
+
+## Error recovery
+
+If an unhandled exception occurs in a saga, Milo dispatches a `@@SAGA_ERROR` action instead of swallowing the error silently. Your reducer can handle it gracefully:
+
+```python
+def reducer(state, action):
+    if action.type == "@@SAGA_ERROR":
+        return {**state, "error": action.payload["error"]}
+    return state
+```
+
+The payload contains `{"error": "message", "type": "ExceptionTypeName"}`.
+
+:::{note}
+The store continues working after a saga error — other sagas and dispatches are unaffected. This matches Bubbletea's pattern of recovering from panics in command goroutines.
+:::
+
+## Sagas vs. Commands
+
+For one-shot effects (fetch a URL, write a file, dispatch the result), consider using [[docs/usage/commands-effects|Commands]] instead. Commands are simpler — a plain function instead of a generator — and handle the dispatch-result pattern automatically.
+
+Use sagas when you need multi-step coordination: reading state mid-effect, retrying with backoff, forking child tasks, or sequencing multiple dependent calls.

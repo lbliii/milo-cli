@@ -77,7 +77,9 @@ class TestAction:
         assert "@@INIT" in BUILTIN_ACTIONS
         assert "@@KEY" in BUILTIN_ACTIONS
         assert "@@QUIT" in BUILTIN_ACTIONS
-        assert len(BUILTIN_ACTIONS) == 13
+        assert "@@SAGA_ERROR" in BUILTIN_ACTIONS
+        assert "@@CMD_ERROR" in BUILTIN_ACTIONS
+        assert len(BUILTIN_ACTIONS) == 15
 
 
 class TestEffects:

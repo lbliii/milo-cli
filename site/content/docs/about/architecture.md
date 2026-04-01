@@ -39,10 +39,10 @@ Every state transition is explicit. There are no hidden mutations, no event bus,
 | Elm concept | Milo implementation |
 |-------------|-------------------|
 | Model | Plain dicts or frozen dataclasses |
-| View | Kida templates (`.kida` files) |
+| View | Kida templates (`.kida` files) + `ViewState` for terminal features |
 | Update | Reducer functions: `(state, action) -> state` |
-| Commands | Sagas: generator functions yielding effect descriptors |
-| Subscriptions | `tick_rate`, `SIGWINCH` handler, `KeyReader` |
+| Commands | `Cmd` thunks (one-shot) or sagas (multi-step generators) |
+| Subscriptions | `tick_rate`, `TickCmd`, `SIGWINCH` handler, `KeyReader` |
 | Runtime | `App` event loop + `Store` |
 
 ## App lifecycle
@@ -56,12 +56,18 @@ flowchart TB
     end
 
     subgraph Loop
-        Read[Read key] -->|"@@KEY"| Dispatch
+        Read[Read key] -->|"@@KEY"| Filter[Message filter]
+        Filter -->|action or drop| Dispatch
         Dispatch --> Reducer
         Reducer -->|state| Render[Re-render template]
         Reducer -->|ReducerResult| Sagas[Schedule sagas]
+        Reducer -->|ReducerResult| Cmds[Execute commands]
+        Reducer -->|ViewState| ViewDiff[Apply terminal state]
         Sagas -->|ThreadPool| Effects[Execute effects]
         Effects -->|"Put(action)"| Dispatch
+        Cmds -->|ThreadPool| CmdRun[Run Cmd thunks]
+        CmdRun -->|"Action"| Dispatch
+        ViewDiff --> Render
         Render --> Read
     end
 

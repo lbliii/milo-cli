@@ -1,0 +1,8 @@
+{% from "components/_defs.kida" import status_line %}
+{% if state.status == "done" %}
+{% set ok = state.results | selectattr("status") | list | length %}
+{% set fail = state.results | length - ok %}
+{{ status_line("success", ok ~ " succeeded, " ~ fail ~ " failed") }}
+{% else %}
+{{ status_line("info", "Goodbye!") }}
+{% endif %}
