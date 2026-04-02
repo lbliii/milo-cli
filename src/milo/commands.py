@@ -780,7 +780,13 @@ class CLI:
 
         # Before-command hooks
         for hook in self._before_command:
-            hook(ctx, cmd.name, kwargs)
+            try:
+                hook(ctx, cmd.name, kwargs)
+            except SystemExit:
+                raise
+            except Exception as exc:
+                ctx.error(f"before_command hook failed: {type(exc).__name__}: {exc}")
+                sys.exit(1)
 
         # Call handler through middleware if present
         try:
@@ -820,7 +826,10 @@ class CLI:
 
         # After-command hooks
         for hook in self._after_command:
-            hook(ctx, cmd.name, result)
+            try:
+                hook(ctx, cmd.name, result)
+            except Exception as exc:
+                ctx.error(f"after_command hook failed: {type(exc).__name__}: {exc}")
 
         # Format and output (to file or stdout)
         output_file = ctx.output_file
@@ -977,10 +986,12 @@ class CLI:
         }
 
         if self._middleware:
+            from milo.context import Context as ContextClass
             from milo.middleware import MCPCall
 
+            ctx = ContextClass()
             call = MCPCall(method="command", name=command_name, arguments=valid)
-            result = self._middleware.execute(None, call, lambda c: cmd.handler(**c.arguments))
+            result = self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
         else:
             result = cmd.handler(**valid)
 

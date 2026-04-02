@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -26,7 +26,10 @@ from milo._types import (
     Select,
     Sequence,
     TickCmd,
+    ViewState,
 )
+
+_logger = logging.getLogger("milo.state")
 
 
 class Store:
@@ -190,13 +193,15 @@ class Store:
             pass
         except Exception as e:
             # Dispatch error to the store so reducers can handle it
-            with contextlib.suppress(Exception):
+            try:
                 self.dispatch(
                     Action(
                         "@@SAGA_ERROR",
                         payload={"error": str(e), "type": type(e).__name__},
                     )
                 )
+            except Exception:
+                _logger.debug("Failed to dispatch @@SAGA_ERROR", exc_info=True)
 
     def _exec_cmd(self, cmd: Any) -> None:
         """Execute a Cmd, Batch, Sequence, or TickCmd."""
@@ -218,13 +223,15 @@ class Store:
             if result is not None:
                 self.dispatch(result)
         except Exception as e:
-            with contextlib.suppress(Exception):
+            try:
                 self.dispatch(
                     Action(
                         "@@CMD_ERROR",
                         payload={"error": str(e), "type": type(e).__name__},
                     )
                 )
+            except Exception:
+                _logger.debug("Failed to dispatch @@CMD_ERROR", exc_info=True)
 
     def _run_sequence(self, cmds: tuple) -> None:
         """Run commands serially, dispatching each result before the next."""
@@ -242,7 +249,7 @@ class Store:
                             futures.append(self._executor.submit(self._run_cmd, c.fn))
                         else:
                             self._exec_cmd(c)
-                    concurrent.futures.wait(futures)
+                    concurrent.futures.wait(futures, timeout=60)
                 case Sequence(seq_cmds):
                     self._run_sequence(seq_cmds)
                 case TickCmd(interval):
@@ -279,8 +286,8 @@ class Store:
         return self._recording
 
     def shutdown(self) -> None:
-        """Shut down the thread pool."""
-        self._executor.shutdown(wait=False)
+        """Shut down the thread pool, waiting for pending work."""
+        self._executor.shutdown(wait=True)
 
 
 def combine_reducers(**reducers: Callable) -> Callable:
@@ -310,14 +317,14 @@ def combine_reducers(**reducers: Callable) -> Callable:
                 all_sagas.extend(next_val.sagas)
                 all_cmds.extend(next_val.cmds)
                 if next_val.view is not None:
-                    last_view = next_val.view
+                    last_view = _merge_view(last_view, next_val.view)
                 changed = True
             elif isinstance(next_val, ReducerResult):
                 next_state[key] = next_val.state
                 all_sagas.extend(next_val.sagas)
                 all_cmds.extend(next_val.cmds)
                 if next_val.view is not None:
-                    last_view = next_val.view
+                    last_view = _merge_view(last_view, next_val.view)
                 changed = True
             else:
                 next_state[key] = next_val
@@ -344,6 +351,20 @@ def combine_reducers(**reducers: Callable) -> Callable:
         return result
 
     return combined
+
+
+def _merge_view(prev: ViewState | None, new: ViewState) -> ViewState:
+    """Merge two ViewStates: explicitly-set fields in *new* override *prev*."""
+    if prev is None:
+        return new
+    return ViewState(
+        alt_screen=new.alt_screen if new.alt_screen is not None else prev.alt_screen,
+        cursor_visible=new.cursor_visible
+        if new.cursor_visible is not None
+        else prev.cursor_visible,
+        window_title=new.window_title if new.window_title is not None else prev.window_title,
+        mouse_mode=new.mouse_mode if new.mouse_mode is not None else prev.mouse_mode,
+    )
 
 
 def _execute_retry(
