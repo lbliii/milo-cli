@@ -425,9 +425,9 @@ class TestTickCmd:
         store = Store(reducer, None)
         store.dispatch(Action("start"))
         tick_received.wait(timeout=2.0)
+        store.shutdown()
         assert tick_received.is_set()
         assert store.state >= 1
-        store.shutdown()
 
     def test_tick_cmd_self_sustaining(self):
         """Returning another TickCmd from @@TICK creates a recurring loop."""
