@@ -131,7 +131,7 @@ def generate_powershell_completion(cli: CLI) -> str:
         flag_completions = ", ".join(f"'{f}'" for f in flags)
         subcmd_blocks.append(
             f"        '{cmd}' {{ @({flag_completions}) | "
-            f"Where-Object {{ $_ -like \"$wordToComplete*\" }} }}"
+            f'Where-Object {{ $_ -like "$wordToComplete*" }} }}'
         )
 
     subcmd_block = "\n".join(subcmd_blocks)
