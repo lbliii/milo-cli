@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_REGISTRY_DIR = Path.home() / ".milo"
+from milo._compat import data_dir
+
+_REGISTRY_DIR = data_dir()
 _REGISTRY_FILE = _REGISTRY_DIR / "registry.json"
 
 

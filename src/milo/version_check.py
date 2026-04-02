@@ -8,6 +8,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from milo._compat import data_dir
+
 
 @dataclass(frozen=True, slots=True)
 class VersionInfo:
@@ -19,7 +21,7 @@ class VersionInfo:
     message: str = ""
 
 
-_CACHE_DIR = Path.home() / ".milo" / "cache"
+_CACHE_DIR = data_dir() / "cache"
 _CHECK_INTERVAL = 86400  # 24 hours
 
 
