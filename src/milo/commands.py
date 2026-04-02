@@ -267,7 +267,7 @@ class CLI:
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            resource_name = name or func.__name__
+            resource_name = name or getattr(func, "__name__", repr(func))
             res = ResourceDef(
                 uri=uri,
                 name=resource_name,

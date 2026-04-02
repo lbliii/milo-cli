@@ -207,7 +207,7 @@ class Config:
         spec: ConfigSpec,
         *,
         root: Path | None = None,
-        format: str = "toml",
+        fmt: str = "toml",
     ) -> Path:
         """Generate a starter config file from a ConfigSpec.
 
@@ -217,18 +217,18 @@ class Config:
         root = root or Path.cwd()
 
         # Determine filename from first source pattern, or use a default
-        filename = spec.sources[0].replace("*", "app") if spec.sources else f"config.{format}"
+        filename = spec.sources[0].replace("*", "app") if spec.sources else f"config.{fmt}"
 
         filepath = root / filename
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
         data = spec.defaults or {}
 
-        if format == "toml" or filepath.suffix == ".toml":
+        if fmt == "toml" or filepath.suffix == ".toml":
             _write_toml(filepath, data)
-        elif format in ("yaml", "yml") or filepath.suffix in (".yaml", ".yml"):
+        elif fmt in ("yaml", "yml") or filepath.suffix in (".yaml", ".yml"):
             _write_yaml(filepath, data)
-        elif format == "json" or filepath.suffix == ".json":
+        elif fmt == "json" or filepath.suffix == ".json":
             import json
 
             with open(filepath, "w") as f:

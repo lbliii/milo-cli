@@ -65,13 +65,19 @@ exclude_lines = [
 python-version = "3.14"
 
 [tool.ty.rules]
-call-non-callable = "warn"
+call-non-callable = "error"
 unresolved-attribute = "warn"
+unresolved-import = "error"
+invalid-argument-type = "error"
+possibly-unresolved-reference = "warn"
+invalid-return-type = "error"
+invalid-assignment = "error"
+
+[[tool.ty.overrides]]
+include = ["src/milo/dev.py"]
+
+[tool.ty.overrides.rules]
 unresolved-import = "warn"
-invalid-argument-type = "warn"
-possibly-unresolved-reference = "ignore"
-invalid-return-type = "warn"
-invalid-assignment = "warn"
 
 [tool.ruff]
 line-length = 100
@@ -92,12 +98,32 @@ select = [
     "C4",   # unnecessary comprehensions/list()/dict() calls
     "RUF",  # Ruff-specific (unused noqa, mutable class defaults, etc.)
     "PT",   # pytest style
+    "A",    # flake8-builtins - shadowing builtins
+    "S",    # bandit - security checks
+    "ARG",  # flake8-unused-arguments
+    "T20",  # flake8-print - no print() in library code
+    "ERA",  # eradicate - no commented-out code
+    "RSE",  # flake8-raise - clean raise statements
+    "FA",   # flake8-future-annotations
+    "TCH",  # flake8-type-checking - optimize type imports
+    "TID",  # flake8-tidy-imports
 ]
-ignore = ["E501"] # Line length handled by formatter
+ignore = [
+    "E501",   # line length handled by formatter
+    "A003",   # class attribute shadowing builtin (format, type on dataclasses is fine)
+    "TCH",    # Python 3.14 has lazy annotations (PEP 649/749); TYPE_CHECKING blocks unnecessary
+    "ERA001", # section-header comments trigger false positives
+    "S603",   # subprocess calls are expected in a CLI framework
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"tests/**/*.py" = ["S101", "SIM117", "N806"]
+"tests/**/*.py" = ["S101", "S108", "S110", "S604", "SIM117", "N806", "ARG"]
+"src/milo/_child.py" = ["S101"]          # asserts for type narrowing on subprocess pipes
+"src/milo/testing/*.py" = ["S101", "ARG"] # test helpers use assert and may have unused args
+"src/milo/version_check.py" = ["S110", "S310"] # best-effort cache reads + known PyPI URL
+"src/milo/mcp.py" = ["ARG002"]            # MCP protocol methods require params signature
+"src/milo/gateway.py" = ["ARG002", "S110"] # MCP protocol methods + best-effort discovery
 
 [dependency-groups]
 dev = [

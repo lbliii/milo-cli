@@ -136,7 +136,7 @@ def _type_to_schema(annotation: Any, _seen: set[int] | None = None) -> dict[str,
         props = {}
         for fname, ftype in hints.items():
             props[fname] = _type_to_schema(ftype, _seen)
-        result = {"type": "object", "properties": props}
+        result: dict[str, Any] = {"type": "object", "properties": props}
         # TypedDict required keys
         req_keys = getattr(annotation, "__required_keys__", set())
         if req_keys:

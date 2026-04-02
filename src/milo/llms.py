@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from milo.commands import CLI, CommandDef, LazyCommandDef
     from milo.groups import Group
+
+from milo.commands import CLI, CommandDef, LazyCommandDef
 
 
 def generate_llms_txt(cli: CLI) -> str:
@@ -119,7 +120,7 @@ def _format_group(group: Group, lines: list[str], depth: int) -> None:
         _format_group(sub_group, lines, depth=depth + 1)
 
 
-def _format_command(cmd: CommandDef) -> str:
+def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
     """Format a single command as an llms.txt entry."""
     parts = [f"- **{cmd.name}**"]
 

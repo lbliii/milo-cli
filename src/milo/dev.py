@@ -92,7 +92,7 @@ class _WatchfilesWatcher(_FileWatcher):
     """Rust-based watcher using the ``watchfiles`` package."""
 
     def watch(self, callback: Any, stop_event: threading.Event) -> None:
-        import watchfiles  # type: ignore[import-untyped]
+        import watchfiles  # type: ignore[import-untyped,unresolved-import]
 
         for changes in watchfiles.watch(
             *self._dirs,
@@ -116,7 +116,7 @@ def _make_watcher(
 ) -> _FileWatcher:
     """Try watchfiles first, fall back to polling."""
     try:
-        import watchfiles  # type: ignore[import-untyped]  # noqa: F401
+        import watchfiles  # type: ignore[import-untyped,unresolved-import]  # noqa: F401
 
         return _WatchfilesWatcher(dirs, extensions=extensions, poll_interval=poll_interval)
     except ImportError:

@@ -86,9 +86,9 @@ class TestMessageFilter:
             template="t.kida",
             reducer=lambda s, a: s or 0,
             initial_state=0,
-            filter=my_filter,
+            msg_filter=my_filter,
         )
-        assert app._filter is my_filter
+        assert app._msg_filter is my_filter
 
     def test_no_filter_by_default(self):
         app = App(
@@ -96,7 +96,7 @@ class TestMessageFilter:
             reducer=lambda s, a: s or 0,
             initial_state=0,
         )
-        assert app._filter is None
+        assert app._msg_filter is None
 
 
 # ---------------------------------------------------------------------------
@@ -483,9 +483,9 @@ class TestMessageFilterApplication:
             template="t.kida",
             reducer=reducer,
             initial_state=0,
-            filter=block_all,
+            msg_filter=block_all,
         )
-        assert app._filter is block_all
+        assert app._msg_filter is block_all
 
     def test_filter_passes_action_through(self):
         """A filter that returns the action allows it through."""
@@ -497,9 +497,9 @@ class TestMessageFilterApplication:
             template="t.kida",
             reducer=lambda s, a: s or 0,
             initial_state=0,
-            filter=passthrough,
+            msg_filter=passthrough,
         )
-        assert app._filter is passthrough
+        assert app._msg_filter is passthrough
 
     def test_filter_can_transform_action(self):
         """A filter can replace the action with a different one."""
@@ -513,9 +513,9 @@ class TestMessageFilterApplication:
             template="t.kida",
             reducer=lambda s, a: s or 0,
             initial_state=0,
-            filter=transform,
+            msg_filter=transform,
         )
-        result = app._filter(0, Action("raw", payload=42))
+        result = app._msg_filter(0, Action("raw", payload=42))
         assert result.type == "transformed"
         assert result.payload == 42
 

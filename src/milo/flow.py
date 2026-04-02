@@ -84,7 +84,7 @@ class Flow:
         for t in self.transitions:
             transition_map[(t.from_screen, t.on_action)] = t.to_screen
 
-        def flow_reducer(state: FlowState | None, action: Action) -> FlowState:
+        def flow_reducer(state: FlowState | None, action: Action) -> FlowState | ReducerResult | Quit:
             if state is None:
                 first = self.screens[0]
                 initial_states = {s.name: s.reducer(None, Action("@@INIT")) for s in self.screens}

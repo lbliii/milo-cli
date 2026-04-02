@@ -11,7 +11,7 @@ from pathlib import Path
 def _load_app(app_path: str):
     """Load an App instance from a module:attribute path like 'myapp:app'."""
     if ":" not in app_path:
-        print(f"Error: expected format 'module:attribute', got '{app_path}'", file=sys.stderr)
+        sys.stderr.write(f"Error: expected format 'module:attribute', got '{app_path}'\n")
         sys.exit(1)
 
     module_path, attr_name = app_path.rsplit(":", 1)
@@ -24,13 +24,13 @@ def _load_app(app_path: str):
     try:
         module = importlib.import_module(module_path)
     except ModuleNotFoundError as e:
-        print(f"Error: could not import '{module_path}': {e}", file=sys.stderr)
+        sys.stderr.write(f"Error: could not import '{module_path}': {e}\n")
         sys.exit(1)
 
     try:
         app = getattr(module, attr_name)
     except AttributeError:
-        print(f"Error: '{module_path}' has no attribute '{attr_name}'", file=sys.stderr)
+        sys.stderr.write(f"Error: '{module_path}' has no attribute '{attr_name}'\n")
         sys.exit(1)
 
     return app
@@ -53,7 +53,7 @@ def _cmd_replay(args: argparse.Namespace) -> None:
 
     recording = load_recording(args.session)
 
-    def default_reducer(state, action):
+    def default_reducer(state, _action):
         return state
 
     reducer = default_reducer
@@ -64,7 +64,7 @@ def _cmd_replay(args: argparse.Namespace) -> None:
 
     def on_state(state, action):
         if args.diff:
-            print(f"[{action.type}] -> {state!r}")
+            sys.stdout.write(f"[{action.type}] -> {state!r}\n")
 
     final = replay(
         recording,
@@ -76,9 +76,9 @@ def _cmd_replay(args: argparse.Namespace) -> None:
     )
 
     if args.assert_hashes:
-        print("All state hashes match.", file=sys.stderr)
+        sys.stderr.write("All state hashes match.\n")
     else:
-        print(f"Replay complete. Final state: {final!r}")
+        sys.stdout.write(f"Replay complete. Final state: {final!r}\n")
 
 
 def main(argv: list[str] | None = None) -> None:
