@@ -425,9 +425,9 @@ class TestTickCmd:
         store = Store(reducer, None)
         store.dispatch(Action("start"))
         tick_received.wait(timeout=2.0)
+        store.shutdown()
         assert tick_received.is_set()
         assert store.state >= 1
-        store.shutdown()
 
     def test_tick_cmd_self_sustaining(self):
         """Returning another TickCmd from @@TICK creates a recurring loop."""
@@ -457,3 +457,178 @@ class TestTickCmd:
     def test_tick_cmd_dataclass(self):
         t = TickCmd(interval=0.5)
         assert t.interval == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Message filter application
+# ---------------------------------------------------------------------------
+
+
+class TestMessageFilterApplication:
+    def test_filter_blocks_action(self):
+        """A filter that returns None prevents the action from reaching the reducer."""
+
+        def block_all(state, action):
+            return None
+
+        reducer_called = []
+
+        def reducer(state, action):
+            if state is None:
+                return 0
+            reducer_called.append(action.type)
+            return state
+
+        app = App(
+            template="t.kida",
+            reducer=reducer,
+            initial_state=0,
+            filter=block_all,
+        )
+        assert app._filter is block_all
+
+    def test_filter_passes_action_through(self):
+        """A filter that returns the action allows it through."""
+
+        def passthrough(state, action):
+            return action
+
+        app = App(
+            template="t.kida",
+            reducer=lambda s, a: s or 0,
+            initial_state=0,
+            filter=passthrough,
+        )
+        assert app._filter is passthrough
+
+    def test_filter_can_transform_action(self):
+        """A filter can replace the action with a different one."""
+
+        def transform(state, action):
+            if action.type == "raw":
+                return Action("transformed", payload=action.payload)
+            return action
+
+        app = App(
+            template="t.kida",
+            reducer=lambda s, a: s or 0,
+            initial_state=0,
+            filter=transform,
+        )
+        result = app._filter(0, Action("raw", payload=42))
+        assert result.type == "transformed"
+        assert result.payload == 42
+
+
+# ---------------------------------------------------------------------------
+# Task 8: ViewState merging in combine_reducers
+# ---------------------------------------------------------------------------
+
+
+class TestViewStateMerging:
+    def test_combine_reducers_merges_view_states(self):
+        """combine_reducers merges ViewState fields from multiple reducers."""
+
+        def reducer_a(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=1, view=ViewState(cursor_visible=False))
+            return state
+
+        def reducer_b(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=2, view=ViewState(window_title="hello"))
+            return state
+
+        combined = combine_reducers(a=reducer_a, b=reducer_b)
+        result = combined({"a": 0, "b": 0}, Action("trigger"))
+        assert isinstance(result, ReducerResult)
+        assert result.view.cursor_visible is False
+        assert result.view.window_title == "hello"
+
+    def test_later_reducer_overrides_same_field(self):
+        """When two reducers set the same ViewState field, later one wins."""
+
+        def reducer_a(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=1, view=ViewState(cursor_visible=False))
+            return state
+
+        def reducer_b(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=2, view=ViewState(cursor_visible=True))
+            return state
+
+        combined = combine_reducers(a=reducer_a, b=reducer_b)
+        result = combined({"a": 0, "b": 0}, Action("trigger"))
+        assert isinstance(result, ReducerResult)
+        assert result.view.cursor_visible is True
+
+
+# ---------------------------------------------------------------------------
+# Task 9: Nested Batch and error isolation
+# ---------------------------------------------------------------------------
+
+
+class TestNestedBatch:
+    def test_nested_batch_in_batch(self):
+        """Nested Batch structures flatten correctly."""
+        results = []
+        lock = threading.Lock()
+
+        def cmd_a():
+            with lock:
+                results.append("a")
+            return None
+
+        def cmd_b():
+            with lock:
+                results.append("b")
+            return None
+
+        def reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                inner = Batch((Cmd(cmd_a), Cmd(cmd_b)))
+                return ReducerResult(state, cmds=(Batch((inner,)),))
+            return state
+
+        store = Store(reducer, None)
+        store.dispatch(Action("trigger"))
+        store._executor.shutdown(wait=True)
+        assert sorted(results) == ["a", "b"]
+
+
+class TestBatchErrorIsolation:
+    def test_batch_error_does_not_block_others(self):
+        """One failing Cmd in a Batch doesn't prevent others from running."""
+        results = []
+        lock = threading.Lock()
+
+        def good_cmd():
+            with lock:
+                results.append("good")
+            return None
+
+        def bad_cmd():
+            raise ValueError("fail")
+
+        def reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state, cmds=(Batch((Cmd(bad_cmd), Cmd(good_cmd))),))
+            return state
+
+        store = Store(reducer, None)
+        store.dispatch(Action("trigger"))
+        store._executor.shutdown(wait=True)
+        assert "good" in results

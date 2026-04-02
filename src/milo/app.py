@@ -326,12 +326,13 @@ class App:
                     if key.ctrl and key.char == "c":
                         if quit_dispatched:
                             break
-                        quit_dispatched = True
                         action = Action("@@QUIT")
                         if self._filter:
                             action = self._filter(store.state, action)
-                        if action is not None:
-                            store.dispatch(action)
+                        if action is None:
+                            continue
+                        quit_dispatched = True
+                        store.dispatch(action)
                         if store.quit_requested:
                             break
                         continue

@@ -2,28 +2,7 @@
 
 All notable changes to Milo are documented here.
 
-## 0.2.0 — Unreleased
-
-### Added
-
-- **Commands** — Lightweight `Cmd` effect type as a simpler alternative to sagas for one-shot side effects. A `Cmd` is a plain function `() -> Action | None` that runs on the thread pool.
-- **Batch and Sequence combinators** — `Batch(*cmds)` runs commands concurrently; `Sequence(*cmds)` runs them serially. Both support recursive nesting.
-- **`compact_cmds()`** — Helper to strip `None` entries from command tuples.
-- **`TickCmd(interval)`** — Self-sustaining tick pattern. Schedules a single `@@TICK` after *interval* seconds. Return another `TickCmd` from `@@TICK` to keep ticking; omit to stop. Gives per-component, dynamic tick control.
-- **`ViewState`** — Declarative terminal state (`alt_screen`, `cursor_visible`, `window_title`, `mouse_mode`). Returned via `ReducerResult(state, view=ViewState(...))`. The renderer diffs previous vs. current and applies only the changes.
-- **Message filter** — `App(filter=fn)` accepts a function `(state, action) -> action | None` that intercepts actions before dispatch. Return `None` to drop, return a different action to transform.
-- **Saga error recovery** — Unhandled saga exceptions now dispatch `@@SAGA_ERROR` instead of being swallowed silently. Payload: `{"error": "message", "type": "ExceptionTypeName"}`.
-- **Cmd error recovery** — Unhandled `Cmd` exceptions dispatch `@@CMD_ERROR` with the same payload shape.
-- **Bulletproof terminal cleanup** — Each step in `App.run()` finally block is individually guarded so a failure in one does not prevent the rest from running.
-
-### Changed
-
-- **`ReducerResult`** — now accepts `cmds` and `view` fields alongside `sagas`
-- **`Quit`** — now accepts `cmds` and `view` fields alongside `sagas`
-- **`combine_reducers`** — collects `cmds` and `view` from child reducers
-- **`_TerminalRenderer`** — supports `apply_view_state()` for declarative terminal feature control
-
-## 0.1.1 — 2026-03-31
+## 0.1.1 — 2026-04-02
 
 ### Added
 
@@ -47,6 +26,17 @@ All notable changes to Milo are documented here.
 - **`Retry` saga effect** — retry with backoff for transient failures
 - **`Config.init()` scaffolding** — generate starter config files
 - **`devtool` example** — showcases doctor, hooks, examples-in-help, structured errors, and completions
+- **Commands** — Lightweight `Cmd` effect type as a simpler alternative to sagas for one-shot side effects. A `Cmd` is a plain function `() -> Action | None` that runs on the thread pool.
+- **Batch and Sequence combinators** — `Batch(*cmds)` runs commands concurrently; `Sequence(*cmds)` runs them serially. Both support recursive nesting.
+- **`compact_cmds()`** — Helper to strip `None` entries from command tuples.
+- **`TickCmd(interval)`** — Self-sustaining tick pattern. Schedules a single `@@TICK` after *interval* seconds. Return another `TickCmd` from `@@TICK` to keep ticking; omit to stop. Gives per-component, dynamic tick control.
+- **`ViewState`** — Declarative terminal state (`alt_screen`, `cursor_visible`, `window_title`, `mouse_mode`). Returned via `ReducerResult(state, view=ViewState(...))`. The renderer diffs previous vs. current and applies only the changes.
+- **Message filter** — `App(filter=fn)` accepts a function `(state, action) -> action | None` that intercepts actions before dispatch. Return `None` to drop, return a different action to transform.
+- **Saga error recovery** — Unhandled saga exceptions now dispatch `@@SAGA_ERROR` instead of being swallowed silently. Payload: `{"error": "message", "type": "ExceptionTypeName"}`.
+- **Cmd error recovery** — Unhandled `Cmd` exceptions dispatch `@@CMD_ERROR` with the same payload shape.
+- **Bulletproof terminal cleanup** — Each step in `App.run()` finally block is individually guarded so a failure in one does not prevent the rest from running.
+- **MCP dispatch router** — Extracted shared `_mcp_router.py` to deduplicate tool/resource/prompt dispatch between `mcp.py` and `gateway.py`
+- **`spinner` example** — showcases `Cmd`, `Batch`, `TickCmd`, and `ViewState` patterns
 
 ### Changed
 
@@ -54,6 +44,14 @@ All notable changes to Milo are documented here.
 - **Shared JSON-RPC helpers** — extracted `_jsonrpc.py` with `MCP_VERSION` constant to reduce duplication in `gateway.py` and `mcp.py`
 - **Unified command registration** — `_make_command_def` helper shared between CLI and Group
 - **Updated all Elm examples** — counter, stopwatch, todo, filepicker, and wizard use the new combinator and `App.from_dir()` APIs
+- **`ReducerResult`** — now accepts `cmds` and `view` fields alongside `sagas`
+- **`Quit`** — now accepts `cmds` and `view` fields alongside `sagas`
+- **`combine_reducers`** — collects `cmds` and `view` from child reducers
+- **`_TerminalRenderer`** — supports `apply_view_state()` for declarative terminal feature control
+- **Middleware wired into dispatch** — registered middleware now executes in `CLI.run()` and `CLI.call()` paths
+- **Parallelized gateway** — health checks and gateway discovery use `ThreadPoolExecutor`
+- **Lazy `walk_commands`** — converted to generators to avoid eager materialization
+- **Workflow detection** — pre-computed property sets eliminate O(n²) redundant work
 
 ### Fixed
 
@@ -67,6 +65,15 @@ All notable changes to Milo are documented here.
 - **`--version` rendering** — guards template path when no action groups are captured
 - **`generate_help_all` formatting** — fixed unclosed backtick in global options section
 - **uv detection** — version upgrade notices use `uv pip install` when running under uv
+- **Version string drift** — `cli.py`, `mcp.py`, and `gateway.py` now use `__version__` from `__init__.py` instead of hardcoded strings
+- **ViewState merging in `combine_reducers`** — multiple child reducers' ViewState fields are now merged instead of last-wins overwrite
+- **Message filter + Ctrl+C** — `quit_dispatched` flag is only set after the filter passes, so filtered @@QUIT no longer locks out subsequent Ctrl+C
+- **`CLI.call()` middleware context** — now provides a proper `Context` instead of `None`
+- **Gateway child I/O timeout** — `_read_line()` enforces a 30-second deadline to prevent deadlocks when a child process dies mid-write
+- **`ThreadPoolExecutor` shutdown** — `Store.shutdown()` now waits for pending work (`wait=True`)
+- **Batch timeout** — nested `Batch` inside `Sequence` uses a 60-second timeout on `concurrent.futures.wait()`
+- **Error recovery logging** — failed `@@SAGA_ERROR`/`@@CMD_ERROR` dispatches are logged at DEBUG level instead of silently swallowed
+- **Before/after hook error handling** — before-command hook errors now exit with code 1; after-command hook errors are logged without crashing
 
 ## 0.1.0 — 2026-03-26
 

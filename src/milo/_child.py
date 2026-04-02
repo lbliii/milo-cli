@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import threading
 import time
 from typing import Any
+
+_READ_TIMEOUT = 30.0  # seconds
 
 
 class ChildProcess:
@@ -134,8 +137,25 @@ class ChildProcess:
         self._proc.stdin.flush()
 
     def _read_line(self) -> str:
-        """Read a line from the child's stdout."""
+        """Read a line from the child's stdout with timeout.
+
+        Uses a background thread so we can enforce a deadline even
+        when the child blocks without writing a newline.
+        """
         assert self._proc is not None
         assert self._proc.stdout is not None
-        line = self._proc.stdout.readline()
-        return line.strip()
+        result: list[str] = []
+        reader = threading.Thread(
+            target=lambda: result.append(self._proc.stdout.readline()),  # type: ignore[union-attr]
+            daemon=True,
+        )
+        reader.start()
+        reader.join(timeout=_READ_TIMEOUT)
+        if reader.is_alive():
+            # Timed out — kill the child to unblock the reader thread
+            with contextlib.suppress(OSError):
+                self._proc.kill()
+            self._proc = None
+            self._initialized = False
+            return ""
+        return result[0].strip() if result else ""

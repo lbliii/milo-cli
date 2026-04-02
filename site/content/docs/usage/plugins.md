@@ -129,6 +129,44 @@ def report_time(**kw):
     print(f"Build took {elapsed:.2f}s")
 ```
 
+## CLI middleware
+
+For intercepting MCP and CLI calls at a lower level than hooks, use the `MiddlewareStack`. Each middleware wraps the call pipeline and can inspect, modify, or short-circuit calls.
+
+```python
+from milo.middleware import MiddlewareStack, MCPCall
+
+stack = MiddlewareStack()
+
+@stack.use
+def log_calls(ctx, call: MCPCall, next_fn):
+    print(f"-> {call.method} {call.name}")
+    result = next_fn(call)
+    print(f"<- {call.name}")
+    return result
+
+@stack.use
+def inject_metadata(ctx, call: MCPCall, next_fn):
+    enriched = MCPCall(
+        method=call.method,
+        name=call.name,
+        arguments=call.arguments,
+        metadata={**call.metadata, "trace_id": "abc123"},
+    )
+    return next_fn(enriched)
+```
+
+`MCPCall` is a frozen dataclass representing an interceptable call:
+
+| Field | Description |
+|---|---|
+| `method` | Protocol method (`"tools/call"`, `"resources/read"`, etc.) |
+| `name` | Tool, resource, or prompt name |
+| `arguments` | Call arguments dict |
+| `metadata` | Arbitrary metadata dict |
+
+Execute the stack by calling `stack.execute(ctx, call, handler)`, where `handler` is the final function that processes the call. Middleware runs in registration order — the first registered middleware is the outermost wrapper.
+
 :::{tip}
 Combine with [[docs/usage/pipeline|Pipeline]] — define hooks for pipeline events and let plugins observe build progress without modifying the pipeline itself.
 :::

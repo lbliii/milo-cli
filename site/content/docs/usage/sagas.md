@@ -120,6 +120,30 @@ yield Delay(2.0)  # Wait 2 seconds
 ```
 
 :::{/tab-item}
+
+:::{tab-item} Retry
+
+Call a function with automatic retry and backoff on failure:
+
+```python
+from milo import Retry
+
+result = yield Retry(fetch_data, args=(url,), max_attempts=3, backoff="exponential")
+```
+
+If `fetch_data` raises an exception, the saga runner retries up to `max_attempts` times with the chosen backoff strategy.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `fn` | (required) | The function to call |
+| `args` | `()` | Positional arguments |
+| `kwargs` | `{}` | Keyword arguments |
+| `max_attempts` | `3` | Total attempts before propagating the error |
+| `backoff` | `"exponential"` | `"exponential"`, `"linear"`, or `"fixed"` |
+| `base_delay` | `1.0` | Initial delay in seconds between retries |
+| `max_delay` | `30.0` | Cap on delay between retries |
+
+:::{/tab-item}
 :::{/tab-set}
 
 ## Composing sagas
