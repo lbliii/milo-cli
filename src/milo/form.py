@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
@@ -263,9 +264,9 @@ def _form_fallback(specs: tuple[FieldSpec, ...] | tuple) -> dict[str, Any]:
                 raw = input(f"{spec.label} (y/n): ").strip().lower()
                 values[spec.name] = raw in ("y", "yes")
             case FieldType.SELECT:
-                print(f"{spec.label}:")
+                sys.stderr.write(f"{spec.label}:\n")
                 for i, choice in enumerate(spec.choices):
-                    print(f"  {i + 1}. {choice}")
+                    sys.stderr.write(f"  {i + 1}. {choice}\n")
                 raw = input("Choice: ").strip()
                 try:
                     idx = int(raw) - 1

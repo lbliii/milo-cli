@@ -116,7 +116,7 @@ class _TerminalRenderer:
             sys.stdout.write("\033[?25h")  # Show cursor
             sys.stdout.write("\033[?1049l")  # Leave alternate screen
             sys.stdout.flush()
-        except Exception:
+        except Exception:  # noqa: S110
             pass  # Best-effort terminal restoration
 
 
@@ -141,7 +141,7 @@ class App:
         env: Any = None,
         flow: Flow | None = None,
         exit_template: str = "",
-        filter: Callable | None = None,
+        msg_filter: Callable | None = None,
     ) -> None:
         self._target = target
         self._tick_rate = tick_rate
@@ -152,7 +152,7 @@ class App:
         self._exit_template = exit_template
         self._status = AppStatus.IDLE
         self._stop = threading.Event()
-        self._filter = filter
+        self._msg_filter = msg_filter
 
         # Flow mode: build reducer from flow
         if flow is not None:
@@ -272,7 +272,7 @@ class App:
         original_sigwinch = None
         if hasattr(signal, "SIGWINCH"):
 
-            def _on_resize(signum: int, frame: Any) -> None:
+            def _on_resize(_signum: int, _frame: Any) -> None:
                 try:
                     cols, rows = os.get_terminal_size()
                     store.dispatch(Action("@@RESIZE", payload=(cols, rows)))
@@ -327,8 +327,8 @@ class App:
                         if quit_dispatched:
                             break
                         action = Action("@@QUIT")
-                        if self._filter:
-                            action = self._filter(store.state, action)
+                        if self._msg_filter:
+                            action = self._msg_filter(store.state, action)
                         if action is None:
                             continue
                         quit_dispatched = True
@@ -340,8 +340,8 @@ class App:
                     action = Action("@@KEY", payload=key)
 
                     # Apply message filter
-                    if self._filter:
-                        action = self._filter(store.state, action)
+                    if self._msg_filter:
+                        action = self._msg_filter(store.state, action)
                         if action is None:
                             continue
 

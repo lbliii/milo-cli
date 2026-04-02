@@ -44,7 +44,7 @@ class HookRegistry:
         name: str,
         *,
         action_type: str = "",
-        description: str = "",
+        description: str = "",  # noqa: ARG002
     ) -> None:
         """Define a named hook point.
 

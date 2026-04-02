@@ -128,8 +128,9 @@ def format_error(error: Exception) -> str:
     Uses format_compact() for kida TemplateErrors and MiloErrors.
     Falls back to str() for other exceptions.
     """
-    if hasattr(error, "format_compact"):
-        return error.format_compact()
+    formatter = getattr(error, "format_compact", None)
+    if formatter is not None:
+        return formatter()
     return f"{type(error).__name__}: {error}"
 
 
@@ -158,7 +159,7 @@ def format_render_error(
                 hint=_get_hint(error),
                 docs_url=_get_docs_url(error),
             )
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     return compact

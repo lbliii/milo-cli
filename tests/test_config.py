@@ -384,7 +384,7 @@ class TestConfigInit:
             sources=("config.yaml",),
             defaults={"name": "myapp"},
         )
-        path = Config.init(spec, root=tmp_path, format="yaml")
+        path = Config.init(spec, root=tmp_path, fmt="yaml")
         assert path.exists()
         content = path.read_text()
         assert "myapp" in content
@@ -396,7 +396,7 @@ class TestConfigInit:
             sources=("config.json",),
             defaults={"name": "myapp"},
         )
-        path = Config.init(spec, root=tmp_path, format="json")
+        path = Config.init(spec, root=tmp_path, fmt="json")
         assert path.exists()
         data = json.loads(path.read_text())
         assert data["name"] == "myapp"
