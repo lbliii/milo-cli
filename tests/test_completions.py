@@ -57,9 +57,22 @@ class TestCompletionsModule:
         assert isinstance(result, str)
         assert len(result) > 0
 
+    def test_generate_powershell(self):
+        from milo.completions import generate_powershell_completion
+
+        cli = CLI(name="myapp")
+
+        @cli.command("test", description="Test")
+        def test_cmd() -> str:
+            return "ok"
+
+        script = generate_powershell_completion(cli)
+        assert "Register-ArgumentCompleter" in script
+        assert "-CommandName 'myapp'" in script
+
     def test_install_completions_unsupported_shell(self):
         from milo.completions import install_completions
 
         cli = CLI(name="myapp")
-        result = install_completions(cli, shell="powershell")
+        result = install_completions(cli, shell="nushell")
         assert "Unsupported shell" in result

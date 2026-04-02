@@ -57,6 +57,16 @@ def read_available(fd: int | None = None, max_bytes: int = 16) -> str:
     if fd is None:
         fd = sys.stdin.fileno()
 
+    if sys.platform == "win32":
+        import msvcrt
+
+        result = ""
+        for _ in range(max_bytes):
+            if not msvcrt.kbhit():
+                break
+            result += msvcrt.getwch()
+        return result
+
     import os
     import select
 

@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import shutil
-import signal
 import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from milo._compat import enable_vt_processing, watch_terminal_resize
 from milo._errors import AppError, ErrorCode, format_render_error
 from milo._types import Action, AppStatus, RenderTarget, ViewState
 from milo.flow import Flow, FlowState
@@ -35,6 +34,7 @@ class _TerminalRenderer:
 
     def start(self) -> None:
         """Enter alternate screen buffer and hide cursor."""
+        enable_vt_processing()
         sys.stdout.write("\033[?1049h")  # Enter alternate screen
         sys.stdout.write("\033[?25l")  # Hide cursor
         sys.stdout.flush()
@@ -268,19 +268,11 @@ class App:
         self._status = AppStatus.RUNNING
         self._stop.clear()
 
-        # Set up signal handler for resize
-        original_sigwinch = None
-        if hasattr(signal, "SIGWINCH"):
+        # Set up cross-platform resize monitoring
+        def _on_resize(cols: int, rows: int) -> None:
+            store.dispatch(Action("@@RESIZE", payload=(cols, rows)))
 
-            def _on_resize(_signum: int, _frame: Any) -> None:
-                try:
-                    cols, rows = os.get_terminal_size()
-                    store.dispatch(Action("@@RESIZE", payload=(cols, rows)))
-                except OSError:
-                    pass
-
-            original_sigwinch = signal.getsignal(signal.SIGWINCH)
-            signal.signal(signal.SIGWINCH, _on_resize)
+        stop_resize = watch_terminal_resize(_on_resize)
 
         # Set up tick timer
         tick_thread = None
@@ -362,9 +354,8 @@ class App:
                     stop_tick.set()
             with contextlib.suppress(Exception):
                 renderer.stop()
-            if original_sigwinch is not None:
-                with contextlib.suppress(Exception):
-                    signal.signal(signal.SIGWINCH, original_sigwinch)
+            with contextlib.suppress(Exception):
+                stop_resize()
             with contextlib.suppress(Exception):
                 store.shutdown()
 

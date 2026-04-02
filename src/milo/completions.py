@@ -1,9 +1,10 @@
-"""Shell completion generation for bash, zsh, and fish."""
+"""Shell completion generation for bash, zsh, fish, and PowerShell."""
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING, Any
+
+from milo._compat import default_shell
 
 if TYPE_CHECKING:
     from milo.commands import CLI
@@ -119,6 +120,43 @@ def generate_fish_completion(cli: CLI) -> str:
     return "\n".join(lines) + "\n"
 
 
+def generate_powershell_completion(cli: CLI) -> str:
+    """Generate PowerShell completion script."""
+    prog = cli.name
+    commands = _collect_completions(cli)
+
+    subcmd_blocks = []
+    for cmd, info in commands.items():
+        flags = info["flags"]
+        flag_completions = ", ".join(f"'{f}'" for f in flags)
+        subcmd_blocks.append(
+            f"        '{cmd}' {{ @({flag_completions}) | "
+            f'Where-Object {{ $_ -like "$wordToComplete*" }} }}'
+        )
+
+    subcmd_block = "\n".join(subcmd_blocks)
+    cmd_names = ", ".join(f"'{c}'" for c in commands)
+
+    return f"""# PowerShell completion for {prog}
+# Add to $PROFILE: {prog} --completions powershell | Invoke-Expression
+Register-ArgumentCompleter -CommandName '{prog}' -ScriptBlock {{
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $commands = @({cmd_names})
+    $subcommand = $commandAst.CommandElements | Select-Object -Skip 1 -First 1
+
+    if (-not $subcommand) {{
+        $commands | Where-Object {{ $_ -like "$wordToComplete*" }} |
+            ForEach-Object {{ [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }}
+        return
+    }}
+
+    switch ($subcommand.ToString()) {{
+{subcmd_block}
+    }}
+}}
+"""
+
+
 def _collect_completions(cli: CLI) -> dict[str, dict[str, Any]]:
     """Collect command names, flags, and descriptions for completions."""
     result: dict[str, dict[str, Any]] = {}
@@ -148,18 +186,13 @@ def install_completions(cli: CLI, shell: str = "") -> str:
     If shell is empty, auto-detects from $SHELL.
     """
     if not shell:
-        shell_path = os.environ.get("SHELL", "")
-        if "zsh" in shell_path:
-            shell = "zsh"
-        elif "fish" in shell_path:
-            shell = "fish"
-        else:
-            shell = "bash"
+        shell = default_shell()
 
     generators = {
         "bash": generate_bash_completion,
         "zsh": generate_zsh_completion,
         "fish": generate_fish_completion,
+        "powershell": generate_powershell_completion,
     }
 
     gen = generators.get(shell)
