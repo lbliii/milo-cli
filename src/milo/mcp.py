@@ -54,7 +54,11 @@ class _CLIHandler:
         result = _call_tool(self._cli, params)
         error = "" if not result.get("isError") else result["content"][0].get("text", "")
         log_request(
-            self._logger, "tools/call", params.get("name", ""), start, error=error,
+            self._logger,
+            "tools/call",
+            params.get("name", ""),
+            start,
+            error=error,
         )
         return result
 
