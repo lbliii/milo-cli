@@ -25,6 +25,13 @@ def _write_error(req_id: Any, code: int, message: str) -> None:
     sys.stdout.flush()
 
 
+def _write_notification(method: str, params: dict[str, Any]) -> None:
+    """Write a JSON-RPC notification (no id field, no response expected)."""
+    notification = {"jsonrpc": "2.0", "method": method, "params": params}
+    sys.stdout.write(json.dumps(notification) + "\n")
+    sys.stdout.flush()
+
+
 def _stderr(message: str) -> None:
     sys.stderr.write(message + "\n")
     sys.stderr.flush()

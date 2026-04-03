@@ -973,6 +973,226 @@ class TestExamplesInHelp:
         assert "Deploy to prod" in md
 
 
+# ---------------------------------------------------------------------------
+# Phase 1: Annotations, middleware in MCP, observability
+# ---------------------------------------------------------------------------
+
+
+class TestMCPAnnotations:
+    def test_annotations_in_tools_list(self):
+        cli = CLI(name="test")
+
+        @cli.command(
+            "delete",
+            description="Delete a resource",
+            annotations={"destructiveHint": True, "idempotentHint": True},
+        )
+        def delete(name: str) -> str:
+            return f"Deleted {name}"
+
+        tools = _list_tools(cli)
+        tool = next(t for t in tools if t["name"] == "delete")
+        assert tool["annotations"]["destructiveHint"] is True
+        assert tool["annotations"]["idempotentHint"] is True
+
+    def test_no_annotations_when_empty(self):
+        cli = CLI(name="test")
+
+        @cli.command("list", description="List items")
+        def list_cmd() -> str:
+            return "items"
+
+        tools = _list_tools(cli)
+        tool = next(t for t in tools if t["name"] == "list")
+        assert "annotations" not in tool
+
+    def test_annotations_in_llms_txt(self):
+        cli = CLI(name="app")
+
+        @cli.command(
+            "rm",
+            description="Remove files",
+            annotations={"destructiveHint": True, "readOnlyHint": False},
+        )
+        def rm(path: str) -> str:
+            return f"Removed {path}"
+
+        txt = generate_llms_txt(cli)
+        assert "[destructive]" in txt
+
+    def test_read_only_annotation_in_llms_txt(self):
+        cli = CLI(name="app")
+
+        @cli.command(
+            "status",
+            description="Show status",
+            annotations={"readOnlyHint": True},
+        )
+        def status() -> str:
+            return "ok"
+
+        txt = generate_llms_txt(cli)
+        assert "[read-only]" in txt
+
+
+class TestMCPMiddleware:
+    def test_middleware_fires_on_tool_call(self):
+        cli = CLI(name="test")
+        calls = []
+
+        @cli.middleware
+        def track(ctx, call, next_fn):
+            calls.append(call.method)
+            return next_fn(call)
+
+        @cli.command("greet", description="Say hello")
+        def greet(name: str) -> str:
+            return f"Hello, {name}!"
+
+        result = _call_tool(cli, {"name": "greet", "arguments": {"name": "Agent"}})
+        assert result["content"][0]["text"] == "Hello, Agent!"
+        assert "tools/call" in calls
+
+    def test_middleware_can_transform_args(self):
+        cli = CLI(name="test")
+
+        @cli.middleware
+        def inject_default(ctx, call, next_fn):
+            from milo.middleware import MCPCall
+
+            if call.name == "greet" and "name" not in call.arguments:
+                call = MCPCall(
+                    method=call.method,
+                    name=call.name,
+                    arguments={**call.arguments, "name": "Default"},
+                )
+            return next_fn(call)
+
+        @cli.command("greet", description="Say hello")
+        def greet(name: str) -> str:
+            return f"Hello, {name}!"
+
+        result = _call_tool(cli, {"name": "greet", "arguments": {}})
+        assert "Default" in result["content"][0]["text"]
+
+
+class TestMCPObservability:
+    def test_stats_resource_exists(self):
+        cli = CLI(name="test")
+
+        @cli.command("ping", description="Ping")
+        def ping() -> str:
+            return "pong"
+
+        handler = _CLIHandler(cli)
+        resources = handler.list_resources({})["resources"]
+        uris = [r["uri"] for r in resources]
+        assert "milo://stats" in uris
+
+    def test_stats_populated_after_calls(self):
+        cli = CLI(name="test")
+
+        @cli.command("ping", description="Ping")
+        def ping() -> str:
+            return "pong"
+
+        handler = _CLIHandler(cli)
+        handler.call_tool({"name": "ping", "arguments": {}})
+        handler.call_tool({"name": "ping", "arguments": {}})
+
+        stats_result = handler.read_resource({"uri": "milo://stats"})
+        stats = json.loads(stats_result["contents"][0]["text"])
+        assert stats["total"] == 2
+        assert stats["errors"] == 0
+        assert stats["avg_latency_ms"] >= 0
+
+    def test_stats_tracks_errors(self):
+        cli = CLI(name="test")
+
+        @cli.command("fail", description="Fail")
+        def fail() -> str:
+            raise RuntimeError("boom")
+
+        handler = _CLIHandler(cli)
+        handler.call_tool({"name": "fail", "arguments": {}})
+
+        stats_result = handler.read_resource({"uri": "milo://stats"})
+        stats = json.loads(stats_result["contents"][0]["text"])
+        assert stats["total"] == 1
+        assert stats["errors"] == 1
+
+
+class TestMCPStreaming:
+    def test_streaming_progress_notifications(self):
+        from milo.streaming import Progress
+
+        cli = CLI(name="test")
+
+        @cli.command("deploy", description="Deploy")
+        def deploy(env: str = "dev"):
+            yield Progress(status="Starting", step=0, total=2)
+            yield Progress(status="Deploying", step=1, total=2)
+            return f"Deployed to {env}"
+
+        # Capture stdout to see progress notifications
+        captured = io.StringIO()
+        with patch("sys.stdout", captured):
+            result = _call_tool(cli, {"name": "deploy", "arguments": {"env": "prod"}})
+
+        # Final result should be correct
+        assert result["content"][0]["text"] == "Deployed to prod"
+        assert "isError" not in result
+
+        # Progress notifications should have been written
+        lines = captured.getvalue().strip().split("\n")
+        notifications = [json.loads(line) for line in lines]
+        assert len(notifications) == 2
+        assert notifications[0]["method"] == "notifications/progress"
+        assert notifications[0]["params"]["message"] == "Starting"
+        assert notifications[1]["params"]["message"] == "Deploying"
+        assert notifications[1]["params"]["progress"] == 1
+
+    def test_streaming_with_no_progress(self):
+        cli = CLI(name="test")
+
+        @cli.command("simple", description="Simple")
+        def simple() -> str:
+            return "done"
+
+        # Non-generator commands should work normally (no notifications)
+        captured = io.StringIO()
+        with patch("sys.stdout", captured):
+            result = _call_tool(cli, {"name": "simple", "arguments": {}})
+
+        assert result["content"][0]["text"] == "done"
+        assert captured.getvalue() == ""
+
+    def test_call_raw_returns_generator(self):
+        from milo.streaming import Progress, is_generator_result
+
+        cli = CLI(name="test")
+
+        @cli.command("work", description="Work")
+        def work():
+            yield Progress(status="Working", step=1, total=1)
+            return "finished"
+
+        result = cli.call_raw("work")
+        assert is_generator_result(result)
+
+        # Consume it manually
+        values = []
+        try:
+            while True:
+                values.append(next(result))
+        except StopIteration as e:
+            final = e.value
+
+        assert len(values) == 1
+        assert values[0].status == "Working"
+        assert final == "finished"
+
+
 class TestGenerateHelpAllBacktickFix:
     def test_global_option_short_flag_formatting(self):
         cli = CLI(name="myapp")

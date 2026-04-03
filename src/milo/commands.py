@@ -185,6 +185,7 @@ class CLI:
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        annotations: dict[str, Any] | None = None,
     ) -> Callable:
         """Register a function as a CLI command.
 
@@ -195,6 +196,8 @@ class CLI:
 
         Args:
             confirm: If set, prompt user with this message before executing.
+            annotations: MCP tool annotations (readOnlyHint, destructiveHint,
+                idempotentHint, openWorldHint).
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -207,6 +210,7 @@ class CLI:
                 hidden=hidden,
                 examples=tuple(examples),
                 confirm=confirm,
+                annotations=annotations,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -228,6 +232,7 @@ class CLI:
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        annotations: dict[str, Any] | None = None,
     ) -> LazyCommandDef:
         """Register a lazy-loaded command.
 
@@ -244,6 +249,7 @@ class CLI:
             hidden=hidden,
             examples=examples,
             confirm=confirm,
+            annotations=annotations,
         )
         self._commands[name] = cmd
         for alias in aliases:
@@ -1002,6 +1008,39 @@ class CLI:
             _, result = consume_generator(result)
 
         return result
+
+    def call_raw(self, command_name: str, **kwargs: Any) -> Any:
+        """Call a command without consuming generators.
+
+        Like :meth:`call`, but returns the raw result — if the handler
+        returns a generator, it is *not* consumed.  The MCP server uses
+        this to stream ``Progress`` yields as notifications.
+        """
+        found = self.get_command(command_name)
+        if not found:
+            suggestion = self.suggest_command(command_name)
+            msg = f"Unknown command: {command_name!r}"
+            if suggestion:
+                msg += f". Did you mean {suggestion!r}?"
+            raise ValueError(msg)
+
+        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+
+        sig = inspect.signature(cmd.handler)
+        valid = {
+            k: v
+            for k, v in kwargs.items()
+            if k in sig.parameters and not _is_context_param(sig.parameters[k])
+        }
+
+        if self._middleware:
+            from milo.context import Context as ContextClass
+            from milo.middleware import MCPCall
+
+            ctx = ContextClass()
+            call = MCPCall(method="tools/call", name=command_name, arguments=valid)
+            return self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
+        return cmd.handler(**valid)
 
     def suggest_command(self, name: str) -> str | None:
         """Suggest the closest command name for typo correction."""

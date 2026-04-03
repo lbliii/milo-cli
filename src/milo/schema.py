@@ -11,6 +11,79 @@ import typing
 from collections.abc import Callable
 from typing import Any, Literal, Union, get_args, get_origin
 
+# ---------------------------------------------------------------------------
+# Annotated constraint markers
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MinLen:
+    """Minimum length for strings (minLength) or items for arrays (minItems)."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class MaxLen:
+    """Maximum length for strings (maxLength) or items for arrays (maxItems)."""
+
+    value: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Gt:
+    """Exclusive minimum constraint for numbers."""
+
+    value: int | float
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Lt:
+    """Exclusive maximum constraint for numbers."""
+
+    value: int | float
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Ge:
+    """Inclusive minimum constraint for numbers."""
+
+    value: int | float
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Le:
+    """Inclusive maximum constraint for numbers."""
+
+    value: int | float
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Pattern:
+    """Regex pattern constraint for strings."""
+
+    value: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Description:
+    """Override or supplement the parameter description."""
+
+    value: str
+
+
+_CONSTRAINT_MAP: dict[type, str] = {
+    MinLen: "minLength",
+    MaxLen: "maxLength",
+    Gt: "exclusiveMinimum",
+    Lt: "exclusiveMaximum",
+    Ge: "minimum",
+    Le: "maximum",
+    Pattern: "pattern",
+    Description: "description",
+}
+
+
 _TYPE_MAP: dict[type, str] = {
     str: "string",
     int: "integer",
@@ -33,8 +106,9 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     """
     sig = inspect.signature(func)
     # Resolve string annotations (from __future__ import annotations)
+    # include_extras=True preserves Annotated metadata for constraint extraction
     try:
-        hints = typing.get_type_hints(func)
+        hints = typing.get_type_hints(func, include_extras=True)
     except Exception:
         hints = {}
 
@@ -57,9 +131,22 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         if _is_context_type(annotation, name):
             continue
 
-        is_optional = _is_optional(annotation)
+        # Unwrap Annotated to check optional underneath
+        bare = annotation
+        annotated_meta: tuple = ()
+        if get_origin(bare) is typing.Annotated:
+            annotated_args = get_args(bare)
+            bare = annotated_args[0]
+            annotated_meta = annotated_args[1:]
+
+        is_optional = _is_optional(bare)
         if is_optional:
-            annotation = _unwrap_optional(annotation)
+            unwrapped = _unwrap_optional(bare)
+            if annotated_meta:
+                # Re-wrap: Annotated[unwrapped_type, *meta]
+                annotation = typing.Annotated[(unwrapped, *annotated_meta)]
+            else:
+                annotation = unwrapped
 
         prop = _type_to_schema(annotation)
 
@@ -81,6 +168,24 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
 
 def _type_to_schema(annotation: Any, _seen: set[int] | None = None) -> dict[str, Any]:
     """Convert Python type annotation to JSON Schema fragment."""
+    # Annotated[T, constraints...] — unwrap and apply constraints
+    origin = get_origin(annotation)
+    if origin is typing.Annotated:
+        args = get_args(annotation)
+        base_type = args[0]
+        schema = _type_to_schema(base_type, _seen)
+        is_array = schema.get("type") == "array"
+        for meta in args[1:]:
+            key = _CONSTRAINT_MAP.get(type(meta))
+            if key:
+                # MinLen/MaxLen map to minItems/maxItems for arrays
+                if is_array and key == "minLength":
+                    key = "minItems"
+                elif is_array and key == "maxLength":
+                    key = "maxItems"
+                schema[key] = meta.value
+        return schema
+
     # Primitive types
     if annotation in _TYPE_MAP:
         return {"type": _TYPE_MAP[annotation]}

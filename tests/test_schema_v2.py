@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 import pytest
 
 from milo.commands import CLI
-from milo.schema import _parse_param_docs, _type_to_schema, function_to_schema
+from milo.schema import (
+    Description,
+    Ge,
+    Gt,
+    Le,
+    Lt,
+    MaxLen,
+    MinLen,
+    Pattern,
+    _parse_param_docs,
+    _type_to_schema,
+    function_to_schema,
+)
 
 # --- Test Enum ---
 
@@ -314,3 +326,91 @@ class TestSchemaHelpText:
         """)
         assert result["name"] == "The user's name."
         assert result["count"] == "How many times."
+
+
+# ---------------------------------------------------------------------------
+# Annotated constraint tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotatedConstraints:
+    def test_min_max_length(self):
+
+        def func(name: Annotated[str, MinLen(1), MaxLen(100)]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["name"]
+        assert prop["type"] == "string"
+        assert prop["minLength"] == 1
+        assert prop["maxLength"] == 100
+
+    def test_gt_lt(self):
+
+        def func(age: Annotated[int, Gt(0), Lt(200)]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["age"]
+        assert prop["type"] == "integer"
+        assert prop["exclusiveMinimum"] == 0
+        assert prop["exclusiveMaximum"] == 200
+
+    def test_ge_le(self):
+
+        def func(score: Annotated[float, Ge(0.0), Le(100.0)]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["score"]
+        assert prop["type"] == "number"
+        assert prop["minimum"] == 0.0
+        assert prop["maximum"] == 100.0
+
+    def test_pattern(self):
+
+        def func(email: Annotated[str, Pattern(r"^[^@]+@[^@]+$")]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["email"]
+        assert prop["type"] == "string"
+        assert prop["pattern"] == r"^[^@]+@[^@]+$"
+
+    def test_description_override(self):
+
+        def func(name: Annotated[str, Description("The user's full name")]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["name"]
+        assert prop["description"] == "The user's full name"
+
+    def test_unknown_annotations_ignored(self):
+        def func(x: Annotated[str, "some random metadata", 42]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["x"]
+        assert prop == {"type": "string"}
+
+    def test_annotated_optional(self):
+
+        def func(name: Annotated[str | None, MinLen(1)] = None):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["name"]
+        assert prop["type"] == "string"
+        assert prop["minLength"] == 1
+        assert "required" not in schema
+
+    def test_annotated_with_list(self):
+
+        def func(tags: Annotated[list[str], MinLen(1)]):
+            pass
+
+        schema = function_to_schema(func)
+        prop = schema["properties"]["tags"]
+        assert prop["type"] == "array"
+        assert prop["minItems"] == 1
