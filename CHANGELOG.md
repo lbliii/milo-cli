@@ -77,4 +77,4 @@ All notable changes to Milo are documented here.
 
 ## 0.1.0 — 2026-03-26
 
-Initial release. See [release notes](https://lbliii.github.io/milo/releases/0.1.0/).
+Initial release. See [release notes](https://lbliii.github.io/milo-cli/releases/0.1.0/).
