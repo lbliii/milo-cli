@@ -129,6 +129,21 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
 
     parts.append(f": {cmd.description}" if cmd.description else "")
 
+    # Annotations (behavioral hints)
+    annotations = getattr(cmd, "annotations", {})
+    if annotations:
+        hints = []
+        if annotations.get("readOnlyHint"):
+            hints.append("read-only")
+        if annotations.get("destructiveHint"):
+            hints.append("destructive")
+        if annotations.get("idempotentHint"):
+            hints.append("idempotent")
+        if annotations.get("openWorldHint"):
+            hints.append("open-world")
+        if hints:
+            parts.append(f" [{', '.join(hints)}]")
+
     # Parameter summary
     props = cmd.schema.get("properties", {})
     required = set(cmd.schema.get("required", []))

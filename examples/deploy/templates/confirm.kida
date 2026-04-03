@@ -1,0 +1,18 @@
+{% from "components/_defs.kida" import header, status_line, kv_pair, key_hints %}
+{{ header("Deploy") }}
+{{ hr() }}
+
+  {{ kv_pair("Environment", state.environment | bold) }}
+  {{ kv_pair("Service", state.service | bold) }}
+  {{ kv_pair("Version", state.version | bold) }}
+
+{{ hr() }}
+
+{% if state.confirmed %}
+  {{ status_line("success", "Deploying...") }}
+{% else %}
+  Press {{ "Enter" | green }} to confirm or {{ "Esc" | red }} to cancel.
+{% endif %}
+
+{{ hr() }}
+{{ key_hints([{"key": "enter", "action": "confirm"}, {"key": "esc", "action": "cancel"}]) }}

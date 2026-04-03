@@ -6,7 +6,7 @@ import importlib
 import inspect
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -57,6 +57,8 @@ class CommandDef:
     examples: tuple[dict[str, Any], ...] = ()
     confirm: str = ""
     """If non-empty, prompt for confirmation before running."""
+    annotations: dict[str, Any] = field(default_factory=dict)
+    """MCP tool annotations (readOnlyHint, destructiveHint, etc.)."""
 
 
 class LazyCommandDef:
@@ -75,6 +77,7 @@ class LazyCommandDef:
         "_resolved",
         "_schema",
         "aliases",
+        "annotations",
         "confirm",
         "description",
         "examples",
@@ -96,6 +99,7 @@ class LazyCommandDef:
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        annotations: dict[str, Any] | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -105,6 +109,7 @@ class LazyCommandDef:
         self.hidden = hidden
         self.examples = tuple(examples)
         self.confirm = confirm
+        self.annotations = annotations or {}
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -153,6 +158,7 @@ class LazyCommandDef:
                 hidden=self.hidden,
                 examples=self.examples,
                 confirm=self.confirm,
+                annotations=self.annotations,
             )
             return self._resolved
 
@@ -178,6 +184,7 @@ def _make_command_def(
     hidden: bool = False,
     examples: tuple[dict[str, Any], ...] = (),
     confirm: str = "",
+    annotations: dict[str, Any] | None = None,
 ) -> CommandDef:
     """Build a CommandDef from a function and decorator kwargs."""
     from milo.schema import function_to_schema
@@ -196,6 +203,7 @@ def _make_command_def(
         hidden=hidden,
         examples=examples,
         confirm=confirm,
+        annotations=annotations or {},
     )
 
 

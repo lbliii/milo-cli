@@ -44,9 +44,11 @@ class TestMCPResourcesList:
     def test_list_resources(self, cli: CLI) -> None:
         client = MCPClient(cli)
         resources = client.list_resources()
-        assert len(resources) == 2
+        # 2 user resources + 1 built-in (milo://stats)
+        assert len(resources) == 3
         names = [r["name"] for r in resources]
         assert "get_config" in names
+        assert "Server Statistics" in names
 
     def test_resource_fields(self, cli: CLI) -> None:
         client = MCPClient(cli)

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from typing import TYPE_CHECKING, Any
 
 from milo import __version__ as _server_version
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
-from milo._jsonrpc import _stderr, _write_error, _write_result
+from milo._jsonrpc import _stderr, _write_error, _write_notification, _write_result
 from milo._mcp_router import dispatch
+from milo.observability import RequestLogger, log_request, new_correlation_id
 
 if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef
@@ -28,6 +30,7 @@ class _CLIHandler:
     def __init__(self, cli: CLI, cached_tools: list[dict[str, Any]] | None = None) -> None:
         self._cli = cli
         self._cached_tools = cached_tools
+        self._logger = RequestLogger()
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -46,19 +49,37 @@ class _CLIHandler:
         return {"tools": tools}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
-        return _call_tool(self._cli, params)
+        new_correlation_id()
+        start = time.monotonic()
+        result = _call_tool(self._cli, params)
+        error = "" if not result.get("isError") else result["content"][0].get("text", "")
+        log_request(
+            self._logger, "tools/call", params.get("name", ""), start, error=error,
+        )
+        return result
 
     def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"resources": _list_resources(self._cli)}
+        return {"resources": _list_resources(self._cli) + _builtin_resources()}
 
     def read_resource(self, params: dict[str, Any]) -> dict[str, Any]:
-        return _read_resource(self._cli, params)
+        uri = params.get("uri", "")
+        if uri == "milo://stats":
+            return _stats_resource(self._logger)
+        new_correlation_id()
+        start = time.monotonic()
+        result = _read_resource(self._cli, params)
+        log_request(self._logger, "resources/read", uri, start)
+        return result
 
     def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
         return {"prompts": _list_prompts(self._cli)}
 
     def get_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
-        return _get_prompt(self._cli, params)
+        new_correlation_id()
+        start = time.monotonic()
+        result = _get_prompt(self._cli, params)
+        log_request(self._logger, "prompts/get", params.get("name", ""), start)
+        return result
 
 
 def run_mcp_server(cli: CLI) -> None:
@@ -119,6 +140,25 @@ def run_mcp_server(cli: CLI) -> None:
             _write_error(req_id, -32603, str(e))
 
 
+def _builtin_resources() -> list[dict[str, Any]]:
+    """Built-in MCP resources provided by the milo runtime."""
+    return [
+        {
+            "uri": "milo://stats",
+            "name": "Server Statistics",
+            "description": "Request latency, error counts, and throughput for this MCP server",
+            "mimeType": "application/json",
+        },
+    ]
+
+
+def _stats_resource(logger: RequestLogger) -> dict[str, Any]:
+    """Return server statistics as an MCP resource."""
+    stats = logger.stats()
+    text = json.dumps(stats, indent=2)
+    return {"contents": [{"uri": "milo://stats", "text": text, "mimeType": "application/json"}]}
+
+
 def _list_tools(cli: CLI) -> list[dict[str, Any]]:
     """Generate MCP tools/list response from all commands including groups.
 
@@ -144,6 +184,10 @@ def _list_tools(cli: CLI) -> list[dict[str, Any]]:
         output_schema = _output_schema(cmd)
         if output_schema:
             tool["outputSchema"] = output_schema
+
+        # annotations: MCP behavioral hints (readOnlyHint, destructiveHint, etc.)
+        if cmd.annotations:
+            tool["annotations"] = cmd.annotations
 
         tools.append(tool)
     return tools
@@ -186,12 +230,43 @@ def _output_schema(cmd: CommandDef | LazyCommandDef) -> dict[str, Any] | None:
 
 
 def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
-    """Handle tools/call by dispatching to the command handler."""
+    """Handle tools/call by dispatching to the command handler.
+
+    Routes through the CLI's middleware stack when present, so middleware
+    can intercept MCP-originated calls just like CLI-originated ones.
+
+    If the handler returns a generator yielding Progress objects, each
+    Progress is emitted as a ``notifications/progress`` JSON-RPC
+    notification before the final result is returned.
+    """
     tool_name = params.get("name", "")
     arguments = params.get("arguments", {})
 
     try:
-        result = cli.call(tool_name, **arguments)
+        result = cli.call_raw(tool_name, **arguments)
+
+        # Stream progress notifications for generator results
+        from milo.streaming import Progress, is_generator_result
+
+        if is_generator_result(result):
+            final_value = None
+            try:
+                while True:
+                    value = next(result)
+                    if isinstance(value, Progress):
+                        _write_notification(
+                            "notifications/progress",
+                            {
+                                "progressToken": tool_name,
+                                "progress": value.step,
+                                "total": value.total or None,
+                                "message": value.status,
+                            },
+                        )
+            except StopIteration as e:
+                final_value = e.value
+            result = final_value
+
     except Exception as e:
         return {
             "content": [{"type": "text", "text": f"Error: {e}"}],
@@ -235,7 +310,15 @@ def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
         return {"contents": []}
 
     try:
-        result = res.handler()
+        if cli._middleware:
+            from milo.context import Context as ContextClass
+            from milo.middleware import MCPCall
+
+            ctx = ContextClass()
+            call = MCPCall(method="resources/read", name=uri, arguments={})
+            result = cli._middleware.execute(ctx, call, lambda _c: res.handler())
+        else:
+            result = res.handler()
     except Exception as e:
         return {"contents": [{"uri": uri, "text": f"Error: {e}", "mimeType": "text/plain"}]}
 
@@ -268,7 +351,15 @@ def _get_prompt(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
         return {"messages": []}
 
     try:
-        result = p.handler(**arguments)
+        if cli._middleware:
+            from milo.context import Context as ContextClass
+            from milo.middleware import MCPCall
+
+            ctx = ContextClass()
+            call = MCPCall(method="prompts/get", name=name, arguments=arguments)
+            result = cli._middleware.execute(ctx, call, lambda c: p.handler(**c.arguments))
+        else:
+            result = p.handler(**arguments)
     except Exception as e:
         return {"messages": [{"role": "user", "content": {"type": "text", "text": f"Error: {e}"}}]}
 
