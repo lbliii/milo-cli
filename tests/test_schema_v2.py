@@ -413,4 +413,4 @@ class TestAnnotatedConstraints:
         schema = function_to_schema(func)
         prop = schema["properties"]["tags"]
         assert prop["type"] == "array"
-        assert prop["minLength"] == 1
+        assert prop["minItems"] == 1

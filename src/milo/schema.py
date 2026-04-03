@@ -18,14 +18,14 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class MinLen:
-    """Minimum length constraint for strings/arrays."""
+    """Minimum length for strings (minLength) or items for arrays (minItems)."""
 
     value: int
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class MaxLen:
-    """Maximum length constraint for strings/arrays."""
+    """Maximum length for strings (maxLength) or items for arrays (maxItems)."""
 
     value: int
 
@@ -174,9 +174,15 @@ def _type_to_schema(annotation: Any, _seen: set[int] | None = None) -> dict[str,
         args = get_args(annotation)
         base_type = args[0]
         schema = _type_to_schema(base_type, _seen)
+        is_array = schema.get("type") == "array"
         for meta in args[1:]:
             key = _CONSTRAINT_MAP.get(type(meta))
             if key:
+                # MinLen/MaxLen map to minItems/maxItems for arrays
+                if is_array and key == "minLength":
+                    key = "minItems"
+                elif is_array and key == "maxLength":
+                    key = "maxItems"
                 schema[key] = meta.value
         return schema
 

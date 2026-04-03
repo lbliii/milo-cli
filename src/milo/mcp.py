@@ -45,7 +45,10 @@ class _CLIHandler:
         }
 
     def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
+        new_correlation_id()
+        start = time.monotonic()
         tools = self._cached_tools if self._cached_tools is not None else _list_tools(self._cli)
+        log_request(self._logger, "tools/list", "", start)
         return {"tools": tools}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -63,7 +66,11 @@ class _CLIHandler:
         return result
 
     def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"resources": _list_resources(self._cli) + _builtin_resources()}
+        new_correlation_id()
+        start = time.monotonic()
+        resources = _list_resources(self._cli) + _builtin_resources()
+        log_request(self._logger, "resources/list", "", start)
+        return {"resources": resources}
 
     def read_resource(self, params: dict[str, Any]) -> dict[str, Any]:
         uri = params.get("uri", "")
@@ -71,18 +78,34 @@ class _CLIHandler:
             return _stats_resource(self._logger)
         new_correlation_id()
         start = time.monotonic()
-        result = _read_resource(self._cli, params)
+        try:
+            result = _read_resource(self._cli, params)
+        except Exception as e:
+            log_request(self._logger, "resources/read", uri, start, error=str(e))
+            raise
         log_request(self._logger, "resources/read", uri, start)
         return result
 
     def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"prompts": _list_prompts(self._cli)}
+        new_correlation_id()
+        start = time.monotonic()
+        prompts = _list_prompts(self._cli)
+        log_request(self._logger, "prompts/list", "", start)
+        return {"prompts": prompts}
 
     def get_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
         start = time.monotonic()
         result = _get_prompt(self._cli, params)
-        log_request(self._logger, "prompts/get", params.get("name", ""), start)
+        # Detect errors returned as message payloads
+        error = ""
+        for message in result.get("messages", []):
+            content = message.get("content", {})
+            text = content.get("text", "") if isinstance(content, dict) else ""
+            if text.startswith("Error:"):
+                error = text
+                break
+        log_request(self._logger, "prompts/get", params.get("name", ""), start, error=error)
         return result
 
 
