@@ -8,10 +8,20 @@ from typing import Annotated, Literal, TypedDict
 
 import pytest
 
-from milo.schema import Description, Ge, Gt, Le, Lt, MaxLen, MinLen, Pattern
-
 from milo.commands import CLI
-from milo.schema import _parse_param_docs, _type_to_schema, function_to_schema
+from milo.schema import (
+    Description,
+    Ge,
+    Gt,
+    Le,
+    Lt,
+    MaxLen,
+    MinLen,
+    Pattern,
+    _parse_param_docs,
+    _type_to_schema,
+    function_to_schema,
+)
 
 # --- Test Enum ---
 
