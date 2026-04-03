@@ -53,6 +53,6 @@ A structured reactive stack — every layer written in pure Python for 3.14t fre
 | **)彡** | [Kida](https://github.com/lbliii/kida) | Template engine | [Docs](https://lbliii.github.io/kida/) |
 | **ฅᨐฅ** | [Patitas](https://github.com/lbliii/patitas) | Markdown parser | [Docs](https://lbliii.github.io/patitas/) |
 | **⌾⌾⌾** | [Rosettes](https://github.com/lbliii/rosettes) | Syntax highlighter | [Docs](https://lbliii.github.io/rosettes/) |
-| **ᗣᗣ** | **Milo** | CLI framework ← You are here | [Docs](https://lbliii.github.io/milo/) |
+| **ᗣᗣ** | **Milo** (PyPI: `milo-cli`) | CLI framework ← You are here | [Docs](https://lbliii.github.io/milo-cli/) |
 
 Python-native. Free-threading ready. No npm required.

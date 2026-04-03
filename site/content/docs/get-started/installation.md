@@ -10,6 +10,8 @@ keywords: [installation, setup, python, uv, pip]
 category: onboarding
 ---
 
+The PyPI distribution is **milo-cli**; Python imports use the **`milo`** package (and the `milo` CLI entry point).
+
 ## Requirements
 
 :::{checklist} Before You Start
@@ -27,7 +29,7 @@ category: onboarding
 :badge: Recommended
 
 ```bash
-uv pip install milo
+uv pip install milo-cli
 ```
 
 :::{/tab-item}
@@ -35,7 +37,7 @@ uv pip install milo
 :::{tab-item} pip
 
 ```bash
-pip install milo
+pip install milo-cli
 ```
 
 :::{/tab-item}
@@ -45,8 +47,8 @@ pip install milo
 :badge: Development
 
 ```bash
-git clone https://github.com/lbliii/milo.git
-cd milo
+git clone https://github.com/lbliii/milo-cli.git
+cd milo-cli
 uv sync --group dev --python 3.14t
 ```
 

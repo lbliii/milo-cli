@@ -30,10 +30,11 @@ yaml = ["pyyaml>=6.0"]
 watch = ["watchfiles>=1.0"]
 
 [project.urls]
-Homepage = "https://lbliii.github.io/milo/"
-Documentation = "https://lbliii.github.io/milo/"
-Repository = "https://github.com/lbliii/milo"
-Changelog = "https://github.com/lbliii/milo/blob/main/CHANGELOG.md"
+Homepage = "https://lbliii.github.io/milo-cli/"
+Documentation = "https://lbliii.github.io/milo-cli/"
+Repository = "https://github.com/lbliii/milo-cli"
+Changelog = "https://github.com/lbliii/milo-cli/blob/main/CHANGELOG.md"
+Issues = "https://github.com/lbliii/milo-cli/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -44,6 +45,10 @@ milo = ["templates/*.kida", "templates/components/*.kida", "py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
+timeout = 120
+markers = [
+    "slow: tests that are intentionally slow",
+]
 
 [tool.coverage.run]
 source = ["milo"]
@@ -124,6 +129,7 @@ ignore = [
 "src/milo/version_check.py" = ["S110", "S310"] # best-effort cache reads + known PyPI URL
 "src/milo/mcp.py" = ["ARG002"]            # MCP protocol methods require params signature
 "src/milo/gateway.py" = ["ARG002", "S110"] # MCP protocol methods + best-effort discovery
+"benchmarks/**/*.py" = ["T201"] # benchmarks may use print for diagnostics
 
 [dependency-groups]
 dev = [
@@ -132,6 +138,7 @@ dev = [
     "pytest-cov>=4.0",
     "pytest-xdist>=3.3.0",
     "pytest-timeout>=2.3.0",
+    "pytest-benchmark>=4.0.0",
     "hypothesis>=6.100.0",
     # Linting & Type Checking
     "ty>=0.0.11",
@@ -139,4 +146,3 @@ dev = [
     # Pre-commit
     "pre-commit>=4.0.0",
 ]
-docs = ["bengal>=0.2.6"]

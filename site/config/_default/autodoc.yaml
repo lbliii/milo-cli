@@ -1,5 +1,5 @@
 autodoc:
-  github_repo: "lbliii/milo"
+  github_repo: "lbliii/milo-cli"
   github_branch: "main"
 
   python:

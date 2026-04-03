@@ -10,7 +10,7 @@ tags: [onboarding]
 icon: rocket
 ---
 
-Install Milo with `pip install milo` (requires Python 3.14+), then create your first app with `milo dev`.
+Install Milo with `pip install milo-cli` (requires Python 3.14+), then create your first app with `milo dev`.
 
 :::{cards}
 :columns: 1-2

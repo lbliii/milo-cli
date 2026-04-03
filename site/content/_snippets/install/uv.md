@@ -1,3 +1,3 @@
 ```bash
-uv pip install milo
+uv pip install milo-cli
 ```

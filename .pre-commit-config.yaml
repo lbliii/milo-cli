@@ -20,7 +20,7 @@ repos:
     hooks:
       - id: ruff-format
         name: ruff format
-        entry: uv run ruff format .
+        entry: uv run ruff format src/ tests/ benchmarks/
         language: system
         types: [python]
         pass_filenames: false
