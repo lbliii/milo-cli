@@ -80,7 +80,7 @@
 
 {#- ── Header/banner ────────────────────────────────────────────────── -#}
 {%- def header(name, version="", description="") -%}
-{{ name | bold | cyan }}{% if version %} {{ version | dim }}{% endif %}{% if description %}
+{{ name | bold | cyan }} {{ version ?|> dim }}{% if description %}
 {{ description }}{% endif %}
 {%- enddef -%}
 
