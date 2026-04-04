@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov lint format ty bench ci clean build
+.PHONY: all help setup install test test-cov lint format ty bench ci clean build gh-release
 
 all: help
 
@@ -23,6 +23,7 @@ help:
 	@echo "  make ci        - lint + format check + ty + tests + coverage"
 	@echo "  make clean     - remove build artifacts"
 	@echo "  make build     - uv build"
+	@echo "  make gh-release - create GitHub release → triggers PyPI publish"
 
 setup:
 	uv venv --python $(PYTHON_VERSION) $(VENV_DIR)
@@ -59,3 +60,18 @@ clean:
 
 build:
 	uv build
+
+# Create GitHub release from site release notes; triggers python-publish workflow → PyPI
+# Strips YAML frontmatter (--- ... ---) from notes before passing to gh
+gh-release:
+	@VERSION=$$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
+	PROJECT=$$(grep '^name = ' pyproject.toml | sed 's/name = "\(.*\)"/\1/'); \
+	NOTES="site/content/releases/$$VERSION.md"; \
+	if [ ! -f "$$NOTES" ]; then echo "Error: $$NOTES not found"; exit 1; fi; \
+	echo "Creating release v$$VERSION for $$PROJECT..."; \
+	git push origin main 2>/dev/null || true; \
+	git push origin v$$VERSION 2>/dev/null || true; \
+	awk '/^---$$/{c++;next}c>=2' "$$NOTES" | gh release create v$$VERSION \
+		--title "$$PROJECT $$VERSION" \
+		-F -; \
+	echo "✓ GitHub release v$$VERSION created (PyPI publish will run via workflow)"
