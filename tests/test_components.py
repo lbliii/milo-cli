@@ -143,6 +143,14 @@ class TestHeader:
         assert "v1.0" in out
         assert "A tool" in out
 
+    def test_empty_version(self, env):
+        out = _render(env, '{{ header("myapp", "") }}')
+        assert "myapp" in out
+
+    def test_none_version(self, env):
+        out = _render(env, '{{ header("myapp", none) }}')
+        assert "myapp" in out
+
 
 class TestHeaderBox:
     def test_renders_box(self, env):
@@ -170,6 +178,44 @@ class TestComposites:
         assert "init" in out
         assert "--verbose" in out
         assert "$ myapp init" in out
+
+    def test_help_page_minimal(self, env):
+        """Only name provided — all optional fields default via ??=."""
+        tmpl = env.get_template("components/help_page.kida")
+        out = tmpl.render(name="myapp")
+        assert "myapp" in out
+        assert "Usage" not in out
+        assert "Commands" not in out
+        assert "Options" not in out
+        assert "Examples" not in out
+
+    def test_help_page_no_commands(self, env):
+        tmpl = env.get_template("components/help_page.kida")
+        out = tmpl.render(name="myapp", version="v2.0", usage="myapp [cmd]")
+        assert "myapp" in out
+        assert "v2.0" in out
+        assert "Usage" in out
+        assert "Commands" not in out
+
+    def test_help_page_none_fields(self, env):
+        """Explicitly None values are coalesced to defaults by ??=."""
+        tmpl = env.get_template("components/help_page.kida")
+        out = tmpl.render(
+            name="myapp",
+            version=None,
+            description=None,
+            commands=None,
+            flags=None,
+        )
+        assert "myapp" in out
+        assert "Commands" not in out
+        assert "Options" not in out
+
+    def test_help_page_with_epilog(self, env):
+        tmpl = env.get_template("components/help_page.kida")
+        out = tmpl.render(name="myapp", epilog="See docs for more.")
+        assert "myapp" in out
+        assert "See docs for more." in out
 
 
 class TestKeyHints:

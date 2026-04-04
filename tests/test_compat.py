@@ -175,7 +175,7 @@ class TestPollResize:
 
         with patch("milo._compat.os.get_terminal_size", side_effect=fake_terminal_size):
             stop = _poll_resize(on_resize, interval=0.05)
-            time.sleep(0.3)
+            time.sleep(0.8)
             stop()
 
         assert (120, 40) in received

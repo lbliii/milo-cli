@@ -12,32 +12,40 @@
 -#}
 {%- from "components/_defs.kida" import header, section, command_row, example_block, def_list -%}
 
-{{ header(name, version | default(""), description | default("")) }}
+{% set version ??= "" %}
+{% set description ??= "" %}
+{% set usage ??= "" %}
+{% set commands ??= [] %}
+{% set flags ??= [] %}
+{% set examples ??= [] %}
+{% set epilog ??= "" %}
 
-{% if usage | default("") %}
+{{ header(name, version, description) }}
+
+{% if usage %}
 {{ section("Usage") }}
   {{ usage | dim }}
 {% endif %}
 
-{% if commands | default([]) %}
+{% if commands %}
 {{ section("Commands") }}
 {% for cmd in commands %}
 {{ command_row(cmd.name, cmd.get("description", ""), cmd.get("aliases", []), cmd.get("tags", [])) }}
 {% endfor %}
 {% endif %}
 
-{% if flags | default([]) %}
+{% if flags %}
 {{ section("Options") }}
 {% for flag in flags %}
   {{ flag.flags | join(", ") | green }}{% if flag.get("metavar") %} {{ flag.metavar | dim }}{% endif %}    {{ flag.get("description", "") }}{% if flag.get("default") %} {{ ("(default: " ~ flag.default ~ ")") | dim }}{% endif %}
 {% endfor %}
 {% endif %}
 
-{% if examples | default([]) %}
+{% if examples %}
 {{ section("Examples") }}
 {{ example_block(examples) }}
 {% endif %}
 
-{% if epilog | default("") %}
+{% if epilog %}
 {{ epilog | dim }}
 {% endif %}
