@@ -143,7 +143,6 @@ class TestHeader:
         assert "v1.0" in out
         assert "A tool" in out
 
-
     def test_empty_version(self, env):
         out = _render(env, '{{ header("myapp", "") }}')
         assert "myapp" in out
