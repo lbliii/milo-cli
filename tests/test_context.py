@@ -454,3 +454,53 @@ class TestRunApp:
         with patch("milo.app.is_tty", return_value=False), patch("sys.stdout"):
             ctx.run_app(reducer=r, template="t.kida", initial_state=0, env=env)
         env.get_template.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Context.render (template helper)
+# ---------------------------------------------------------------------------
+
+
+class TestContextRender:
+    def test_inline_template(self):
+        ctx = Context()
+        result = ctx.render("string:{{ x }}", x="hello")
+        assert "hello" in result
+
+    def test_inline_with_filter(self):
+        ctx = Context()
+        result = ctx.render("string:{{ x | bold }}", x="hi")
+        assert "hi" in result
+
+    def test_named_template(self):
+        """Built-in milo templates should be accessible."""
+        ctx = Context()
+        result = ctx.render(
+            "error.kida",
+            error="Something broke",
+            code="E001",
+            template_name="",
+            hint="",
+            docs_url="",
+        )
+        assert "broke" in result
+
+    def test_custom_env(self):
+        from unittest.mock import MagicMock
+
+        from kida import Environment
+
+        env = Environment()
+        mock_tmpl = env.from_string("custom: {{ y }}")
+        mock_env = MagicMock()
+        mock_env.get_template.return_value = mock_tmpl
+
+        ctx = Context()
+        ctx.render("any.kida", env=mock_env, y="val")
+        # The mock env was used
+        mock_env.get_template.assert_called_with("any.kida")
+
+    def test_style_filter_available(self):
+        ctx = Context()
+        result = ctx.render('string:{{ "hi" | style("primary") }}')
+        assert "hi" in result
