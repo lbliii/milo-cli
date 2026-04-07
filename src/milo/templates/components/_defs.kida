@@ -145,3 +145,50 @@
 {%- endif %}
 {{ b.bl }}{{ b.h * width }}{{ b.br }}
 {%- enddef -%}
+
+{#- ── Panel: bordered box with optional title ─────────────────────── -#}
+{%- def panel(content, title="", border="round") -%}
+{%- set b = box[border] | default(box.round) -%}
+{%- set lines = content.splitlines() -%}
+{%- set max_len = 0 -%}
+{%- for line in lines -%}
+{%- set line_len = line | length -%}
+{%- if line_len > max_len -%}{%- set max_len = line_len -%}{%- endif -%}
+{%- endfor -%}
+{%- set inner_w = [max_len + 2, 20] | max -%}
+{%- if title -%}
+{%- set title_str = " " ~ title ~ " " -%}
+{%- set remaining = inner_w - (title_str | length) -%}
+{{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * [remaining, 1] | max }}{{ b.tr }}
+{%- else -%}
+{{ b.tl }}{{ b.h * inner_w }}{{ b.tr }}
+{%- endif -%}
+{%- for line in lines %}
+{{ b.v }} {{ line | pad(inner_w - 2) }} {{ b.v }}
+{%- endfor %}
+{{ b.bl }}{{ b.h * inner_w }}{{ b.br }}
+{%- enddef -%}
+
+{#- ── Issue list: validation results ──────────────────────────────── -#}
+{%- def issue_list(issues) -%}
+{%- for issue in issues -%}
+{{ status_line(issue.level | default("info"), issue.message, issue.detail | default("")) }}
+{% endfor -%}
+{%- enddef -%}
+
+{#- ── Next steps: numbered guidance ───────────────────────────────── -#}
+{%- def next_steps(steps) -%}
+{%- for step in steps -%}
+  {{ (loop.index | string ~ ".") | bold | cyan }} {{ step }}
+{% endfor -%}
+{%- enddef -%}
+
+{#- ── Summary box: panel with key-value pairs ─────────────────────── -#}
+{%- def summary_box(title, items, width=40) -%}
+{%- capture content -%}
+{%- for item in items -%}
+{{ item.label | kv(item.value | string, width=width) }}
+{% endfor -%}
+{%- endcapture -%}
+{{ panel(content | trim, title=title) }}
+{%- enddef -%}

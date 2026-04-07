@@ -132,6 +132,48 @@ class Context:
         """True when -vv (or higher) was passed."""
         return self.verbosity >= 2
 
+    def render(
+        self,
+        template: str,
+        *,
+        env: Any = None,
+        **kwargs: Any,
+    ) -> str:
+        """Render a kida template and return the result string.
+
+        Convenience method for commands that need styled template output
+        without the full App event loop::
+
+            @cli.command("report", description="Show report")
+            def report(ctx: Context = None) -> str:
+                data = [{"name": "Alice", "score": 95}]
+                return ctx.render("report.kida", items=data)
+
+        Inline templates are supported with the ``string:`` prefix::
+
+            ctx.render("string:{{ x | bold }}", x="hello")
+
+        Args:
+            template: Template name (e.g. ``"report.kida"``) or an inline
+                template prefixed with ``"string:"``.
+            env: Optional pre-configured kida Environment.
+            **kwargs: Template context variables.
+
+        Returns:
+            Rendered string.
+        """
+        if env is None:
+            from milo.templates import get_env
+
+            env = get_env()
+
+        if template.startswith("string:"):
+            tmpl = env.from_string(template[7:])
+        else:
+            tmpl = env.get_template(template)
+
+        return tmpl.render(**kwargs)
+
     def run_app(
         self,
         reducer: Callable,
