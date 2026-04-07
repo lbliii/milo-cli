@@ -103,12 +103,12 @@ class ThemeProxy:
 
     def __getattr__(self, name: str) -> str:
         if name == "reset":
-            return _RESET if self._color else ""
-        theme: dict[str, ThemeStyle] = self._theme
+            return _RESET if object.__getattribute__(self, "_color") else ""
+        theme = object.__getattribute__(self, "_theme")
         if name not in theme:
             msg = f"Unknown theme style: {name!r}. Available: {', '.join(sorted(theme))}"
             raise AttributeError(msg)
-        if not self._color:
+        if not object.__getattribute__(self, "_color"):
             return ""
         return theme[name].sgr_prefix()
 

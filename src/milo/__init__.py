@@ -148,6 +148,7 @@ __version__ = "0.1.1"
 __all__ = [
     "BUILTIN_ACTIONS",
     "CLI",
+    "DEFAULT_THEME",
     "Action",
     "App",
     "AppError",
@@ -236,7 +237,6 @@ __all__ = [
     "function_to_schema",
     "generate_llms_txt",
     "get_context",
-    "DEFAULT_THEME",
     "install_completions",
     "make_form_reducer",
     "make_style_filter",
