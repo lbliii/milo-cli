@@ -496,7 +496,7 @@ class TestContextRender:
         mock_env.get_template.return_value = mock_tmpl
 
         ctx = Context()
-        result = ctx.render("any.kida", env=mock_env, y="val")
+        ctx.render("any.kida", env=mock_env, y="val")
         # The mock env was used
         mock_env.get_template.assert_called_with("any.kida")
 

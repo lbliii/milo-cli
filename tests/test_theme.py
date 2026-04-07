@@ -5,13 +5,12 @@ from __future__ import annotations
 import pytest
 
 from milo.theme import (
+    _RESET,
     DEFAULT_THEME,
     ThemeProxy,
     ThemeStyle,
-    _RESET,
     make_style_filter,
 )
-
 
 # ---------------------------------------------------------------------------
 # ThemeStyle

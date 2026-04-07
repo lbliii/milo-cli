@@ -95,7 +95,7 @@ class ThemeProxy:
     When color is disabled, all attributes return empty strings.
     """
 
-    __slots__ = ("_theme", "_color")
+    __slots__ = ("_color", "_theme")
 
     def __init__(self, theme: dict[str, ThemeStyle], *, color: bool = True) -> None:
         object.__setattr__(self, "_theme", theme)
@@ -104,7 +104,7 @@ class ThemeProxy:
     def __getattr__(self, name: str) -> str:
         if name == "reset":
             return _RESET if self._color else ""
-        theme = self._theme
+        theme: dict[str, ThemeStyle] = self._theme
         if name not in theme:
             msg = f"Unknown theme style: {name!r}. Available: {', '.join(sorted(theme))}"
             raise AttributeError(msg)
