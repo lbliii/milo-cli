@@ -7,7 +7,21 @@ import threading
 import pytest
 from conftest import noop_reducer
 
-from milo._types import Action, Call, Delay, Fork, Put, ReducerResult, Select
+from milo._types import (
+    Action,
+    All,
+    Call,
+    Debounce,
+    Delay,
+    Fork,
+    Put,
+    Race,
+    ReducerResult,
+    Select,
+    Take,
+    TakeEvery,
+    TakeLatest,
+)
 from milo.state import Store
 
 # ---------------------------------------------------------------------------
@@ -290,3 +304,401 @@ def test_bench_saga_throughput_no_blocking(benchmark) -> None:
         store.shutdown()
 
     benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+# ---------------------------------------------------------------------------
+# 3.1: Race benchmarks
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=[2, 4, 8], ids=["racers-2", "racers-4", "racers-8"])
+def race_count(request: pytest.FixtureRequest) -> int:
+    return request.param
+
+
+def test_bench_race(benchmark, race_count) -> None:
+    """Race with N sagas — first to complete wins, losers cancelled."""
+    done = threading.Event()
+
+    def _fast():
+        yield Delay(seconds=0.01)
+        return "fast"
+
+    def _slow(n):
+        def _s():
+            yield Delay(seconds=5.0)
+            return f"slow_{n}"
+
+        return _s
+
+    def _parent(n=race_count):
+        sagas = tuple([_fast()] + [_slow(i)() for i in range(n - 1)])
+        yield Race(sagas=sagas)
+        yield Put(Action("SAGA_DONE"))
+
+    def run():
+        done.clear()
+        store = Store(
+            _saga_done_reducer,
+            {"_done_event": done, "_saga_fn": _parent, "saga_completed": 0},
+        )
+        store.dispatch(Action("RUN_SAGA"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+def test_bench_race_cancellation_overhead(benchmark) -> None:
+    """Race where loser saga is deep in a Delay — measures cancellation cleanup time."""
+    done = threading.Event()
+
+    def _fast():
+        yield Delay(seconds=0.01)
+        return "fast"
+
+    def _deep_slow():
+        for _ in range(5):
+            yield Delay(seconds=1.0)
+        return "slow"
+
+    def _parent():
+        yield Race(sagas=(_fast(), _deep_slow()))
+        yield Put(Action("SAGA_DONE"))
+
+    def run():
+        done.clear()
+        store = Store(
+            _saga_done_reducer,
+            {"_done_event": done, "_saga_fn": _parent, "saga_completed": 0},
+        )
+        store.dispatch(Action("RUN_SAGA"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+# ---------------------------------------------------------------------------
+# 3.2: All benchmarks
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=[2, 4, 8], ids=["all-2", "all-4", "all-8"])
+def all_count(request: pytest.FixtureRequest) -> int:
+    return request.param
+
+
+def test_bench_all(benchmark, all_count) -> None:
+    """All with N parallel sagas — wait for all to complete."""
+    done = threading.Event()
+
+    def _worker(i):
+        def _w():
+            yield Delay(seconds=0.01)
+            return i
+
+        return _w
+
+    def _parent(n=all_count):
+        sagas = tuple(_worker(i)() for i in range(n))
+        yield All(sagas=sagas)
+        yield Put(Action("SAGA_DONE"))
+
+    def run():
+        done.clear()
+        store = Store(
+            _saga_done_reducer,
+            {"_done_event": done, "_saga_fn": _parent, "saga_completed": 0},
+        )
+        store.dispatch(Action("RUN_SAGA"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+# ---------------------------------------------------------------------------
+# 3.3: Take benchmarks
+# ---------------------------------------------------------------------------
+
+
+def test_bench_take_latency(benchmark) -> None:
+    """Take latency — time from dispatch to saga resumption."""
+    done = threading.Event()
+
+    def _take_saga():
+        yield Take("TRIGGER", timeout=5.0)
+        yield Put(Action("SAGA_DONE"))
+
+    def _trigger_reducer(state, action):
+        if action.type == "@@INIT":
+            return state
+        if action.type == "SAGA_DONE":
+            event = state.get("_done_event")
+            if event:
+                event.set()
+            return state
+        return state
+
+    def run():
+        done.clear()
+        store = Store(_trigger_reducer, {"_done_event": done})
+        store.run_saga(_take_saga())
+        # Small delay to ensure Take is registered, then trigger
+        import time
+
+        time.sleep(0.01)
+        store.dispatch(Action("TRIGGER"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=30, warmup_rounds=5)
+
+
+@pytest.fixture(params=[2, 4, 8], ids=["waiters-2", "waiters-4", "waiters-8"])
+def waiter_count(request: pytest.FixtureRequest) -> int:
+    return request.param
+
+
+def test_bench_take_multiple_waiters(benchmark, waiter_count) -> None:
+    """N sagas all waiting for the same action type via Take."""
+    done = threading.Event()
+    lock = threading.Lock()
+    remaining = [0]
+
+    def _waiter():
+        yield Take("BROADCAST", timeout=5.0)
+        with lock:
+            remaining[0] -= 1
+            if remaining[0] <= 0:
+                done.set()
+
+    def _reducer(state, action):
+        return state
+
+    def run():
+        done.clear()
+        remaining[0] = waiter_count
+        store = Store(_reducer, {})
+        for _ in range(waiter_count):
+            store.run_saga(_waiter())
+        import time
+
+        time.sleep(0.02)
+        store.dispatch(Action("BROADCAST"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+# ---------------------------------------------------------------------------
+# 3.4: Debounce benchmarks
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=[10, 50, 100], ids=["retrigger-10", "retrigger-50", "retrigger-100"])
+def retrigger_count(request: pytest.FixtureRequest) -> int:
+    return request.param
+
+
+def test_bench_debounce_retrigger(benchmark, retrigger_count) -> None:
+    """Debounce retrigger N times — only last one should fire."""
+    done = threading.Event()
+    fire_count = [0]
+
+    def _search():
+        fire_count[0] += 1
+        yield Put(Action("SEARCH_DONE"))
+
+    def _parent(n=retrigger_count):
+        for _i in range(n):
+            yield Take("KEY", timeout=5.0)
+            yield Debounce(seconds=0.05, saga=_search)
+        # Wait for debounce to fire
+        yield Delay(seconds=0.15)
+        yield Put(Action("SAGA_DONE"))
+
+    def _reducer(state, action):
+        if action.type == "SAGA_DONE":
+            done.set()
+        return state or 0
+
+    def run():
+        done.clear()
+        fire_count[0] = 0
+        store = Store(_reducer, 0)
+        store.run_saga(_parent())
+        import time
+
+        time.sleep(0.02)
+        for _ in range(retrigger_count):
+            store.dispatch(Action("KEY"))
+            time.sleep(0.001)
+        done.wait(timeout=5.0)
+        store.shutdown()
+        assert fire_count[0] == 1, f"Expected 1 fire, got {fire_count[0]}"
+
+    benchmark.pedantic(run, rounds=10, warmup_rounds=2)
+
+
+# ---------------------------------------------------------------------------
+# 3.5: TakeEvery / TakeLatest benchmarks
+# ---------------------------------------------------------------------------
+
+
+def test_bench_take_every(benchmark) -> None:
+    """TakeEvery throughput — fork handler for each of 10 dispatched actions."""
+    done = threading.Event()
+    lock = threading.Lock()
+    handled = [0]
+
+    def _handler(action):
+        with lock:
+            handled[0] += 1
+            if handled[0] >= 10:
+                done.set()
+        yield Put(Action("HANDLED"))
+
+    def _watcher():
+        yield TakeEvery("EVT", _handler)
+
+    def _reducer(state, action):
+        return state or 0
+
+    def run():
+        done.clear()
+        handled[0] = 0
+        store = Store(_reducer, 0)
+        ctx = store.run_saga(_watcher())
+        import time
+
+        time.sleep(0.02)
+        for _ in range(10):
+            store.dispatch(Action("EVT"))
+            time.sleep(0.005)
+        done.wait(timeout=5.0)
+        ctx.cancel_tree()
+        time.sleep(0.15)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=10, warmup_rounds=2)
+
+
+def test_bench_take_latest(benchmark) -> None:
+    """TakeLatest — rapid-fire 10 actions, only last handler completes."""
+    done = threading.Event()
+    completed = []
+
+    def _handler(action):
+        yield Delay(seconds=0.1)
+        completed.append(action.payload)
+        done.set()
+
+    def _watcher():
+        yield TakeLatest("SEARCH", _handler)
+
+    def _reducer(state, action):
+        return state or 0
+
+    def run():
+        done.clear()
+        completed.clear()
+        store = Store(_reducer, 0)
+        ctx = store.run_saga(_watcher())
+        import time
+
+        time.sleep(0.02)
+        for i in range(10):
+            store.dispatch(Action("SEARCH", payload=i))
+            time.sleep(0.005)
+        done.wait(timeout=5.0)
+        ctx.cancel_tree()
+        time.sleep(0.15)
+        store.shutdown()
+        assert len(completed) == 1
+
+    benchmark.pedantic(run, rounds=10, warmup_rounds=2)
+
+
+# ---------------------------------------------------------------------------
+# 3.6: Composition benchmarks
+# ---------------------------------------------------------------------------
+
+
+def test_bench_race_of_alls(benchmark) -> None:
+    """Race(All(a, b), All(c, d)) — nested parallelism."""
+    done = threading.Event()
+
+    def _fast_worker():
+        yield Delay(seconds=0.01)
+        return "fast"
+
+    def _slow_worker():
+        yield Delay(seconds=5.0)
+        return "slow"
+
+    def _fast_pair():
+        a, b = yield All(sagas=(_fast_worker(), _fast_worker()))
+        return (a, b)
+
+    def _slow_pair():
+        a, b = yield All(sagas=(_slow_worker(), _slow_worker()))
+        return (a, b)
+
+    def _parent():
+        yield Race(sagas=(_fast_pair(), _slow_pair()))
+        yield Put(Action("SAGA_DONE"))
+
+    def run():
+        done.clear()
+        # Extra workers to prevent pool starvation when Race+All nest
+        store = Store(
+            _saga_done_reducer,
+            {"_done_event": done, "_saga_fn": _parent, "saga_completed": 0},
+            max_workers=8,
+        )
+        store.dispatch(Action("RUN_SAGA"))
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=20, warmup_rounds=3)
+
+
+def test_bench_take_fork_loop(benchmark) -> None:
+    """Event-driven pattern: Take + Fork in a loop — 5 iterations."""
+    done = threading.Event()
+    lock = threading.Lock()
+    fork_count = [0]
+
+    def _child():
+        yield Call(fn=lambda: None)
+        with lock:
+            fork_count[0] += 1
+            if fork_count[0] >= 5:
+                done.set()
+
+    def _event_loop():
+        for _ in range(5):
+            yield Take("EVENT", timeout=5.0)
+            yield Fork(saga=_child())
+
+    def _reducer(state, action):
+        return state or 0
+
+    def run():
+        done.clear()
+        fork_count[0] = 0
+        store = Store(_reducer, 0)
+        store.run_saga(_event_loop())
+        import time
+
+        time.sleep(0.02)
+        for _ in range(5):
+            store.dispatch(Action("EVENT"))
+            time.sleep(0.01)
+        done.wait(timeout=5.0)
+        store.shutdown()
+
+    benchmark.pedantic(run, rounds=15, warmup_rounds=3)

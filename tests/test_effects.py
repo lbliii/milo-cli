@@ -19,9 +19,12 @@ from milo._types import (
     Retry,
     Select,
     Take,
+    TakeEvery,
+    TakeLatest,
     Timeout,
     TryCall,
 )
+from milo.state import SagaContext
 
 
 class TestSagaStepping:
@@ -1034,3 +1037,783 @@ class TestDebounceEffect:
         store._executor.shutdown(wait=True)
 
         assert "SHOULD_NOT_FIRE" not in actions
+
+
+class TestSagaContext:
+    def test_basic_creation(self):
+        ctx = SagaContext()
+        assert len(ctx.saga_id) == 12
+        assert not ctx.is_cancelled
+        assert ctx.parent is None
+        assert ctx.children == []
+
+    def test_child_inherits_cancel(self):
+        parent = SagaContext()
+        child = parent.child()
+        assert child.parent is parent
+        assert child in parent.children
+        assert not child.is_cancelled
+
+    def test_cancel_tree_propagates(self):
+        root = SagaContext()
+        child1 = root.child()
+        child2 = root.child()
+        grandchild = child1.child()
+
+        root.cancel_tree()
+
+        assert root.is_cancelled
+        assert child1.is_cancelled
+        assert child2.is_cancelled
+        assert grandchild.is_cancelled
+
+    def test_detached_child_independent(self):
+        parent = SagaContext()
+        detached = parent.detached_child()
+
+        parent.cancel_tree()
+
+        assert parent.is_cancelled
+        assert not detached.is_cancelled
+
+    def test_custom_saga_id(self):
+        ctx = SagaContext(saga_id="my-saga")
+        assert ctx.saga_id == "my-saga"
+
+    def test_cancel_child_does_not_cancel_parent(self):
+        parent = SagaContext()
+        child = parent.child()
+
+        child.cancel_tree()
+
+        assert child.is_cancelled
+        assert not parent.is_cancelled
+
+    def test_run_saga_returns_context(self):
+        from milo.state import Store
+
+        def saga():
+            yield Put(Action("done"))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(saga())
+        assert isinstance(ctx, SagaContext)
+        store._executor.shutdown(wait=True)
+
+    def test_saga_error_includes_saga_id(self):
+        from milo.state import Store
+
+        errors = []
+
+        def bad_saga():
+            raise ValueError("boom")
+            yield  # makes it a generator
+
+        def reducer(state, action):
+            if action.type == "@@SAGA_ERROR":
+                errors.append(action.payload)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(bad_saga())
+        store._executor.shutdown(wait=True)
+
+        assert len(errors) == 1
+        assert errors[0]["saga_id"] == ctx.saga_id
+        assert errors[0]["type"] == "ValueError"
+
+    def test_saga_cancelled_includes_saga_id(self):
+        from milo.state import Store
+
+        payloads = []
+
+        def long_saga():
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            if action.type == "@@SAGA_CANCELLED":
+                payloads.append(action.payload)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(long_saga())
+        time.sleep(0.1)
+        ctx.cancel.set()
+        store._executor.shutdown(wait=True)
+
+        assert len(payloads) == 1
+        assert payloads[0]["saga_id"] == ctx.saga_id
+
+
+class TestForkAttached:
+    def test_detached_fork_not_cancelled_by_parent(self):
+        """Default (detached) fork is NOT cancelled when parent is cancelled."""
+        from milo.state import Store
+
+        results = []
+        cancel = threading.Event()
+
+        def child():
+            yield Delay(seconds=0.15)
+            results.append("child_completed")
+            yield Put(Action("child_done"))
+
+        def parent():
+            yield Fork(saga=child())  # detached by default
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent(), cancel=cancel)
+        time.sleep(0.05)
+        cancel.set()  # Cancel parent
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Child should still complete because it's detached
+        assert "child_completed" in results
+
+    def test_attached_fork_cancelled_by_parent(self):
+        """Attached fork IS cancelled when parent is cancelled."""
+        from milo.state import Store
+
+        results = []
+        actions = []
+
+        def child():
+            yield Delay(seconds=0.05)
+            yield Delay(seconds=10)  # Should be cancelled before this completes
+            results.append("child_completed")
+
+        def parent():
+            yield Fork(saga=child(), attached=True)
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()  # Cancel parent AND attached children
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        assert "child_completed" not in results
+        assert "@@SAGA_CANCELLED" in actions
+
+
+class TestRaceCancellationPropagation:
+    def test_race_parent_cancel_propagates_to_children(self):
+        """Cancelling parent while Race is running cancels all Race children."""
+        from milo.state import Store
+
+        actions = []
+
+        def slow_a():
+            yield Delay(seconds=10)
+            return "a"
+
+        def slow_b():
+            yield Delay(seconds=10)
+            return "b"
+
+        def parent():
+            try:  # noqa: SIM105
+                yield Race(sagas=(slow_a(), slow_b()))
+            except Exception:
+                pass
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Parent + at least one child should have been cancelled
+        cancel_count = actions.count("@@SAGA_CANCELLED")
+        assert cancel_count >= 1
+
+
+class TestAllCancellationPropagation:
+    def test_all_parent_cancel_propagates_to_children(self):
+        """Cancelling parent while All is running cancels all children."""
+        from milo.state import Store
+
+        actions = []
+
+        def slow_a():
+            yield Delay(seconds=10)
+            return "a"
+
+        def slow_b():
+            yield Delay(seconds=10)
+            return "b"
+
+        def parent():
+            try:  # noqa: SIM105
+                yield All(sagas=(slow_a(), slow_b()))
+            except Exception:
+                pass
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        cancel_count = actions.count("@@SAGA_CANCELLED")
+        assert cancel_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Composition tests — nested effect patterns
+# ---------------------------------------------------------------------------
+
+
+class TestEffectComposition:
+    def test_race_inside_all(self):
+        """All containing two Race effects — both races resolve, All collects results."""
+        from milo.state import Store
+
+        results = []
+
+        def race_ab():
+            def fast():
+                yield Delay(seconds=0.05)
+                return "fast_a"
+
+            def slow():
+                yield Delay(seconds=5.0)
+                return "slow_a"
+
+            winner = yield Race(sagas=(fast(), slow()))
+            return winner
+
+        def race_cd():
+            def fast():
+                yield Delay(seconds=0.05)
+                return "fast_b"
+
+            def slow():
+                yield Delay(seconds=5.0)
+                return "slow_b"
+
+            winner = yield Race(sagas=(fast(), slow()))
+            return winner
+
+        def parent():
+            a, b = yield All(sagas=(race_ab(), race_cd()))
+            results.append((a, b))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("fast_a", "fast_b")]
+
+    def test_all_inside_race(self):
+        """Race between two All effects — first All to complete wins."""
+        from milo.state import Store
+
+        results = []
+
+        def fast_pair():
+            def a():
+                yield Delay(seconds=0.05)
+                return "a"
+
+            def b():
+                yield Delay(seconds=0.05)
+                return "b"
+
+            pair = yield All(sagas=(a(), b()))
+            return pair
+
+        def slow_pair():
+            def c():
+                yield Delay(seconds=5.0)
+                return "c"
+
+            def d():
+                yield Delay(seconds=5.0)
+                return "d"
+
+            pair = yield All(sagas=(c(), d()))
+            return pair
+
+        def parent():
+            winner = yield Race(sagas=(fast_pair(), slow_pair()))
+            results.append(winner)
+
+        def reducer(state, action):
+            return state or 0
+
+        # Use extra workers to prevent pool starvation when Race+All nest
+        store = Store(reducer, None, max_workers=8)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("a", "b")]
+
+    def test_fork_inside_race(self):
+        """Race where one racer forks a child — fork should be cancelled when race completes."""
+        from milo.state import Store
+
+        actions = []
+
+        def forker():
+            def child():
+                yield Delay(seconds=0.05)
+                yield Delay(seconds=10.0)  # Should be cancelled
+                yield Put(Action("CHILD_SURVIVED"))
+
+            yield Fork(saga=child(), attached=True)
+            yield Delay(seconds=5.0)
+            return "forker"
+
+        def fast():
+            yield Delay(seconds=0.1)
+            return "fast"
+
+        def parent():
+            winner = yield Race(sagas=(forker(), fast()))
+            yield Put(Action("WINNER", payload=winner))
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert "WINNER" in actions
+        assert "CHILD_SURVIVED" not in actions
+
+    def test_take_inside_all(self):
+        """All with multiple sagas waiting for different actions via Take."""
+        from milo.state import Store
+
+        results = []
+
+        def waiter_a():
+            action = yield Take("EVENT_A", timeout=2.0)
+            return action.payload
+
+        def waiter_b():
+            action = yield Take("EVENT_B", timeout=2.0)
+            return action.payload
+
+        def parent():
+            # Fork a saga that dispatches the events after a short delay
+            def dispatcher():
+                yield Delay(seconds=0.1)
+                yield Put(Action("EVENT_A", payload="hello"))
+                yield Put(Action("EVENT_B", payload="world"))
+
+            yield Fork(saga=dispatcher())
+            a, b = yield All(sagas=(waiter_a(), waiter_b()))
+            results.append((a, b))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("hello", "world")]
+
+    def test_debounce_with_take_pattern(self):
+        """Keystroke search pattern: Take + Debounce in a loop."""
+        from milo.state import Store
+
+        actions = []
+
+        def search_saga():
+            yield Put(Action("SEARCH_EXECUTED"))
+
+        def parent():
+            # Simulate: receive 3 rapid keys, debounce should fire once
+            for _ in range(3):
+                yield Take("@@KEY", timeout=1.0)
+                yield Debounce(seconds=0.15, saga=search_saga)
+            # Wait for debounce to fire
+            yield Delay(seconds=0.3)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        # Dispatch 3 rapid key events
+        time.sleep(0.05)
+        store.dispatch(Action("@@KEY", payload="a"))
+        time.sleep(0.02)
+        store.dispatch(Action("@@KEY", payload="b"))
+        time.sleep(0.02)
+        store.dispatch(Action("@@KEY", payload="c"))
+        time.sleep(0.6)
+        store._executor.shutdown(wait=True)
+
+        # Debounce should have fired exactly once (last one)
+        search_count = actions.count("SEARCH_EXECUTED")
+        assert search_count == 1
+
+
+class TestTakeEveryEffect:
+    def test_take_every_forks_for_each_action(self):
+        """TakeEvery('CLICK', handler) forks 3 handlers when 3 CLICK actions dispatched."""
+        from milo.state import Store
+
+        results = []
+
+        def handle_click(action):
+            results.append(action.payload)
+            yield Put(Action("CLICK_HANDLED", payload=action.payload))
+
+        def watcher():
+            yield TakeEvery("CLICK", handle_click)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("CLICK", payload="btn1"))
+        time.sleep(0.05)
+        store.dispatch(Action("CLICK", payload="btn2"))
+        time.sleep(0.05)
+        store.dispatch(Action("CLICK", payload="btn3"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert sorted(results) == ["btn1", "btn2", "btn3"]
+
+    def test_take_every_cancel_stops_watching(self):
+        """Cancelling the parent stops the TakeEvery watcher loop."""
+        from milo.state import Store
+
+        actions = []
+
+        def handler(action):
+            yield Put(Action("HANDLED"))
+
+        def watcher():
+            yield TakeEvery("EVT", handler)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("EVT", payload=1))
+        time.sleep(0.15)
+
+        # Cancel the watcher
+        ctx.cancel_tree()
+        time.sleep(0.2)
+
+        # Dispatch after cancel — should NOT be handled
+        handled_before = actions.count("HANDLED")
+        store.dispatch(Action("EVT", payload=2))
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        handled_after = actions.count("HANDLED")
+        assert handled_before == 1
+        assert handled_after == handled_before  # No new handlers after cancel
+
+    def test_take_every_ignores_unrelated_actions(self):
+        """TakeEvery only forks for matching action types."""
+        from milo.state import Store
+
+        results = []
+
+        def handler(action):
+            results.append(action.type)
+            yield Put(Action("HANDLED"))
+
+        def watcher():
+            yield TakeEvery("TARGET", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("OTHER", payload="x"))
+        store.dispatch(Action("TARGET", payload="y"))
+        store.dispatch(Action("OTHER", payload="z"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["TARGET"]
+
+
+class TestTakeLatestEffect:
+    def test_take_latest_cancels_previous(self):
+        """TakeLatest cancels previous handler when new action arrives, only last completes."""
+        from milo.state import Store
+
+        completed = []
+
+        def handler(action):
+            yield Delay(seconds=0.5)
+            completed.append(action.payload)
+
+        def watcher():
+            yield TakeLatest("SEARCH", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=8)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.15)
+
+        # Dispatch with enough gap for TakeLatest to re-register its waiter
+        store.dispatch(Action("SEARCH", payload="first"))
+        time.sleep(0.15)
+        store.dispatch(Action("SEARCH", payload="second"))
+        time.sleep(0.15)
+        store.dispatch(Action("SEARCH", payload="third"))
+        # Wait for the last handler to complete
+        time.sleep(0.8)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        # Only the last one should have completed
+        assert completed == ["third"]
+
+    def test_take_latest_cancel_stops_watching(self):
+        """Cancelling the parent stops TakeLatest and cancels the active fork."""
+        from milo.state import Store
+
+        actions = []
+
+        def handler(action):
+            yield Delay(seconds=0.5)
+            yield Put(Action("COMPLETED"))
+
+        def watcher():
+            yield TakeLatest("EVT", handler)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("EVT", payload=1))
+        time.sleep(0.1)
+
+        # Cancel before handler completes
+        ctx.cancel_tree()
+        time.sleep(0.7)
+        store._executor.shutdown(wait=True)
+
+        assert "COMPLETED" not in actions
+
+    def test_take_latest_single_action_completes(self):
+        """With only one action, TakeLatest lets it complete normally."""
+        from milo.state import Store
+
+        results = []
+
+        def handler(action):
+            yield Delay(seconds=0.05)
+            results.append(action.payload)
+
+        def watcher():
+            yield TakeLatest("DO", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("DO", payload="only"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["only"]
+
+
+class TestConfigurablePool:
+    def test_custom_max_workers(self):
+        """Store accepts max_workers parameter."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=8)
+        assert store._max_workers == 8
+        assert store._executor._max_workers == 8
+        store._executor.shutdown(wait=True)
+
+    def test_default_max_workers(self):
+        """Default max_workers is 4."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        assert store._max_workers == 4
+        store._executor.shutdown(wait=True)
+
+    def test_pool_pressure_callback_fires(self):
+        """on_pool_pressure fires when active tasks exceed threshold."""
+        from milo.state import Store
+
+        pressure_calls = []
+
+        def on_pressure(active, max_w):
+            pressure_calls.append((active, max_w))
+
+        def reducer(state, action):
+            return state or 0
+
+        # max_workers=2, threshold=0.5 → fires when active >= 1
+        store = Store(
+            reducer,
+            None,
+            max_workers=2,
+            on_pool_pressure=on_pressure,
+            pool_pressure_threshold=0.5,
+        )
+
+        barrier = threading.Event()
+
+        def blocking_saga():
+            yield Call(fn=lambda: barrier.wait(timeout=5))
+
+        # Launch 2 sagas that block
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        time.sleep(0.2)
+
+        barrier.set()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        # Should have fired at least once (when active >= 1)
+        assert len(pressure_calls) >= 1
+        # Each call should have (active_count, max_workers=2)
+        for active, max_w in pressure_calls:
+            assert max_w == 2
+            assert active >= 1
+
+    def test_pool_active_property(self):
+        """pool_active reports currently running tasks."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=4)
+
+        barrier = threading.Event()
+
+        def blocking_saga():
+            def block():
+                barrier.wait(timeout=5)
+
+            yield Call(fn=block)
+
+        # Launch 3 blocking sagas
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        time.sleep(0.2)
+
+        snapshot = store.pool_active
+
+        barrier.set()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # While blocked, should have had 3 active tasks
+        assert snapshot >= 3
+        # After completion, should be 0
+        assert store.pool_active == 0
+
+    def test_pool_pressure_callback_error_swallowed(self):
+        """Errors in on_pool_pressure callback are swallowed, not propagated."""
+        from milo.state import Store
+
+        def bad_callback(active, max_w):
+            raise RuntimeError("callback boom")
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(
+            reducer,
+            None,
+            max_workers=2,
+            on_pool_pressure=bad_callback,
+            pool_pressure_threshold=0.0,  # Always fires
+        )
+
+        results = []
+
+        def simple_saga():
+            result = yield Call(fn=lambda: 42)
+            results.append(result)
+
+        store.run_saga(simple_saga())
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Saga should still complete despite callback error
+        assert results == [42]

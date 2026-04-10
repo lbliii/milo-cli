@@ -6,7 +6,8 @@ import hashlib
 import logging
 import threading
 import time
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ from milo._types import (
     Select,
     Sequence,
     Take,
+    TakeEvery,
+    TakeLatest,
     TickCmd,
     Timeout,
     TryCall,
@@ -36,6 +39,343 @@ from milo._types import (
 )
 
 _logger = logging.getLogger("milo.state")
+
+
+# ---------------------------------------------------------------------------
+# EffectResult — return type for effect handlers
+# ---------------------------------------------------------------------------
+
+_SEND = "send"
+_NEXT = "next"
+_THROW = "throw"
+_CONTINUE = "continue"  # Re-check cancellation at top of loop
+
+
+class EffectResult:
+    """What an effect handler returns to tell the saga runner how to advance the generator."""
+
+    __slots__ = ("action", "error", "value")
+
+    def __init__(self, action: str, value: Any = None, error: Exception | None = None) -> None:
+        self.action = action
+        self.value = value
+        self.error = error
+
+    @classmethod
+    def send(cls, value: Any) -> EffectResult:
+        """Resume the saga with ``saga.send(value)``."""
+        return cls(_SEND, value=value)
+
+    @classmethod
+    def next(cls) -> EffectResult:
+        """Advance the saga with ``next(saga)``."""
+        return cls(_NEXT)
+
+    @classmethod
+    def throw(cls, error: Exception) -> EffectResult:
+        """Throw an exception into the saga with ``saga.throw(error)``."""
+        return cls(_THROW, error=error)
+
+    @classmethod
+    def cont(cls) -> EffectResult:
+        """Loop back to the cancellation check at the top of the runner."""
+        return cls(_CONTINUE)
+
+
+# ---------------------------------------------------------------------------
+# Effect handlers — standalone functions, one per effect type
+# ---------------------------------------------------------------------------
+
+
+def _handle_call(effect: Call, _context: SagaContext, _store: Store) -> EffectResult:
+    try:
+        result = effect.fn(*effect.args, **effect.kwargs)
+    except Exception as e:
+        return EffectResult.throw(e)
+    return EffectResult.send(result)
+
+
+def _handle_put(effect: Put, _context: SagaContext, store: Store) -> EffectResult:
+    store.dispatch(effect.action)
+    return EffectResult.next()
+
+
+def _handle_select(effect: Select, _context: SagaContext, store: Store) -> EffectResult:
+    state = store._state
+    if effect.selector:
+        state = effect.selector(state)
+    return EffectResult.send(state)
+
+
+def _handle_fork(effect: Fork, context: SagaContext, store: Store) -> EffectResult:
+    child_ctx = context.child() if effect.attached else context.detached_child()
+    saga = effect.saga if isinstance(effect.saga, Generator) else effect.saga()
+    store._tracked_submit(store._run_saga, saga, child_ctx)
+    return EffectResult.send(child_ctx.cancel)
+
+
+def _handle_delay(effect: Delay, context: SagaContext, _store: Store) -> EffectResult:
+    context.cancel.wait(timeout=effect.seconds)
+    if context.is_cancelled:
+        return EffectResult.cont()
+    return EffectResult.next()
+
+
+def _handle_retry(effect: Retry, _context: SagaContext, _store: Store) -> EffectResult:
+    result = _execute_retry(
+        effect.fn,
+        effect.args,
+        effect.kwargs,
+        effect.max_attempts,
+        effect.backoff,
+        effect.base_delay,
+        effect.max_delay,
+    )
+    return EffectResult.send(result)
+
+
+def _handle_timeout(effect: Timeout, _context: SagaContext, store: Store) -> EffectResult:
+    try:
+        result = store._execute_timeout(effect.effect, effect.seconds)
+    except TimeoutError as e:
+        return EffectResult.throw(e)
+    return EffectResult.send(result)
+
+
+def _handle_trycall(effect: TryCall, _context: SagaContext, _store: Store) -> EffectResult:
+    try:
+        result = effect.fn(*effect.args, **effect.kwargs)
+        return EffectResult.send((result, None))
+    except Exception as e:
+        return EffectResult.send((None, e))
+
+
+def _handle_race(effect: Race, context: SagaContext, store: Store) -> EffectResult:
+    if not effect.sagas:
+        raise StateError(ErrorCode.STA_SAGA, "Race requires at least one saga")
+    try:
+        result = store._execute_race(effect.sagas, context)
+    except Exception as e:
+        return EffectResult.throw(e)
+    return EffectResult.send(result)
+
+
+def _handle_all(effect: All, context: SagaContext, store: Store) -> EffectResult:
+    if not effect.sagas:
+        return EffectResult.send(())
+    try:
+        results = store._execute_all(effect.sagas, context)
+    except Exception as e:
+        return EffectResult.throw(e)
+    return EffectResult.send(results)
+
+
+def _handle_take(effect: Take, context: SagaContext, store: Store) -> EffectResult:
+    waiter_event = threading.Event()
+    result_box: list = []
+    with store._lock:
+        store._action_waiters.setdefault(effect.action_type, []).append((waiter_event, result_box))
+    wait_interval = 0.1
+    deadline = None if effect.timeout is None else time.monotonic() + effect.timeout
+    while not waiter_event.is_set():
+        if context.is_cancelled:
+            break
+        if deadline is None:
+            current_timeout = wait_interval
+        else:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            current_timeout = min(wait_interval, remaining)
+        waiter_event.wait(timeout=current_timeout)
+
+    if context.is_cancelled:
+        _cleanup_take_waiter(store, effect.action_type, waiter_event)
+        return EffectResult.cont()
+
+    if result_box:
+        return EffectResult.send(result_box[0])
+
+    # Timeout expired
+    _cleanup_take_waiter(store, effect.action_type, waiter_event)
+    return EffectResult.throw(
+        TimeoutError(f"Take('{effect.action_type}') timed out after {effect.timeout}s")
+    )
+
+
+def _handle_debounce(
+    effect: Debounce,
+    context: SagaContext,
+    store: Store,
+    pending: list,
+) -> EffectResult:
+    # Cancel any pending debounce timer from a previous yield
+    if pending:
+        old_timer, old_ctx = pending[0]
+        old_timer.cancel()
+        old_ctx.cancel.set()
+        pending.clear()
+    child_ctx = context.child()
+
+    def _debounce_fire(s=effect.saga, cc=child_ctx, st=store):
+        if not cc.is_cancelled:
+            st._tracked_submit(st._run_saga, s(), cc)
+
+    timer = threading.Timer(effect.seconds, _debounce_fire)
+    timer.daemon = True
+    timer.start()
+    pending.append((timer, child_ctx))
+    return EffectResult.next()
+
+
+def _handle_take_every(effect: TakeEvery, context: SagaContext, store: Store) -> EffectResult:
+    """Block until cancelled, forking a new saga for every matching action."""
+    while not context.is_cancelled:
+        # Wait for the next matching action
+        waiter_event = threading.Event()
+        result_box: list = []
+        with store._lock:
+            store._action_waiters.setdefault(effect.action_type, []).append(
+                (waiter_event, result_box)
+            )
+        # Poll with short intervals for cancellation
+        while not waiter_event.is_set():
+            if context.is_cancelled:
+                _cleanup_take_waiter(store, effect.action_type, waiter_event)
+                return EffectResult.cont()
+            waiter_event.wait(timeout=0.1)
+        if result_box:
+            action = result_box[0]
+            child_ctx = context.child()
+            store._tracked_submit(store._run_saga, effect.saga(action), child_ctx)
+    return EffectResult.cont()
+
+
+def _handle_take_latest(effect: TakeLatest, context: SagaContext, store: Store) -> EffectResult:
+    """Block until cancelled, forking a saga for the latest matching action only."""
+    prev_ctx: SagaContext | None = None
+    while not context.is_cancelled:
+        waiter_event = threading.Event()
+        result_box: list = []
+        with store._lock:
+            store._action_waiters.setdefault(effect.action_type, []).append(
+                (waiter_event, result_box)
+            )
+        while not waiter_event.is_set():
+            if context.is_cancelled:
+                _cleanup_take_waiter(store, effect.action_type, waiter_event)
+                if prev_ctx is not None:
+                    prev_ctx.cancel_tree()
+                return EffectResult.cont()
+            waiter_event.wait(timeout=0.1)
+        if result_box:
+            action = result_box[0]
+            # Cancel previous fork before starting new one
+            if prev_ctx is not None:
+                prev_ctx.cancel_tree()
+            child_ctx = context.child()
+            prev_ctx = child_ctx
+            store._tracked_submit(store._run_saga, effect.saga(action), child_ctx)
+    if prev_ctx is not None:
+        prev_ctx.cancel_tree()
+    return EffectResult.cont()
+
+
+def _cleanup_take_waiter(
+    store: Store,
+    action_type: str,
+    waiter_event: threading.Event,
+) -> None:
+    """Remove an unconsumed Take waiter from the store."""
+    with store._lock:
+        entries = store._action_waiters.get(action_type, [])
+        for i, (ev, _) in enumerate(entries):
+            if ev is waiter_event:
+                entries.pop(i)
+                break
+        if not entries and action_type in store._action_waiters:
+            del store._action_waiters[action_type]
+
+
+# Default handler registry — maps effect type to handler function
+_DEFAULT_HANDLERS: dict[type, Callable] = {
+    Call: _handle_call,
+    Put: _handle_put,
+    Select: _handle_select,
+    Fork: _handle_fork,
+    Delay: _handle_delay,
+    Retry: _handle_retry,
+    Timeout: _handle_timeout,
+    TryCall: _handle_trycall,
+    Race: _handle_race,
+    All: _handle_all,
+    Take: _handle_take,
+    TakeEvery: _handle_take_every,
+    TakeLatest: _handle_take_latest,
+    # Debounce handled specially (needs pending_debounce state)
+}
+
+
+# ---------------------------------------------------------------------------
+# SagaContext — runtime identity + cancellation scope for sagas
+# ---------------------------------------------------------------------------
+
+
+class SagaContext:
+    """Runtime context for a running saga — threading identity + cancellation scope.
+
+    Provides structured cancellation: when a parent context is cancelled,
+    all child contexts are cancelled transitively via :meth:`cancel_tree`.
+
+    This is mutable runtime state (not Store state), so it uses a regular
+    class with ``__slots__`` rather than a frozen dataclass.
+    """
+
+    __slots__ = ("_lock", "cancel", "children", "parent", "saga_id")
+
+    def __init__(
+        self,
+        saga_id: str | None = None,
+        cancel: threading.Event | None = None,
+        parent: SagaContext | None = None,
+    ) -> None:
+        self.saga_id: str = saga_id or uuid.uuid4().hex[:12]
+        self.cancel: threading.Event = cancel or threading.Event()
+        self.parent: SagaContext | None = parent
+        self.children: list[SagaContext] = []
+        self._lock: threading.Lock = threading.Lock()
+        if parent is not None:
+            parent._add_child(self)
+
+    def _add_child(self, child: SagaContext) -> None:
+        with self._lock:
+            self.children.append(child)
+
+    def _remove_child(self, child: SagaContext) -> None:
+        import contextlib
+
+        with self._lock, contextlib.suppress(ValueError):
+            self.children.remove(child)
+
+    def cancel_tree(self) -> None:
+        """Cancel this context and all descendants transitively."""
+        self.cancel.set()
+        with self._lock:
+            for child in self.children:
+                child.cancel_tree()
+
+    @property
+    def is_cancelled(self) -> bool:
+        """True if this context's cancel event has been set."""
+        return self.cancel.is_set()
+
+    def child(self, saga_id: str | None = None) -> SagaContext:
+        """Create a child context that inherits this cancel scope."""
+        return SagaContext(saga_id=saga_id, parent=self)
+
+    def detached_child(self, saga_id: str | None = None) -> SagaContext:
+        """Create a child with its own independent cancel scope."""
+        return SagaContext(saga_id=saga_id)
 
 
 class Store:
@@ -53,12 +393,20 @@ class Store:
         middleware: tuple[Callable, ...] = (),
         *,
         record: bool | str | Path = False,
+        max_workers: int = 4,
+        on_pool_pressure: Callable[[int, int], None] | None = None,
+        pool_pressure_threshold: float = 0.8,
     ) -> None:
         self._reducer = reducer
         self._state = initial_state
         self._lock = threading.Lock()
         self._listeners: list[Callable] = []
-        self._executor = ThreadPoolExecutor(max_workers=4)
+        self._max_workers = max_workers
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._on_pool_pressure = on_pool_pressure
+        self._pool_pressure_threshold = pool_pressure_threshold
+        self._active_tasks = 0
+        self._tasks_lock = threading.Lock()
         self._recording: list[dict] | None = [] if record else None
         self._record_path = record if isinstance(record, (str, Path)) else None
         self._prev_hash: str = "0" * 16  # Merkle chain seed
@@ -80,9 +428,42 @@ class Store:
     def _get_state(self) -> Any:
         return self._state
 
+    def _tracked_submit(self, fn, *args):
+        """Submit work to the pool, tracking active tasks for pressure detection."""
+        with self._tasks_lock:
+            self._active_tasks += 1
+            active = self._active_tasks
+        if (
+            self._on_pool_pressure is not None
+            and active >= self._max_workers * self._pool_pressure_threshold
+        ):
+            try:
+                self._on_pool_pressure(active, self._max_workers)
+            except Exception:
+                _logger.debug("on_pool_pressure callback failed", exc_info=True)
+
+        def _wrapper():
+            try:
+                fn(*args)
+            finally:
+                with self._tasks_lock:
+                    self._active_tasks -= 1
+
+        try:
+            return self._executor.submit(_wrapper)
+        except Exception:
+            with self._tasks_lock:
+                self._active_tasks -= 1
+            raise
+
     @property
     def state(self) -> Any:
         return self._state
+
+    @property
+    def pool_active(self) -> int:
+        """Number of currently active tasks in the thread pool."""
+        return self._active_tasks
 
     def dispatch(self, action: Action) -> None:
         """Dispatch action through middleware -> reducer."""
@@ -167,198 +548,100 @@ class Store:
         """Latest ViewState from a reducer, or None."""
         return self._view_state
 
-    def run_saga(self, saga: Any, cancel: threading.Event | None = None) -> None:
+    def run_saga(
+        self,
+        saga: Any,
+        cancel: threading.Event | None = None,
+        context: SagaContext | None = None,
+    ) -> SagaContext:
         """Schedule a saga on the thread pool.
 
         Args:
             saga: Generator saga to execute.
-            cancel: Optional cancellation event. When set, the saga
-                stops at the next effect boundary and dispatches
-                ``@@SAGA_CANCELLED``.
-        """
-        if cancel is None:
-            cancel = threading.Event()
-        self._executor.submit(self._run_saga, saga, cancel)
+            cancel: Optional cancellation event (legacy). Prefer *context*.
+            context: Optional :class:`SagaContext` for structured cancellation.
+                If neither *cancel* nor *context* is provided, a fresh context
+                is created automatically.
 
-    def _run_saga(self, saga: Any, cancel: threading.Event | None = None) -> None:
-        """Step through a generator saga, executing effects.
+        Returns:
+            The :class:`SagaContext` assigned to this saga (useful for
+            cancellation and debugging).
+        """
+        if context is None:
+            ctx_cancel = cancel or threading.Event()
+            context = SagaContext(cancel=ctx_cancel)
+        self._tracked_submit(self._run_saga, saga, context)
+        return context
+
+    def _run_saga(self, saga: Any, context: SagaContext | None = None) -> None:
+        """Step through a generator saga, executing effects via handler registry.
 
         Catches unhandled exceptions and dispatches @@SAGA_ERROR so the
         reducer can react gracefully.  The error is never swallowed silently.
         """
-        if cancel is None:
-            cancel = threading.Event()
-        pending_debounce: list = []  # [(timer, child_cancel)] — at most one entry
+        if context is None:
+            context = SagaContext()
+        pending_debounce: list = []  # [(timer, child_ctx)] — at most one entry
         try:
             effect = next(saga)
             while True:
-                if cancel.is_set():
+                if context.is_cancelled:
                     try:
-                        self.dispatch(Action("@@SAGA_CANCELLED"))
+                        self.dispatch(
+                            Action(
+                                "@@SAGA_CANCELLED",
+                                payload={"saga_id": context.saga_id},
+                            )
+                        )
                     except Exception:
                         _logger.debug("Failed to dispatch @@SAGA_CANCELLED", exc_info=True)
                     return
-                match effect:
-                    case Call(fn, args, kwargs):
-                        try:
-                            result = fn(*args, **kwargs)
-                        except Exception as call_err:
-                            effect = saga.throw(call_err)
-                        else:
-                            effect = saga.send(result)
-                    case Put(action):
-                        self.dispatch(action)
-                        effect = next(saga)
-                    case Select(selector):
-                        state = self._state
-                        if selector:
-                            state = selector(state)
-                        effect = saga.send(state)
-                    case Fork(child_saga):
-                        child_cancel = threading.Event()
-                        self._executor.submit(self._run_saga, child_saga, child_cancel)
-                        effect = saga.send(child_cancel)
-                    case Delay(seconds):
-                        # Use cancel.wait() so cancellation can interrupt a long delay
-                        cancel.wait(timeout=seconds)
-                        if cancel.is_set():
-                            continue  # Loop back to cancellation check at top
-                        effect = next(saga)
-                    case Retry(fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay):
-                        result = _execute_retry(
-                            fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay
-                        )
-                        effect = saga.send(result)
-                    case Timeout(inner_effect, seconds):
-                        try:
-                            result = self._execute_timeout(inner_effect, seconds)
-                            effect = saga.send(result)
-                        except TimeoutError as te:
-                            effect = saga.throw(te)
-                    case TryCall(fn, args, kwargs):
-                        try:
-                            result = fn(*args, **kwargs)
-                            effect = saga.send((result, None))
-                        except Exception as call_err:
-                            effect = saga.send((None, call_err))
-                    case Race(child_sagas):
-                        if not child_sagas:
-                            raise StateError(ErrorCode.STA_SAGA, "Race requires at least one saga")
-                        try:
-                            result = self._execute_race(child_sagas, cancel)
-                        except Exception as race_err:
-                            effect = saga.throw(race_err)
-                        else:
-                            effect = saga.send(result)
-                    case All(child_sagas):
-                        if not child_sagas:
-                            effect = saga.send(())
-                        else:
-                            try:
-                                results = self._execute_all(child_sagas, cancel)
-                            except Exception as all_err:
-                                effect = saga.throw(all_err)
-                            else:
-                                effect = saga.send(results)
-                    case Take(action_type, timeout):
-                        waiter_event = threading.Event()
-                        result_box: list = []
-                        with self._lock:
-                            self._action_waiters.setdefault(action_type, []).append(
-                                (waiter_event, result_box)
-                            )
-                        # Wait outside the lock in short intervals so cancellation
-                        # can be checked promptly while still honoring timeout.
-                        wait_interval = 0.1
-                        deadline = None if timeout is None else time.monotonic() + timeout
-                        while not waiter_event.is_set():
-                            if cancel.is_set():
-                                break
-                            if deadline is None:
-                                current_timeout = wait_interval
-                            else:
-                                remaining = deadline - time.monotonic()
-                                if remaining <= 0:
-                                    break
-                                current_timeout = min(wait_interval, remaining)
-                            waiter_event.wait(timeout=current_timeout)
-                        if cancel.is_set():
-                            # Clean up waiter if not consumed
-                            with self._lock:
-                                entries = self._action_waiters.get(action_type, [])
-                                for i, (ev, _) in enumerate(entries):
-                                    if ev is waiter_event:
-                                        entries.pop(i)
-                                        break
-                                if not entries and action_type in self._action_waiters:
-                                    del self._action_waiters[action_type]
-                            continue  # Loop back to cancellation check
-                        if result_box:
-                            effect = saga.send(result_box[0])
-                        else:
-                            # Timeout expired — clean up waiter
-                            with self._lock:
-                                entries = self._action_waiters.get(action_type, [])
-                                for i, (ev, _) in enumerate(entries):
-                                    if ev is waiter_event:
-                                        entries.pop(i)
-                                        break
-                                if not entries and action_type in self._action_waiters:
-                                    del self._action_waiters[action_type]
-                            try:
-                                effect = saga.throw(
-                                    TimeoutError(
-                                        f"Take('{action_type}') timed out after {timeout}s"
-                                    )
-                                )
-                            except StopIteration:
-                                return
-                    case Debounce(seconds, inner_saga):
-                        # Cancel any pending debounce timer from a previous yield
-                        if pending_debounce:
-                            old_timer, old_cancel = pending_debounce[0]
-                            old_timer.cancel()
-                            old_cancel.set()
-                            pending_debounce.clear()
-                        child_cancel = threading.Event()
 
-                        def _debounce_fire(
-                            s=inner_saga,
-                            cc=child_cancel,
-                            store=self,
-                        ):
-                            if not cc.is_set():
-                                store._executor.submit(store._run_saga, s(), cc)
-
-                        timer = threading.Timer(seconds, _debounce_fire)
-                        timer.daemon = True
-                        timer.start()
-                        pending_debounce.append((timer, child_cancel))
-                        effect = next(saga)
-                    case _:
+                # Debounce needs per-saga state, so it's dispatched separately
+                if isinstance(effect, Debounce):
+                    result = _handle_debounce(effect, context, self, pending_debounce)
+                else:
+                    handler = _DEFAULT_HANDLERS.get(type(effect))
+                    if handler is None:
                         raise StateError(
                             ErrorCode.STA_SAGA,
                             f"Unknown effect type: {type(effect).__name__}",
                         )
+                    result = handler(effect, context, self)
+
+                match result.action:
+                    case "send":
+                        effect = saga.send(result.value)
+                    case "next":
+                        effect = next(saga)
+                    case "throw":
+                        effect = saga.throw(result.error)
+                    case "continue":
+                        continue
         except StopIteration:
             pass
         except Exception as e:
-            # Dispatch error to the store so reducers can handle it
             try:
                 self.dispatch(
                     Action(
                         "@@SAGA_ERROR",
-                        payload={"error": str(e), "type": type(e).__name__},
+                        payload={
+                            "error": str(e),
+                            "type": type(e).__name__,
+                            "saga_id": context.saga_id,
+                        },
                     )
                 )
             except Exception:
                 _logger.debug("Failed to dispatch @@SAGA_ERROR", exc_info=True)
         finally:
-            # Cancel any pending debounce timer on saga exit
             if pending_debounce:
-                old_timer, old_cancel = pending_debounce[0]
+                old_timer, old_ctx = pending_debounce[0]
                 old_timer.cancel()
-                old_cancel.set()
+                old_ctx.cancel.set()
+            # Prune this child from parent to prevent unbounded growth
+            if context.parent is not None:
+                context.parent._remove_child(context)
 
     def _execute_timeout(self, effect: Call | Retry, seconds: float) -> Any:
         """Execute a blocking effect with a timeout deadline.
@@ -403,7 +686,7 @@ class Store:
     def _run_saga_capturing(
         self,
         saga: Any,
-        cancel: threading.Event,
+        context: SagaContext,
         result_box: list,
         error_box: list,
         done: threading.Event,
@@ -424,35 +707,35 @@ class Store:
             except Exception as e:
                 error_box.append(e)
 
-        self._run_saga(_wrapper(), cancel)
+        self._run_saga(_wrapper(), context)
         done.set()
 
-    def _execute_race(self, child_sagas: tuple, parent_cancel: threading.Event) -> Any:
+    def _execute_race(self, child_sagas: tuple, parent_context: SagaContext) -> Any:
         """Run sagas concurrently, return the first result. Cancel losers."""
         condition = threading.Condition()
-        child_cancels: list[threading.Event] = []
+        child_contexts: list[SagaContext] = []
         child_dones: list[threading.Event] = []
         child_results: list[list] = []
         child_errors: list[list] = []
 
         for child_saga in child_sagas:
-            child_cancel = threading.Event()
+            child_ctx = parent_context.child()
             child_done = threading.Event()
             result_box: list[Any] = []
             error_box: list[Exception] = []
-            child_cancels.append(child_cancel)
+            child_contexts.append(child_ctx)
             child_dones.append(child_done)
             child_results.append(result_box)
             child_errors.append(error_box)
 
             def _notify_wrapper(
                 saga=child_saga,
-                cancel=child_cancel,
+                ctx=child_ctx,
                 rb=result_box,
                 eb=error_box,
                 done=child_done,
             ):
-                self._run_saga_capturing(saga, cancel, rb, eb, done)
+                self._run_saga_capturing(saga, ctx, rb, eb, done)
                 with condition:
                     condition.notify_all()
 
@@ -461,15 +744,15 @@ class Store:
         # Wait for first completion or parent cancellation
         with condition:
             while True:
-                if parent_cancel.is_set():
-                    for cc in child_cancels:
-                        cc.set()
+                if parent_context.is_cancelled:
+                    for cc in child_contexts:
+                        cc.cancel_tree()
                     raise StateError(ErrorCode.STA_SAGA, "Race cancelled")
                 for i, done in enumerate(child_dones):
                     if done.is_set():
                         # Cancel all others
-                        for cc in child_cancels:
-                            cc.set()
+                        for cc in child_contexts:
+                            cc.cancel_tree()
                         if child_results[i]:
                             return child_results[i][0]
                         if child_errors[i]:
@@ -479,40 +762,40 @@ class Store:
                 if all(d.is_set() for d in child_dones):
                     for i2 in range(len(child_dones)):
                         if child_results[i2]:
-                            for cc in child_cancels:
-                                cc.set()
+                            for cc in child_contexts:
+                                cc.cancel_tree()
                             return child_results[i2][0]
                         if child_errors[i2]:
                             raise child_errors[i2][0]
                     return None
                 condition.wait(timeout=0.05)
 
-    def _execute_all(self, child_sagas: tuple, parent_cancel: threading.Event) -> tuple:
+    def _execute_all(self, child_sagas: tuple, parent_context: SagaContext) -> tuple:
         """Run sagas concurrently, wait for all. Fail-fast on first error."""
         condition = threading.Condition()
-        child_cancels: list[threading.Event] = []
+        child_contexts: list[SagaContext] = []
         child_dones: list[threading.Event] = []
         child_results: list[list] = []
         child_errors: list[list] = []
 
         for child_saga in child_sagas:
-            child_cancel = threading.Event()
+            child_ctx = parent_context.child()
             child_done = threading.Event()
             result_box: list[Any] = []
             error_box: list[Exception] = []
-            child_cancels.append(child_cancel)
+            child_contexts.append(child_ctx)
             child_dones.append(child_done)
             child_results.append(result_box)
             child_errors.append(error_box)
 
             def _notify_wrapper(
                 saga=child_saga,
-                cancel=child_cancel,
+                ctx=child_ctx,
                 rb=result_box,
                 eb=error_box,
                 done=child_done,
             ):
-                self._run_saga_capturing(saga, cancel, rb, eb, done)
+                self._run_saga_capturing(saga, ctx, rb, eb, done)
                 with condition:
                     condition.notify_all()
 
@@ -521,15 +804,15 @@ class Store:
         # Wait for all to complete or first failure
         with condition:
             while True:
-                if parent_cancel.is_set():
-                    for cc in child_cancels:
-                        cc.set()
+                if parent_context.is_cancelled:
+                    for cc in child_contexts:
+                        cc.cancel_tree()
                     raise StateError(ErrorCode.STA_SAGA, "All cancelled")
                 # Check for errors (fail-fast)
                 for i, done in enumerate(child_dones):
                     if done.is_set() and child_errors[i]:
-                        for cc in child_cancels:
-                            cc.set()
+                        for cc in child_contexts:
+                            cc.cancel_tree()
                         raise child_errors[i][0]
                 # Check if all done
                 if all(d.is_set() for d in child_dones):
@@ -540,14 +823,14 @@ class Store:
         """Execute a Cmd, Batch, Sequence, or TickCmd."""
         match cmd:
             case Cmd(fn):
-                self._executor.submit(self._run_cmd, fn)
+                self._tracked_submit(self._run_cmd, fn)
             case Batch(cmds):
                 for c in cmds:
                     self._exec_cmd(c)
             case Sequence(cmds):
-                self._executor.submit(self._run_sequence, cmds)
+                self._tracked_submit(self._run_sequence, cmds)
             case TickCmd(interval):
-                self._executor.submit(self._run_tick, interval)
+                self._tracked_submit(self._run_tick, interval)
 
     def _run_cmd(self, fn: Any) -> None:
         """Run a single Cmd thunk and dispatch its result."""
@@ -579,7 +862,7 @@ class Store:
                     futures = []
                     for c in batch_cmds:
                         if isinstance(c, Cmd):
-                            futures.append(self._executor.submit(self._run_cmd, c.fn))
+                            futures.append(self._tracked_submit(self._run_cmd, c.fn))
                         else:
                             self._exec_cmd(c)
                     concurrent.futures.wait(futures, timeout=60)

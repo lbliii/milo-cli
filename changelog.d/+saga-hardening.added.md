@@ -1,0 +1,1 @@
+Added SagaContext for structured cancellation trees, EffectResult handler registry, TakeEvery/TakeLatest higher-order effects, configurable thread pool (max_workers, on_pool_pressure), and comprehensive benchmarks and free-threading stress tests.
