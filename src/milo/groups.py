@@ -184,7 +184,7 @@ class Group:
     def format_help(self, prog_prefix: str = "") -> str:
         """Render help from this group's command/group registries.
 
-        Returns the rendered help string. Does not print.
+        Writes rendered help to stdout and returns the output string.
         """
         import sys
 

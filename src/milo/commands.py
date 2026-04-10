@@ -61,6 +61,7 @@ class ResolvedGroup:
 
     group: Group
     fmt: str
+    prog: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -743,6 +744,7 @@ class CLI:
     def run(self, argv: list[str] | None = None) -> Any:
         """Parse args and dispatch to the appropriate command."""
         parser = self.build_parser()
+        self._parser = parser
         args = parser.parse_args(argv)
 
         # --completions mode
@@ -783,7 +785,7 @@ class CLI:
         result = self._resolve_command_from_args(args)
 
         if isinstance(result, ResolvedGroup):
-            result.group.format_help(self.name)
+            result.group.format_help(result.prog)
             return None
 
         if isinstance(result, ResolvedNothing):
@@ -954,7 +956,7 @@ class CLI:
         )
 
     def _format_root_help(self) -> None:
-        """Render root help from command/group registries."""
+        """Render root help from command/group registries and the actual parser."""
         from milo.help import HelpState
         from milo.templates import get_env
 
@@ -971,38 +973,24 @@ class CLI:
             ]
         )
 
-        # Built-in options
-        builtin_opts = [
-            {"flags": "-h, --help", "help": "Show this help message and exit"},
-            {"flags": "-v, --verbose", "help": "Increase verbosity (-v verbose, -vv debug)"},
-            {"flags": "-q, --quiet", "help": "Suppress non-error output"},
-            {"flags": "--no-color", "help": "Disable color output"},
-            {"flags": "-n, --dry-run", "help": "Show what would happen without making changes"},
-            {
-                "flags": "-o, --output-file",
-                "metavar": "FILE",
-                "help": "Write output to FILE instead of stdout",
-            },
-        ]
-
-        if self.version:
-            builtin_opts.insert(0, {"flags": "--version", "help": f"Show version ({self.version})"})
-
-        # User-defined global options
-        for opt in self._global_options:
-            flags = f"--{opt.name.replace('_', '-')}"
-            if opt.short:
-                flags = f"{opt.short}, {flags}"
-            entry: dict[str, Any] = {"flags": flags, "help": opt.description}
-            if opt.default and not opt.is_flag:
-                entry["default"] = str(opt.default)
-            builtin_opts.append(entry)
+        # Derive options from the actual parser so new flags are never missed
+        options: list[dict[str, Any]] = []
+        for action in self._parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                continue
+            flags = ", ".join(action.option_strings) if action.option_strings else ""
+            if not flags:
+                continue
+            entry: dict[str, Any] = {"flags": flags, "help": action.help or ""}
+            if action.metavar:
+                entry["metavar"] = action.metavar
+            options.append(entry)
 
         state = HelpState(
             prog=self.name,
             description=self.description,
             commands=commands,
-            options=tuple(builtin_opts),
+            options=tuple(options),
         )
         env = get_env()
         template = env.get_template("help.kida")
@@ -1031,18 +1019,20 @@ class CLI:
         if group is None:
             return ResolvedNothing(attempted=cmd_name, fmt=fmt)
 
-        return self._resolve_group_command(group, args, fmt)
+        return self._resolve_group_command(group, args, fmt, prog=self.name)
 
     def _resolve_group_command(
         self,
         group: Group,
         args: argparse.Namespace,
         fmt: str,
+        prog: str = "",
     ) -> ResolveResult:
         """Recursively resolve a command within a group from parsed args."""
+        group_prog = f"{prog} {group.name}".strip()
         sub_name = getattr(args, f"_command_{group.name}", None)
         if not sub_name:
-            return ResolvedGroup(group=group, fmt=fmt)
+            return ResolvedGroup(group=group, fmt=fmt, prog=group_prog)
 
         cmd = group.get_command(sub_name)
         if cmd:
@@ -1050,7 +1040,7 @@ class CLI:
 
         sub_group = group.get_group(sub_name)
         if sub_group:
-            return self._resolve_group_command(sub_group, args, fmt)
+            return self._resolve_group_command(sub_group, args, fmt, prog=group_prog)
 
         return ResolvedNothing(attempted=sub_name, fmt=fmt)
 
