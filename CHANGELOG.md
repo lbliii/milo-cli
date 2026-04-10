@@ -2,6 +2,12 @@
 
 All notable changes to Milo are documented here.
 
+## 0.2.1 — 2026-04-10
+
+### Fixed
+
+- Fixed group bare invocation showing "Unknown command" instead of group help, and help output now lists subcommands by name instead of raw argparse internals.
+
 ## 0.2.0 — 2026-04-10
 
 ### Added
