@@ -507,12 +507,16 @@ class Store:
                             return child_results[i][0]
                         if child_errors[i]:
                             raise child_errors[i][0]
-                # Check if all are done (all failed without result)
+                # All done — re-check results (a child may have finished
+                # between the per-child is_set() check and here).
                 if all(d.is_set() for d in child_dones):
-                    # Return first error
-                    for eb in child_errors:
-                        if eb:
-                            raise eb[0]
+                    for i2 in range(len(child_dones)):
+                        if child_results[i2]:
+                            for cc in child_cancels:
+                                cc.set()
+                            return child_results[i2][0]
+                        if child_errors[i2]:
+                            raise child_errors[i2][0]
                     return None
                 condition.wait(timeout=0.05)
 
