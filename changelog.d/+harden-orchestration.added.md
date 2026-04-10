@@ -1,0 +1,1 @@
+Added Timeout wrapper effect, TryCall structured error handling, and saga cancellation tokens. Added PhasePolicy with retry/skip/stop failure semantics, DFS cycle detection, and phase context forwarding. Added per-request timeout and graceful child restart to MCP gateway. Added tuple/set/frozenset schema support, $ref for recursive dataclasses, and fallback warnings.

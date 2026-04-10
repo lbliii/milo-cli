@@ -276,7 +276,9 @@ class Store:
             case Call(fn, args, kwargs):
                 return fn(*args, **kwargs)
             case Retry(fn, args, kwargs, max_attempts, backoff, base_delay, max_delay):
-                return _execute_retry(fn, args, kwargs, max_attempts, backoff, base_delay, max_delay)
+                return _execute_retry(
+                    fn, args, kwargs, max_attempts, backoff, base_delay, max_delay
+                )
             case _:
                 raise StateError(
                     ErrorCode.STA_SAGA,

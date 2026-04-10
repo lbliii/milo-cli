@@ -320,7 +320,7 @@ def _type_to_schema(
     # Unknown type — warn and fall back to string
     type_name = getattr(annotation, "__name__", None) or str(annotation)
     warnings.warn(
-        f"Unrecognized type {type_name!r} falling back to {{\"type\": \"string\"}}",
+        f'Unrecognized type {type_name!r} falling back to {{"type": "string"}}',
         UserWarning,
         stacklevel=2,
     )
