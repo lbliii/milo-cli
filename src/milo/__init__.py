@@ -54,6 +54,7 @@ def __getattr__(name: str):
         "format_render_error": "_errors",
         # State
         "Store": "state",
+        "SagaContext": "state",
         "combine_reducers": "state",
         # App
         "App": "app",

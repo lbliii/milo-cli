@@ -22,6 +22,7 @@ from milo._types import (
     Timeout,
     TryCall,
 )
+from milo.state import SagaContext
 
 
 class TestSagaStepping:
@@ -1034,3 +1035,246 @@ class TestDebounceEffect:
         store._executor.shutdown(wait=True)
 
         assert "SHOULD_NOT_FIRE" not in actions
+
+
+class TestSagaContext:
+    def test_basic_creation(self):
+        ctx = SagaContext()
+        assert len(ctx.saga_id) == 12
+        assert not ctx.is_cancelled
+        assert ctx.parent is None
+        assert ctx.children == []
+
+    def test_child_inherits_cancel(self):
+        parent = SagaContext()
+        child = parent.child()
+        assert child.parent is parent
+        assert child in parent.children
+        assert not child.is_cancelled
+
+    def test_cancel_tree_propagates(self):
+        root = SagaContext()
+        child1 = root.child()
+        child2 = root.child()
+        grandchild = child1.child()
+
+        root.cancel_tree()
+
+        assert root.is_cancelled
+        assert child1.is_cancelled
+        assert child2.is_cancelled
+        assert grandchild.is_cancelled
+
+    def test_detached_child_independent(self):
+        parent = SagaContext()
+        detached = parent.detached_child()
+
+        parent.cancel_tree()
+
+        assert parent.is_cancelled
+        assert not detached.is_cancelled
+
+    def test_custom_saga_id(self):
+        ctx = SagaContext(saga_id="my-saga")
+        assert ctx.saga_id == "my-saga"
+
+    def test_cancel_child_does_not_cancel_parent(self):
+        parent = SagaContext()
+        child = parent.child()
+
+        child.cancel_tree()
+
+        assert child.is_cancelled
+        assert not parent.is_cancelled
+
+    def test_run_saga_returns_context(self):
+        from milo.state import Store
+
+        def saga():
+            yield Put(Action("done"))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(saga())
+        assert isinstance(ctx, SagaContext)
+        store._executor.shutdown(wait=True)
+
+    def test_saga_error_includes_saga_id(self):
+        from milo.state import Store
+
+        errors = []
+
+        def bad_saga():
+            raise ValueError("boom")
+            yield  # noqa: unreachable — makes it a generator
+
+        def reducer(state, action):
+            if action.type == "@@SAGA_ERROR":
+                errors.append(action.payload)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(bad_saga())
+        store._executor.shutdown(wait=True)
+
+        assert len(errors) == 1
+        assert errors[0]["saga_id"] == ctx.saga_id
+        assert errors[0]["type"] == "ValueError"
+
+    def test_saga_cancelled_includes_saga_id(self):
+        from milo.state import Store
+
+        payloads = []
+
+        def long_saga():
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            if action.type == "@@SAGA_CANCELLED":
+                payloads.append(action.payload)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(long_saga())
+        time.sleep(0.1)
+        ctx.cancel.set()
+        store._executor.shutdown(wait=True)
+
+        assert len(payloads) == 1
+        assert payloads[0]["saga_id"] == ctx.saga_id
+
+
+class TestForkAttached:
+    def test_detached_fork_not_cancelled_by_parent(self):
+        """Default (detached) fork is NOT cancelled when parent is cancelled."""
+        from milo.state import Store
+
+        results = []
+        cancel = threading.Event()
+
+        def child():
+            yield Delay(seconds=0.15)
+            results.append("child_completed")
+            yield Put(Action("child_done"))
+
+        def parent():
+            yield Fork(saga=child())  # detached by default
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent(), cancel=cancel)
+        time.sleep(0.05)
+        cancel.set()  # Cancel parent
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Child should still complete because it's detached
+        assert "child_completed" in results
+
+    def test_attached_fork_cancelled_by_parent(self):
+        """Attached fork IS cancelled when parent is cancelled."""
+        from milo.state import Store
+
+        results = []
+        actions = []
+
+        def child():
+            yield Delay(seconds=0.05)
+            yield Delay(seconds=10)  # Should be cancelled before this completes
+            results.append("child_completed")
+
+        def parent():
+            yield Fork(saga=child(), attached=True)
+            yield Delay(seconds=10)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()  # Cancel parent AND attached children
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        assert "child_completed" not in results
+        assert "@@SAGA_CANCELLED" in actions
+
+
+class TestRaceCancellationPropagation:
+    def test_race_parent_cancel_propagates_to_children(self):
+        """Cancelling parent while Race is running cancels all Race children."""
+        from milo.state import Store
+
+        actions = []
+
+        def slow_a():
+            yield Delay(seconds=10)
+            return "a"
+
+        def slow_b():
+            yield Delay(seconds=10)
+            return "b"
+
+        def parent():
+            try:
+                yield Race(sagas=(slow_a(), slow_b()))
+            except Exception:
+                pass
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Parent + at least one child should have been cancelled
+        cancel_count = actions.count("@@SAGA_CANCELLED")
+        assert cancel_count >= 1
+
+
+class TestAllCancellationPropagation:
+    def test_all_parent_cancel_propagates_to_children(self):
+        """Cancelling parent while All is running cancels all children."""
+        from milo.state import Store
+
+        actions = []
+
+        def slow_a():
+            yield Delay(seconds=10)
+            return "a"
+
+        def slow_b():
+            yield Delay(seconds=10)
+            return "b"
+
+        def parent():
+            try:
+                yield All(sagas=(slow_a(), slow_b()))
+            except Exception:
+                pass
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(parent())
+        time.sleep(0.15)
+        ctx.cancel_tree()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        cancel_count = actions.count("@@SAGA_CANCELLED")
+        assert cancel_count >= 1

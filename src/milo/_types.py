@@ -205,9 +205,16 @@ class Select:
 
 @dataclass(frozen=True, slots=True)
 class Fork:
-    """Run another saga concurrently."""
+    """Run another saga concurrently.
+
+    By default forks are *detached*: the child gets its own cancellation
+    scope and is not cancelled when the parent is.  Set ``attached=True``
+    to inherit the parent's cancellation scope — cancelling the parent
+    will transitively cancel the child.
+    """
 
     saga: Callable | Generator
+    attached: bool = False
 
 
 @dataclass(frozen=True, slots=True)
