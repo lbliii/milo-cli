@@ -9,6 +9,7 @@ import io
 import os
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from milo._command_defs import (
@@ -39,6 +40,39 @@ __all__ = [
     "PromptDef",
     "ResourceDef",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Resolve result types — discriminated union for command resolution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedCommand:
+    """A command was found and should be dispatched."""
+
+    command: CommandDef | LazyCommandDef
+    fmt: str
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedGroup:
+    """A group was invoked without a subcommand — show its help."""
+
+    group: Group
+    fmt: str
+    prog: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedNothing:
+    """No command or group matched — may offer did-you-mean."""
+
+    attempted: str | None
+    fmt: str
+
+
+ResolveResult = ResolvedCommand | ResolvedGroup | ResolvedNothing
 
 
 class _MiloArgumentParser(argparse.ArgumentParser):
@@ -620,7 +654,7 @@ class CLI:
                 "--format",
                 choices=["plain", "json", "table"],
                 default="plain",
-                help="Output format (default: plain)",
+                help="Output format",
             )
 
     def _add_groups_to_subparsers(
@@ -710,6 +744,7 @@ class CLI:
     def run(self, argv: list[str] | None = None) -> Any:
         """Parse args and dispatch to the appropriate command."""
         parser = self.build_parser()
+        self._parser = parser
         args = parser.parse_args(argv)
 
         # --completions mode
@@ -747,19 +782,25 @@ class CLI:
         ctx = self._build_context(args)
 
         # Resolve command from args (may be nested in groups)
-        found, fmt = self._resolve_command_from_args(args)
-        if not found:
-            # Did-you-mean suggestion for typos
-            cmd_name = getattr(args, "_command", None)
-            if cmd_name:
-                suggestion = self.suggest_command(cmd_name)
+        result = self._resolve_command_from_args(args)
+
+        if isinstance(result, ResolvedGroup):
+            result.group.format_help(result.prog)
+            return None
+
+        if isinstance(result, ResolvedNothing):
+            if result.attempted:
+                suggestion = self.suggest_command(result.attempted)
                 if suggestion:
                     sys.stderr.write(
-                        f"Unknown command: {cmd_name!r}. Did you mean {suggestion!r}?\n"
+                        f"Unknown command: {result.attempted!r}. Did you mean {suggestion!r}?\n"
                     )
                     return None
-            parser.print_help()
+            self._format_root_help()
             return None
+
+        found = result.command
+        fmt = result.fmt
 
         # Resolve lazy commands
         cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
@@ -914,55 +955,94 @@ class CLI:
             globals=user_globals,
         )
 
-    def _resolve_command_from_args(
-        self, args: argparse.Namespace
-    ) -> tuple[CommandDef | LazyCommandDef | None, str]:
-        """Walk the parsed args to find the leaf command."""
+    def _format_root_help(self) -> None:
+        """Render root help from command/group registries and the actual parser."""
+        from milo.help import HelpState
+        from milo.templates import get_env
+
+        commands = tuple(
+            [
+                {"name": cmd.name, "help": getattr(cmd, "description", "")}
+                for cmd in self._commands.values()
+                if not getattr(cmd, "hidden", False)
+            ]
+            + [
+                {"name": g.name, "help": g.description}
+                for g in self._groups.values()
+                if not g.hidden
+            ]
+        )
+
+        # Derive options from the actual parser so new flags are never missed
+        options: list[dict[str, Any]] = []
+        for action in self._parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                continue
+            flags = ", ".join(action.option_strings) if action.option_strings else ""
+            if not flags:
+                continue
+            entry: dict[str, Any] = {"flags": flags, "help": action.help or ""}
+            if action.metavar:
+                entry["metavar"] = action.metavar
+            options.append(entry)
+
+        state = HelpState(
+            prog=self.name,
+            description=self.description,
+            commands=commands,
+            options=tuple(options),
+        )
+        env = get_env()
+        template = env.get_template("help.kida")
+        sys.stdout.write(template.render(state=state) + "\n")
+        sys.stdout.flush()
+
+    def _resolve_command_from_args(self, args: argparse.Namespace) -> ResolveResult:
+        """Walk the parsed args to find the leaf command, group, or nothing."""
         fmt = getattr(args, "format", "plain")
 
-        # Check top-level command
         cmd_name = getattr(args, "_command", None)
         if not cmd_name:
-            return None, fmt
+            return ResolvedNothing(attempted=None, fmt=fmt)
 
-        # Is it a direct command?
+        # Direct command?
         cmd = self.get_command(cmd_name)
         if cmd:
-            return cmd, fmt
+            return ResolvedCommand(command=cmd, fmt=fmt)
 
-        # Is it a group? Walk into it.
+        # Group? Walk into it.
         group = self._groups.get(cmd_name)
         if group is None:
             resolved = self._group_alias_map.get(cmd_name)
             if resolved:
                 group = self._groups.get(resolved)
         if group is None:
-            return None, fmt
+            return ResolvedNothing(attempted=cmd_name, fmt=fmt)
 
-        return self._resolve_group_command(group, args, fmt)
+        return self._resolve_group_command(group, args, fmt, prog=self.name)
 
     def _resolve_group_command(
         self,
         group: Group,
         args: argparse.Namespace,
         fmt: str,
-    ) -> tuple[CommandDef | None, str]:
+        prog: str = "",
+    ) -> ResolveResult:
         """Recursively resolve a command within a group from parsed args."""
+        group_prog = f"{prog} {group.name}".strip()
         sub_name = getattr(args, f"_command_{group.name}", None)
         if not sub_name:
-            return None, fmt
+            return ResolvedGroup(group=group, fmt=fmt, prog=group_prog)
 
-        # Check if it's a command in this group
         cmd = group.get_command(sub_name)
         if cmd:
-            return cmd, fmt
+            return ResolvedCommand(command=cmd, fmt=fmt)
 
-        # Check if it's a nested sub-group
         sub_group = group.get_group(sub_name)
         if sub_group:
-            return self._resolve_group_command(sub_group, args, fmt)
+            return self._resolve_group_command(sub_group, args, fmt, prog=group_prog)
 
-        return None, fmt
+        return ResolvedNothing(attempted=sub_name, fmt=fmt)
 
     def call(self, command_name: str, **kwargs: Any) -> Any:
         """Programmatically call a command by name or dotted path.
