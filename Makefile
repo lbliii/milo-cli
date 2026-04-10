@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov lint format ty bench ci clean build gh-release
+.PHONY: all help setup install test test-cov lint format ty bench ci clean build gh-release changelog changelog-draft
 
 all: help
 
@@ -23,6 +23,8 @@ help:
 	@echo "  make ci        - lint + format check + ty + tests + coverage"
 	@echo "  make clean     - remove build artifacts"
 	@echo "  make build     - uv build"
+	@echo "  make changelog  - compile changelog.d/ fragments into CHANGELOG.md"
+	@echo "  make changelog-draft - preview changelog without writing"
 	@echo "  make gh-release - create GitHub release → triggers PyPI publish"
 
 setup:
@@ -60,6 +62,12 @@ clean:
 
 build:
 	uv build
+
+changelog:
+	uv run towncrier build --yes
+
+changelog-draft:
+	uv run towncrier build --draft
 
 # Create GitHub release from site release notes; triggers python-publish workflow → PyPI
 # Strips YAML frontmatter (--- ... ---) from notes before passing to gh

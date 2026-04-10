@@ -1,8 +1,10 @@
 """Buildpipe — pipeline orchestration with phases, dependencies, and progress.
 
-Demonstrates: Pipeline, Phase, build_reducer, build_saga, execution_order, >> operator.
+Demonstrates: Pipeline, Phase, build_reducer, build_saga, execution_order,
+>> operator, and interactive TUI visualization via App + Store + saga.
 
     uv run python examples/buildpipe/app.py build
+    uv run python examples/buildpipe/app.py run        # interactive TUI
     uv run python examples/buildpipe/app.py order
     uv run python examples/buildpipe/app.py build --format json
 """
@@ -11,8 +13,18 @@ from __future__ import annotations
 
 import time
 
-from milo import CLI, Action, Phase, Pipeline, PipelineState
-
+from milo import (
+    CLI,
+    Action,
+    App,
+    Key,
+    Phase,
+    Pipeline,
+    PipelineState,
+    Quit,
+    ReducerResult,
+    SpecialKey,
+)
 
 # ---------------------------------------------------------------------------
 # Phase handlers — each does real (simulated) work
@@ -138,6 +150,55 @@ def list_phases() -> list[dict]:
         }
         for p in pipeline.phases
     ]
+
+
+# ---------------------------------------------------------------------------
+# Interactive TUI — live pipeline visualization
+# ---------------------------------------------------------------------------
+
+
+def _make_tui_reducer(pipeline_reducer, pipeline_saga):
+    """Wrap the pipeline reducer with keyboard handling and saga scheduling."""
+
+    def reducer(state: PipelineState | None, action: Action) -> PipelineState | Quit | ReducerResult:
+        if action.type == "@@INIT":
+            init_state = pipeline_reducer(state, action)
+            # Schedule the pipeline saga on init
+            return ReducerResult(state=init_state, sagas=(pipeline_saga,))
+
+        if action.type == "@@KEY":
+            key: Key = action.payload
+            if key.char == "q" or key.name == SpecialKey.ESCAPE:
+                return Quit(state=state)
+
+        # Auto-quit when pipeline completes or fails
+        new_state = pipeline_reducer(state, action)
+        if action.type == "@@PIPELINE_COMPLETE" or action.type == "@@PHASE_FAILED":
+            return Quit(state=new_state, code=0 if action.type == "@@PIPELINE_COMPLETE" else 1)
+
+        return new_state
+
+    return reducer
+
+
+@cli.command("run", description="Run the pipeline with interactive TUI")
+def run_interactive() -> str:
+    """Launch the build pipeline with a live-updating terminal UI."""
+    pipeline_reducer = pipeline.build_reducer()
+    pipeline_saga = pipeline.build_saga()
+
+    tui_reducer = _make_tui_reducer(pipeline_reducer, pipeline_saga)
+
+    app = App.from_dir(
+        __file__,
+        template="pipeline.kida",
+        reducer=tui_reducer,
+        initial_state=None,
+        tick_rate=0.05,
+        exit_template="exit.kida",
+    )
+    final_state = app.run()
+    return f"Pipeline {final_state.status}: {final_state.name}"
 
 
 if __name__ == "__main__":

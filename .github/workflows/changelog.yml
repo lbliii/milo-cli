@@ -1,0 +1,35 @@
+name: Changelog Fragment Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  changelog-fragment:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changelog fragment
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # Only enforce when src/ is modified
+          if ! git diff --name-only "$BASE" "$HEAD" | grep -q '^src/'; then
+            echo "No src/ changes — changelog fragment not required."
+            exit 0
+          fi
+
+          # Look for new fragments in changelog.d/
+          if git diff --name-only --diff-filter=A "$BASE" "$HEAD" | grep -q '^changelog\.d/.*\.md$'; then
+            echo "Changelog fragment found."
+            exit 0
+          fi
+
+          echo "::error::PR changes src/ but no new changelog.d/*.md fragment."
+          echo "Add a fragment (e.g. changelog.d/+my-feature.added.md) or label the PR with 'skip-changelog'."
+          exit 1

@@ -1,0 +1,8 @@
+{% from "components/_defs.kida" import header, key_hints, pipeline_progress %}
+{{ header("buildpipe", description=state.name) }}
+{{ hr() }}
+
+{{ pipeline_progress(state) }}
+
+{{ hr() }}
+{{ key_hints([{"key": "q", "action": "quit"}]) }}

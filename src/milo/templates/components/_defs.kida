@@ -192,3 +192,30 @@
 {%- endcapture -%}
 {{ panel(content | trim, title=title) }}
 {%- enddef -%}
+
+{#- ── Pipeline progress: phase list with status + progress bar ───── -#}
+{%- def pipeline_progress(state) -%}
+{%- for phase in state.phases -%}
+{%- if phase.status == "completed" -%}
+  {{ icons.check | green }} {{ phase.name | bold }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
+{% elif phase.status == "running" -%}
+  {{ icons.dot | cyan | bold }} {{ phase.name | bold | cyan }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ "..." | dim }}
+{% elif phase.status == "failed" -%}
+  {{ icons.cross | red | bold }} {{ phase.name | bold | red }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ phase.error | dim }}
+{% else -%}
+  {{ icons.dot | dim }} {{ phase.name | dim }}
+{% endif -%}
+{%- endfor -%}
+{%- if state.status == "running" -%}
+{%- set pct = [[0, (state.progress * 100) | int] | max, 100] | min -%}
+{%- set filled = [[0, pct // 2] | max, 50] | min -%}
+
+  {{ ("█" * filled ~ "░" * (50 - filled)) | cyan }}  {{ pct }}%
+{%- elif state.status == "completed" -%}
+
+  {{ ("█" * 50) | green }}  {{ "done" | bold | green }} {{ format_time(state.elapsed) | dim }}
+{%- elif state.status == "failed" -%}
+
+  {{ "pipeline failed" | red | bold }}
+{%- endif -%}
+{%- enddef -%}
