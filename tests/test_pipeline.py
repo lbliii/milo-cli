@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import pytest
+
 from milo._types import Action, Call, Put
 from milo.pipeline import (
     PHASE_COMPLETE,
     PHASE_FAILED,
+    PHASE_RETRY,
+    PHASE_SKIPPED,
     PHASE_START,
     PIPELINE_COMPLETE,
     PIPELINE_START,
+    CycleError,
     Phase,
+    PhasePolicy,
     PhaseStatus,
     Pipeline,
     PipelineState,
@@ -163,7 +169,7 @@ class TestPipelineSaga:
         effect = gen.send(None)  # PHASE_START discover
         assert isinstance(effect, Put)
         assert effect.action.type == PHASE_START
-        assert effect.action.payload == "discover"
+        assert effect.action.payload["name"] == "discover"
 
         effect = gen.send(None)  # Call discover handler
         assert isinstance(effect, Call)
@@ -176,7 +182,7 @@ class TestPipelineSaga:
         effect = gen.send(None)  # PHASE_START parse
         assert isinstance(effect, Put)
         assert effect.action.type == PHASE_START
-        assert effect.action.payload == "parse"
+        assert effect.action.payload["name"] == "parse"
 
         effect = gen.send(None)  # Call parse handler
         assert isinstance(effect, Call)
@@ -189,7 +195,7 @@ class TestPipelineSaga:
         effect = gen.send(None)  # PHASE_START render
         assert isinstance(effect, Put)
         assert effect.action.type == PHASE_START
-        assert effect.action.payload == "render"
+        assert effect.action.payload["name"] == "render"
 
         effect = gen.send(None)  # Call render handler
         assert isinstance(effect, Call)
@@ -292,8 +298,317 @@ class TestDataTypes:
         ps = PhaseStatus(name="test")
         assert ps.status == "pending"
         assert ps.elapsed == 0.0
+        assert ps.attempt == 1
 
     def test_pipeline_state_defaults(self):
         ps = PipelineState()
         assert ps.status == "pending"
         assert ps.progress == 0.0
+
+    def test_phase_policy_defaults(self):
+        pp = PhasePolicy()
+        assert pp.on_fail == "stop"
+        assert pp.max_retries == 0
+
+    def test_phase_with_policy(self):
+        p = Phase(
+            "x",
+            handler=lambda: None,
+            policy=PhasePolicy(on_fail="retry", max_retries=3),
+        )
+        assert p.policy.on_fail == "retry"
+        assert p.policy.max_retries == 3
+
+
+# ---------------------------------------------------------------------------
+# Cycle detection
+# ---------------------------------------------------------------------------
+
+
+class TestCycleDetection:
+    def test_self_cycle(self):
+        with pytest.raises(CycleError, match=r"Circular dependency.*a.*a"):
+            Pipeline("p", Phase("a", handler=lambda: None, depends_on=("a",)))
+
+    def test_two_node_cycle(self):
+        with pytest.raises(CycleError, match="Circular dependency"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None, depends_on=("b",)),
+                Phase("b", handler=lambda: None, depends_on=("a",)),
+            )
+
+    def test_three_node_cycle(self):
+        with pytest.raises(CycleError, match="Circular dependency"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None, depends_on=("c",)),
+                Phase("b", handler=lambda: None, depends_on=("a",)),
+                Phase("c", handler=lambda: None, depends_on=("b",)),
+            )
+
+    def test_no_cycle_passes(self):
+        # Should not raise
+        Pipeline(
+            "p",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",)),
+            Phase("c", handler=lambda: None, depends_on=("b",)),
+        )
+
+    def test_diamond_no_cycle(self):
+        # Diamond: a -> {b, c} -> d. Not a cycle.
+        Pipeline(
+            "p",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",)),
+            Phase("c", handler=lambda: None, depends_on=("a",)),
+            Phase("d", handler=lambda: None, depends_on=("b", "c")),
+        )
+
+    def test_cycle_error_includes_path(self):
+        with pytest.raises(CycleError) as exc_info:
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None, depends_on=("b",)),
+                Phase("b", handler=lambda: None, depends_on=("a",)),
+            )
+        msg = str(exc_info.value)
+        assert "\u2192" in msg  # arrow in path
+
+
+# ---------------------------------------------------------------------------
+# PhasePolicy: skip
+# ---------------------------------------------------------------------------
+
+
+class TestPhasePolicySkip:
+    def test_skip_continues_pipeline(self):
+        """on_fail='skip' marks phase as skipped, pipeline continues."""
+        from milo.state import Store
+
+        def failing():
+            raise RuntimeError("boom")
+
+        pipeline = Pipeline(
+            "p",
+            Phase("a", handler=failing, policy=PhasePolicy(on_fail="skip")),
+            Phase("b", handler=lambda: "ok", depends_on=("a",)),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        state = store.state
+        a_status = next(p for p in state.phases if p.name == "a")
+        b_status = next(p for p in state.phases if p.name == "b")
+        assert a_status.status == "skipped"
+        assert b_status.status == "completed"
+        assert state.status == "completed"
+
+    def test_skip_reducer_progress(self):
+        """Skipped phases count toward progress."""
+        pipeline = Pipeline(
+            "p",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None),
+            Phase("c", handler=lambda: None),
+        )
+        reducer = pipeline.build_reducer()
+        state = reducer(None, Action("@@INIT"))
+        state = reducer(state, Action(PIPELINE_START))
+        state = reducer(state, Action(PHASE_START, "a"))
+        state = reducer(state, Action(PHASE_SKIPPED, {"name": "a", "error": "skip"}))
+        a = next(p for p in state.phases if p.name == "a")
+        assert a.status == "skipped"
+        assert abs(state.progress - 1 / 3) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# PhasePolicy: retry
+# ---------------------------------------------------------------------------
+
+
+class TestPhasePolicyRetry:
+    def test_retry_succeeds_on_second_attempt(self):
+        """on_fail='retry' retries and succeeds."""
+        from milo.state import Store
+
+        call_count = 0
+
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise RuntimeError("fail")
+            return "ok"
+
+        pipeline = Pipeline(
+            "p",
+            Phase(
+                "a",
+                handler=flaky,
+                policy=PhasePolicy(on_fail="retry", max_retries=3, retry_delay=0.01),
+            ),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        state = store.state
+        a_status = next(p for p in state.phases if p.name == "a")
+        assert a_status.status == "completed"
+        assert state.status == "completed"
+        assert call_count == 2
+
+    def test_retry_exhausted(self):
+        """Retries exhaust, pipeline fails."""
+        from milo.state import Store
+
+        def always_fails():
+            raise RuntimeError("nope")
+
+        pipeline = Pipeline(
+            "p",
+            Phase(
+                "a",
+                handler=always_fails,
+                policy=PhasePolicy(on_fail="retry", max_retries=2, retry_delay=0.01),
+            ),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        state = store.state
+        assert state.status == "failed"
+
+    def test_retry_reducer_state(self):
+        """PHASE_RETRY action sets status to 'retrying'."""
+        pipeline = Pipeline("p", Phase("a", handler=lambda: None))
+        reducer = pipeline.build_reducer()
+        state = reducer(None, Action("@@INIT"))
+        state = reducer(state, Action(PIPELINE_START))
+        state = reducer(state, Action(PHASE_START, {"name": "a", "attempt": 1}))
+        state = reducer(
+            state,
+            Action(PHASE_RETRY, {"name": "a", "attempt": 1, "error": "fail", "max_retries": 3}),
+        )
+        a = next(p for p in state.phases if p.name == "a")
+        assert a.status == "retrying"
+        assert a.attempt == 1
+        assert a.error == "fail"
+
+    def test_default_policy_is_stop(self):
+        """Default PhasePolicy preserves original fail-fast behavior."""
+        from milo.state import Store
+
+        def failing():
+            raise RuntimeError("boom")
+
+        pipeline = Pipeline(
+            "p",
+            Phase("a", handler=failing),
+            Phase("b", handler=lambda: "ok", depends_on=("a",)),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        state = store.state
+        assert state.status == "failed"
+        b_status = next(p for p in state.phases if p.name == "b")
+        assert b_status.status == "pending"  # Never ran
+
+
+# ---------------------------------------------------------------------------
+# Phase context forwarding
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseContext:
+    def test_handler_receives_context(self):
+        """Phase handlers that accept 'context' get dependency results."""
+        from milo.state import Store
+
+        received_context = {}
+
+        def producer():
+            return {"data": 42}
+
+        def consumer(context):
+            received_context.update(context)
+            return "consumed"
+
+        pipeline = Pipeline(
+            "p",
+            Phase("produce", handler=producer),
+            Phase("consume", handler=consumer, depends_on=("produce",)),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        assert received_context == {"produce": {"data": 42}}
+        assert store.state.status == "completed"
+
+    def test_handler_without_context_works(self):
+        """Handlers without 'context' param still work (backward compat)."""
+        from milo.state import Store
+
+        pipeline = Pipeline(
+            "p",
+            Phase("a", handler=lambda: "result_a"),
+            Phase("b", handler=lambda: "result_b", depends_on=("a",)),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        assert store.state.status == "completed"
+
+    def test_skipped_dependency_passes_none(self):
+        """Skipped phase passes None in context to downstream."""
+        from milo.state import Store
+
+        received_context = {}
+
+        def failing():
+            raise RuntimeError("skip me")
+
+        def consumer(context):
+            received_context.update(context)
+            return "done"
+
+        pipeline = Pipeline(
+            "p",
+            Phase("a", handler=failing, policy=PhasePolicy(on_fail="skip")),
+            Phase("b", handler=consumer, depends_on=("a",)),
+        )
+
+        reducer = pipeline.build_reducer()
+        saga_fn = pipeline.build_saga()
+        store = Store(reducer, None)
+        store.run_saga(saga_fn())
+        store._executor.shutdown(wait=True)
+
+        assert received_context == {"a": None}
+        assert store.state.status == "completed"

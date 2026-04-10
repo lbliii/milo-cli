@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
-from milo._types import Action, Call, Fork, Put
+from milo._errors import ErrorCode, PipelineError
+from milo._types import Action, Call, Delay, Fork, Put
 
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PhasePolicy:
+    """Failure policy for a pipeline phase.
+
+    Controls what happens when a phase's handler raises an exception.
+    Default behavior (``on_fail="stop"``) matches the original fail-fast semantics.
+    """
+
+    on_fail: str = "stop"  # "stop" | "skip" | "retry"
+    max_retries: int = 0
+    retry_delay: float = 1.0
+    retry_backoff: str = "fixed"  # "fixed" | "exponential"
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +40,7 @@ class Phase:
     depends_on: tuple[str, ...] = ()
     parallel: bool = False
     weight: int = 1
+    policy: PhasePolicy = PhasePolicy()
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,10 +48,11 @@ class PhaseStatus:
     """Runtime status of a single phase."""
 
     name: str
-    status: str = "pending"  # pending, running, completed, failed, skipped
+    status: str = "pending"  # pending, running, completed, failed, skipped, retrying
     started_at: float = 0.0
     elapsed: float = 0.0
     error: str = ""
+    attempt: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +68,10 @@ class PipelineState:
     status: str = "pending"  # pending, running, completed, failed
 
 
+class CycleError(PipelineError):
+    """Raised when a pipeline dependency graph contains a cycle."""
+
+
 # ---------------------------------------------------------------------------
 # Pipeline action types
 # ---------------------------------------------------------------------------
@@ -60,6 +82,8 @@ PIPELINE_COMPLETE = "@@PIPELINE_COMPLETE"
 PHASE_START = "@@PHASE_START"
 PHASE_COMPLETE = "@@PHASE_COMPLETE"
 PHASE_FAILED = "@@PHASE_FAILED"
+PHASE_SKIPPED = "@@PHASE_SKIPPED"
+PHASE_RETRY = "@@PHASE_RETRY"
 
 
 # ---------------------------------------------------------------------------
@@ -86,11 +110,15 @@ class Pipeline:
 
     The pipeline generates a saga and reducer that work with the Store
     for observable, testable execution.
+
+    Raises :class:`CycleError` at construction if the dependency graph
+    contains a cycle.
     """
 
     def __init__(self, name: str, *phases: Phase) -> None:
         self.name = name
         self.phases = list(phases)
+        _validate_dependencies(self.phases)
 
     def __rshift__(self, phase: Phase) -> Pipeline:
         """Extend the pipeline: ``pipeline >> Phase(...)``."""
@@ -123,10 +151,14 @@ class Pipeline:
                 )
 
             if action.type == PHASE_START:
-                phase_name = action.payload
+                payload = action.payload
+                phase_name = payload["name"] if isinstance(payload, dict) else payload
+                attempt = payload.get("attempt", 1) if isinstance(payload, dict) else 1
                 now = time.monotonic()
                 new_phases = tuple(
-                    replace(p, status="running", started_at=now) if p.name == phase_name else p
+                    replace(p, status="running", started_at=now, attempt=attempt)
+                    if p.name == phase_name
+                    else p
                     for p in state.phases
                 )
                 return replace(state, phases=new_phases, current_phase=phase_name)
@@ -147,7 +179,7 @@ class Pipeline:
                         )
                     else:
                         new_phases.append(p)
-                    if new_phases[-1].status == "completed":
+                    if new_phases[-1].status in ("completed", "skipped"):
                         completed_weight += weight_map.get(p.name, 1)
 
                 progress = completed_weight / total_weight if total_weight > 0 else 1.0
@@ -156,6 +188,46 @@ class Pipeline:
                     phases=tuple(new_phases),
                     progress=progress,
                 )
+
+            if action.type == PHASE_SKIPPED:
+                payload = (
+                    action.payload if isinstance(action.payload, dict) else {"name": action.payload}
+                )
+                phase_name = payload.get("name", "")
+                error = payload.get("error", "")
+                now = time.monotonic()
+                new_phases = []
+                completed_weight = 0
+                for p in state.phases:
+                    if p.name == phase_name:
+                        new_phases.append(
+                            replace(
+                                p,
+                                status="skipped",
+                                error=error,
+                                elapsed=now - p.started_at if p.started_at else 0.0,
+                            )
+                        )
+                    else:
+                        new_phases.append(p)
+                    if new_phases[-1].status in ("completed", "skipped"):
+                        completed_weight += weight_map.get(p.name, 1)
+
+                progress = completed_weight / total_weight if total_weight > 0 else 1.0
+                return replace(state, phases=tuple(new_phases), progress=progress)
+
+            if action.type == PHASE_RETRY:
+                payload = action.payload if isinstance(action.payload, dict) else {}
+                phase_name = payload.get("name", "")
+                error = payload.get("error", "")
+                attempt = payload.get("attempt", 1)
+                new_phases = tuple(
+                    replace(p, status="retrying", error=error, attempt=attempt)
+                    if p.name == phase_name
+                    else p
+                    for p in state.phases
+                )
+                return replace(state, phases=new_phases)
 
             if action.type == PHASE_FAILED:
                 payload = (
@@ -192,7 +264,11 @@ class Pipeline:
         return reducer
 
     def build_saga(self) -> Callable:
-        """Generate a saga that executes all phases in dependency order."""
+        """Generate a saga that executes all phases in dependency order.
+
+        Phase handlers that accept a ``context`` parameter receive a dict
+        mapping dependency names to their results.
+        """
         phases = list(self.phases)
         dep_graph = {p.name: set(p.depends_on) for p in phases}
         phase_map = {p.name: p for p in phases}
@@ -202,13 +278,12 @@ class Pipeline:
 
             executed: set[str] = set()
             remaining = set(dep_graph.keys())
+            results: dict[str, Any] = {}
 
             while remaining:
-                # Find phases whose dependencies are all satisfied
                 ready = [name for name in remaining if dep_graph[name].issubset(executed)]
 
                 if not ready:
-                    # Circular dependency or impossible state
                     yield Put(
                         Action(
                             PHASE_FAILED,
@@ -217,27 +292,25 @@ class Pipeline:
                     )
                     return
 
-                # Separate parallel and sequential phases
                 parallel_ready = [n for n in ready if phase_map[n].parallel]
                 sequential_ready = [n for n in ready if not phase_map[n].parallel]
 
-                # Run parallel phases concurrently via Fork
                 if parallel_ready:
                     for name in parallel_ready:
-                        yield Fork(_make_phase_saga(name, phase_map[name].handler))
-                    # Mark them as executed (Fork runs concurrently)
+                        phase = phase_map[name]
+                        ctx = _build_context(phase, results)
+                        yield Fork(
+                            _make_phase_saga(name, phase.handler, phase.policy, ctx, results)
+                        )
                     for name in parallel_ready:
                         remaining.discard(name)
                         executed.add(name)
 
-                # Run sequential phases one at a time
                 for name in sequential_ready:
-                    yield Put(Action(PHASE_START, name))
-                    try:
-                        result = yield Call(phase_map[name].handler)
-                        yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
-                    except Exception as e:
-                        yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+                    phase = phase_map[name]
+                    ctx = _build_context(phase, results)
+                    failed = yield from _run_phase_inline(name, phase, ctx, results)
+                    if failed:
                         return
                     remaining.discard(name)
                     executed.add(name)
@@ -264,15 +337,175 @@ class Pipeline:
         return order
 
 
-def _make_phase_saga(name: str, handler: Callable) -> Callable:
+# ---------------------------------------------------------------------------
+# Dependency validation
+# ---------------------------------------------------------------------------
+
+
+def _validate_dependencies(phases: list[Phase]) -> None:
+    """Validate the dependency graph upfront. Raises CycleError if a cycle exists."""
+    names = {p.name for p in phases}
+    dep_graph = {p.name: set(p.depends_on) for p in phases}
+
+    # DFS-based cycle detection
+    _white, _gray, _black = 0, 1, 2
+    color: dict[str, int] = dict.fromkeys(names, _white)
+    parent: dict[str, str | None] = dict.fromkeys(names, None)
+
+    def dfs(node: str) -> list[str] | None:
+        color[node] = _gray
+        for dep in dep_graph.get(node, ()):
+            if dep not in names:
+                continue  # dependency on non-existent phase — ignored at validation
+            if color[dep] == _gray:
+                # Back edge found — reconstruct cycle path
+                cycle = [dep, node]
+                cur = node
+                while cur != dep:
+                    cur = parent[cur]  # type: ignore[assignment]
+                    if cur is None or cur == dep:
+                        break
+                    cycle.append(cur)
+                cycle.append(dep)
+                cycle.reverse()
+                return cycle
+            if color[dep] == _white:
+                parent[dep] = node
+                result = dfs(dep)
+                if result is not None:
+                    return result
+        color[node] = _black
+        return None
+
+    for name in names:
+        if color[name] == _white:
+            cycle = dfs(name)
+            if cycle is not None:
+                path_str = " \u2192 ".join(cycle)
+                raise CycleError(
+                    ErrorCode.PIP_DEPENDENCY,
+                    f"Circular dependency: {path_str}",
+                )
+
+
+# ---------------------------------------------------------------------------
+# Phase execution helpers
+# ---------------------------------------------------------------------------
+
+
+def _handler_wants_context(handler: Callable) -> bool:
+    """Return True if the handler has a ``context`` parameter."""
+    try:
+        sig = inspect.signature(handler)
+        return "context" in sig.parameters
+    except (ValueError, TypeError):
+        return False
+
+
+def _build_context(phase: Phase, results: dict[str, Any]) -> dict[str, Any]:
+    """Build the context dict for a phase from its dependency results."""
+    return {dep: results.get(dep) for dep in phase.depends_on}
+
+
+def _call_handler(handler: Callable, context: dict[str, Any]) -> Any:
+    """Call a handler, passing context if it accepts one."""
+    if _handler_wants_context(handler):
+        return handler(context=context)
+    return handler()
+
+
+def _retry_delay_for(policy: PhasePolicy, attempt: int) -> float:
+    """Calculate retry delay for the given attempt number."""
+    if policy.retry_backoff == "exponential":
+        return min(policy.retry_delay * (2 ** (attempt - 1)), 30.0)
+    return policy.retry_delay
+
+
+def _run_phase_inline(
+    name: str,
+    phase: Phase,
+    context: dict[str, Any],
+    results: dict[str, Any],
+) -> Any:
+    """Run a sequential phase inline in the main saga. Returns True if pipeline should stop."""
+    policy = phase.policy
+    max_attempts = policy.max_retries + 1 if policy.on_fail == "retry" else 1
+
+    for attempt in range(1, max_attempts + 1):
+        yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
+        try:
+            result = yield Call(lambda: _call_handler(phase.handler, context))
+            yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
+            results[name] = result
+            return False  # success — don't stop
+        except Exception as e:
+            if policy.on_fail == "retry" and attempt < max_attempts:
+                yield Put(
+                    Action(
+                        PHASE_RETRY,
+                        {
+                            "name": name,
+                            "attempt": attempt,
+                            "error": str(e),
+                            "max_retries": policy.max_retries,
+                        },
+                    )
+                )
+                yield Delay(_retry_delay_for(policy, attempt))
+            elif policy.on_fail == "skip":
+                yield Put(Action(PHASE_SKIPPED, {"name": name, "error": str(e)}))
+                results[name] = None
+                return False  # skipped — don't stop
+            else:
+                yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+                return True  # stop pipeline
+
+    # Retries exhausted
+    yield Put(Action(PHASE_FAILED, {"name": name, "error": "retries exhausted"}))
+    return True
+
+
+def _make_phase_saga(
+    name: str,
+    handler: Callable,
+    policy: PhasePolicy,
+    context: dict[str, Any],
+    results: dict[str, Any],
+) -> Callable:
     """Create a saga for a single phase (used by Fork for parallel phases)."""
 
     def phase_saga():
-        yield Put(Action(PHASE_START, name))
-        try:
-            result = yield Call(handler)
-            yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
-        except Exception as e:
-            yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+        max_attempts = policy.max_retries + 1 if policy.on_fail == "retry" else 1
+
+        for attempt in range(1, max_attempts + 1):
+            yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
+            try:
+                result = yield Call(lambda: _call_handler(handler, context))
+                yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
+                results[name] = result
+                return
+            except Exception as e:
+                if policy.on_fail == "retry" and attempt < max_attempts:
+                    yield Put(
+                        Action(
+                            PHASE_RETRY,
+                            {
+                                "name": name,
+                                "attempt": attempt,
+                                "error": str(e),
+                                "max_retries": policy.max_retries,
+                            },
+                        )
+                    )
+                    yield Delay(_retry_delay_for(policy, attempt))
+                elif policy.on_fail == "skip":
+                    yield Put(Action(PHASE_SKIPPED, {"name": name, "error": str(e)}))
+                    results[name] = None
+                    return
+                else:
+                    yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+                    return
+
+        yield Put(Action(PHASE_FAILED, {"name": name, "error": "retries exhausted"}))
 
     return phase_saga

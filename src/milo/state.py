@@ -185,8 +185,12 @@ class Store:
                     return
                 match effect:
                     case Call(fn, args, kwargs):
-                        result = fn(*args, **kwargs)
-                        effect = saga.send(result)
+                        try:
+                            result = fn(*args, **kwargs)
+                        except Exception as call_err:
+                            effect = saga.throw(call_err)
+                        else:
+                            effect = saga.send(result)
                     case Put(action):
                         self.dispatch(action)
                         effect = next(saga)

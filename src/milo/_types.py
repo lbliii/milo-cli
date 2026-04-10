@@ -80,6 +80,8 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
         "@@PHASE_START",
         "@@PHASE_COMPLETE",
         "@@PHASE_FAILED",
+        "@@PHASE_SKIPPED",
+        "@@PHASE_RETRY",
         "@@SAGA_ERROR",
         "@@SAGA_CANCELLED",
         "@@CMD_ERROR",

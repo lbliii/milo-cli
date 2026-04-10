@@ -86,8 +86,10 @@ def __getattr__(name: str):
         # Pipeline
         "Pipeline": "pipeline",
         "Phase": "pipeline",
+        "PhasePolicy": "pipeline",
         "PipelineState": "pipeline",
         "PhaseStatus": "pipeline",
+        "CycleError": "pipeline",
         # Plugins
         "HookRegistry": "plugins",
         "function_to_schema": "schema",
@@ -165,6 +167,7 @@ __all__ = [
     "ConfigError",
     "ConfigSpec",
     "Context",
+    "CycleError",
     "Delay",
     "Description",
     "DevServer",
@@ -200,6 +203,7 @@ __all__ = [
     "MinLen",
     "Pattern",
     "Phase",
+    "PhasePolicy",
     "PhaseStatus",
     "Pipeline",
     "PipelineError",
