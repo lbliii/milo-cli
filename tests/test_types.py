@@ -78,8 +78,11 @@ class TestAction:
         assert "@@KEY" in BUILTIN_ACTIONS
         assert "@@QUIT" in BUILTIN_ACTIONS
         assert "@@SAGA_ERROR" in BUILTIN_ACTIONS
+        assert "@@SAGA_CANCELLED" in BUILTIN_ACTIONS
         assert "@@CMD_ERROR" in BUILTIN_ACTIONS
-        assert len(BUILTIN_ACTIONS) == 15
+        assert "@@PHASE_SKIPPED" in BUILTIN_ACTIONS
+        assert "@@PHASE_RETRY" in BUILTIN_ACTIONS
+        assert len(BUILTIN_ACTIONS) == 18
 
 
 class TestEffects:

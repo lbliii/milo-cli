@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import json
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -673,6 +673,51 @@ class TestGateway:
             patch("sys.stderr", new_callable=io.StringIO),
         ):
             main()  # Should not raise
+
+    def test_discover_logs_warning_on_resource_failure(self):
+        """Discovery logs a warning when resource listing fails."""
+        from milo._child import ChildProcess
+        from milo.gateway import _discover_one_child
+
+        child = MagicMock(spec=ChildProcess)
+        child.fetch_tools.return_value = [{"name": "greet"}]
+        child.send_call.side_effect = RuntimeError("connection refused")
+
+        with patch("milo.gateway._logger") as mock_logger:
+            _cli_name, tools, resources, prompts = _discover_one_child("app1", child)
+
+        assert tools == [{"name": "greet"}]
+        assert resources == []
+        assert prompts == []
+        # Both resource and prompt failures should be logged
+        assert mock_logger.warning.call_count == 2
+        assert mock_logger.warning.call_args_list[0][0][1] == "app1"
+
+    def test_discover_logs_warning_on_prompt_failure_only(self):
+        """Discovery logs warning for prompts but not resources if resources succeed."""
+        from milo._child import ChildProcess
+        from milo.gateway import _discover_one_child
+
+        child = MagicMock(spec=ChildProcess)
+        child.fetch_tools.return_value = []
+
+        def _send_call(method, params):
+            if method == "resources/list":
+                return {"resources": [{"uri": "docs"}]}
+            raise RuntimeError("prompt fail")
+
+        child.send_call.side_effect = _send_call
+
+        with patch("milo.gateway._logger") as mock_logger:
+            _cli_name, _tools, resources, prompts = _discover_one_child("app1", child)
+
+        assert resources == [{"uri": "docs"}]
+        assert prompts == []
+        # Only prompt failure logged
+        assert mock_logger.warning.call_count == 1
+        assert "prompts" in mock_logger.warning.call_args[0][1].lower() or "app1" in str(
+            mock_logger.warning.call_args
+        )
 
 
 class TestCLIDryRun:

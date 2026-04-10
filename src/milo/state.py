@@ -26,6 +26,8 @@ from milo._types import (
     Select,
     Sequence,
     TickCmd,
+    Timeout,
+    TryCall,
     ViewState,
 )
 
@@ -151,23 +153,44 @@ class Store:
         """Latest ViewState from a reducer, or None."""
         return self._view_state
 
-    def run_saga(self, saga: Any) -> None:
-        """Schedule a saga on the thread pool."""
-        self._executor.submit(self._run_saga, saga)
+    def run_saga(self, saga: Any, cancel: threading.Event | None = None) -> None:
+        """Schedule a saga on the thread pool.
 
-    def _run_saga(self, saga: Any) -> None:
+        Args:
+            saga: Generator saga to execute.
+            cancel: Optional cancellation event. When set, the saga
+                stops at the next effect boundary and dispatches
+                ``@@SAGA_CANCELLED``.
+        """
+        if cancel is None:
+            cancel = threading.Event()
+        self._executor.submit(self._run_saga, saga, cancel)
+
+    def _run_saga(self, saga: Any, cancel: threading.Event | None = None) -> None:
         """Step through a generator saga, executing effects.
 
         Catches unhandled exceptions and dispatches @@SAGA_ERROR so the
         reducer can react gracefully.  The error is never swallowed silently.
         """
+        if cancel is None:
+            cancel = threading.Event()
         try:
             effect = next(saga)
             while True:
+                if cancel.is_set():
+                    try:
+                        self.dispatch(Action("@@SAGA_CANCELLED"))
+                    except Exception:
+                        _logger.debug("Failed to dispatch @@SAGA_CANCELLED", exc_info=True)
+                    return
                 match effect:
                     case Call(fn, args, kwargs):
-                        result = fn(*args, **kwargs)
-                        effect = saga.send(result)
+                        try:
+                            result = fn(*args, **kwargs)
+                        except Exception as call_err:
+                            effect = saga.throw(call_err)
+                        else:
+                            effect = saga.send(result)
                     case Put(action):
                         self.dispatch(action)
                         effect = next(saga)
@@ -177,16 +200,32 @@ class Store:
                             state = selector(state)
                         effect = saga.send(state)
                     case Fork(child_saga):
-                        self._executor.submit(self._run_saga, child_saga)
-                        effect = next(saga)
+                        child_cancel = threading.Event()
+                        self._executor.submit(self._run_saga, child_saga, child_cancel)
+                        effect = saga.send(child_cancel)
                     case Delay(seconds):
-                        time.sleep(seconds)
+                        # Use cancel.wait() so cancellation can interrupt a long delay
+                        cancel.wait(timeout=seconds)
+                        if cancel.is_set():
+                            continue  # Loop back to cancellation check at top
                         effect = next(saga)
                     case Retry(fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay):
                         result = _execute_retry(
                             fn, r_args, r_kwargs, max_attempts, backoff, base_delay, max_delay
                         )
                         effect = saga.send(result)
+                    case Timeout(inner_effect, seconds):
+                        try:
+                            result = self._execute_timeout(inner_effect, seconds)
+                            effect = saga.send(result)
+                        except TimeoutError as te:
+                            effect = saga.throw(te)
+                    case TryCall(fn, args, kwargs):
+                        try:
+                            result = fn(*args, **kwargs)
+                            effect = saga.send((result, None))
+                        except Exception as call_err:
+                            effect = saga.send((None, call_err))
                     case _:
                         raise StateError(
                             ErrorCode.STA_SAGA,
@@ -205,6 +244,46 @@ class Store:
                 )
             except Exception:
                 _logger.debug("Failed to dispatch @@SAGA_ERROR", exc_info=True)
+
+    def _execute_timeout(self, effect: Call | Retry, seconds: float) -> Any:
+        """Execute a blocking effect with a timeout deadline.
+
+        Uses a dedicated thread (not the shared pool) to avoid deadlock
+        when the saga itself is already running on the pool.
+        """
+        result_box: list[Any] = []
+        error_box: list[Exception] = []
+
+        def run() -> None:
+            try:
+                result_box.append(self._execute_effect(effect))
+            except Exception as e:
+                error_box.append(e)
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(timeout=seconds)
+        if worker.is_alive():
+            raise TimeoutError(f"Effect timed out after {seconds}s")
+        if error_box:
+            raise error_box[0]
+        return result_box[0]
+
+    @staticmethod
+    def _execute_effect(effect: Call | Retry) -> Any:
+        """Execute a single blocking effect and return its result."""
+        match effect:
+            case Call(fn, args, kwargs):
+                return fn(*args, **kwargs)
+            case Retry(fn, args, kwargs, max_attempts, backoff, base_delay, max_delay):
+                return _execute_retry(
+                    fn, args, kwargs, max_attempts, backoff, base_delay, max_delay
+                )
+            case _:
+                raise StateError(
+                    ErrorCode.STA_SAGA,
+                    f"Cannot execute effect type: {type(effect).__name__}",
+                )
 
     def _exec_cmd(self, cmd: Any) -> None:
         """Execute a Cmd, Batch, Sequence, or TickCmd."""

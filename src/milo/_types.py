@@ -80,7 +80,10 @@ BUILTIN_ACTIONS: frozenset[str] = frozenset(
         "@@PHASE_START",
         "@@PHASE_COMPLETE",
         "@@PHASE_FAILED",
+        "@@PHASE_SKIPPED",
+        "@@PHASE_RETRY",
         "@@SAGA_ERROR",
+        "@@SAGA_CANCELLED",
         "@@CMD_ERROR",
     }
 )
@@ -230,6 +233,40 @@ class Retry:
     backoff: str = "exponential"  # "exponential", "linear", "fixed"
     base_delay: float = 1.0
     max_delay: float = 30.0
+
+
+@dataclass(frozen=True, slots=True)
+class Timeout:
+    """Wrap a blocking effect with a deadline.
+
+    Usage in a saga::
+
+        result = yield Timeout(Call(fetch_data, args=(url,)), seconds=5)
+
+    Raises ``TimeoutError`` if the effect doesn't complete in time.
+    Only wraps blocking effects (``Call`` and ``Retry``).
+    """
+
+    effect: Call | Retry
+    seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class TryCall:
+    """Call a function, returning (result, None) on success or (None, error) on failure.
+
+    Unlike ``Call``, exceptions do not crash the saga::
+
+        result, error = yield TryCall(fn=might_fail)
+        if error:
+            yield Put(Action("FETCH_FAILED", payload=str(error)))
+        else:
+            yield Put(Action("FETCH_OK", payload=result))
+    """
+
+    fn: Callable
+    args: tuple = ()
+    kwargs: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

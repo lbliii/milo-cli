@@ -9,8 +9,6 @@ import threading
 import time
 from typing import Any
 
-_READ_TIMEOUT = 30.0  # seconds
-
 
 class ChildProcess:
     """A persistent child process that speaks JSON-RPC on stdin/stdout.
@@ -25,10 +23,12 @@ class ChildProcess:
         command: list[str],
         *,
         idle_timeout: float = 300.0,
+        request_timeout: float = 30.0,
     ) -> None:
         self.name = name
         self.command = command
         self.idle_timeout = idle_timeout
+        self.request_timeout = request_timeout
         self._proc: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
         self._last_use = time.monotonic()
@@ -72,8 +72,13 @@ class ChildProcess:
                 self._spawn()
                 self._ensure_initialized()
 
-    def send_call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Send a JSON-RPC request and return the result. Thread-safe."""
+    def send_call(
+        self, method: str, params: dict[str, Any], *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC request and return the result. Thread-safe.
+
+        *timeout* overrides the instance ``request_timeout`` for this call.
+        """
         with self._lock:
             if self._proc is None or self._proc.poll() is not None:
                 self._spawn()
@@ -88,7 +93,8 @@ class ChildProcess:
                 "params": params,
             }
             self._write_line(json.dumps(request))
-            response_line = self._read_line()
+            effective_timeout = timeout if timeout is not None else self.request_timeout
+            response_line = self._read_line(timeout=effective_timeout)
             self._last_use = time.monotonic()
 
             if not response_line:
@@ -115,19 +121,25 @@ class ChildProcess:
     def kill(self) -> None:
         """Kill the child process."""
         with self._lock:
-            if self._proc is not None:
-                try:
-                    self._proc.terminate()
-                    self._proc.wait(timeout=5)
-                except ProcessLookupError:
-                    pass
-                except subprocess.TimeoutExpired:
-                    import contextlib
+            self._graceful_kill()
 
-                    with contextlib.suppress(ProcessLookupError):
-                        self._proc.kill()
-                self._proc = None
-                self._initialized = False
+    def _graceful_kill(self) -> None:
+        """SIGTERM with grace period, then SIGKILL if needed.
+
+        Must be called while holding ``self._lock``.
+        """
+        if self._proc is None:
+            return
+        try:
+            self._proc.terminate()  # SIGTERM
+            self._proc.wait(timeout=5)  # Grace period
+        except ProcessLookupError:
+            pass  # Already dead
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(ProcessLookupError):
+                self._proc.kill()  # SIGKILL
+        self._proc = None
+        self._initialized = False
 
     def _write_line(self, line: str) -> None:
         """Write a line to the child's stdin."""
@@ -136,12 +148,13 @@ class ChildProcess:
         self._proc.stdin.write(line + "\n")
         self._proc.stdin.flush()
 
-    def _read_line(self) -> str:
+    def _read_line(self, *, timeout: float | None = None) -> str:
         """Read a line from the child's stdout with timeout.
 
         Uses a background thread so we can enforce a deadline even
         when the child blocks without writing a newline.
         """
+        effective_timeout = timeout if timeout is not None else self.request_timeout
         assert self._proc is not None
         assert self._proc.stdout is not None
         result: list[str] = []
@@ -150,12 +163,9 @@ class ChildProcess:
             daemon=True,
         )
         reader.start()
-        reader.join(timeout=_READ_TIMEOUT)
+        reader.join(timeout=effective_timeout)
         if reader.is_alive():
-            # Timed out — kill the child to unblock the reader thread
-            with contextlib.suppress(OSError):
-                self._proc.kill()
-            self._proc = None
-            self._initialized = False
+            # Timed out — graceful shutdown: SIGTERM → grace → SIGKILL
+            self._graceful_kill()
             return ""
         return result[0].strip() if result else ""
