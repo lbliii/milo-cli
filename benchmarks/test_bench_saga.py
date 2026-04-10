@@ -653,9 +653,11 @@ def test_bench_race_of_alls(benchmark) -> None:
 
     def run():
         done.clear()
+        # Extra workers to prevent pool starvation when Race+All nest
         store = Store(
             _saga_done_reducer,
             {"_done_event": done, "_saga_fn": _parent, "saga_completed": 0},
+            max_workers=8,
         )
         store.dispatch(Action("RUN_SAGA"))
         done.wait(timeout=5.0)
