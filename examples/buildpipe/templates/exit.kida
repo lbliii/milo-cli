@@ -1,8 +1,9 @@
 {% from "components/_defs.kida" import format_time -%}
-{% if state.status == "completed" -%}
+{% match state.status -%}
+{% case "completed" -%}
 {{ "✓" | green }} Pipeline {{ state.name | bold }} completed in {{ format_time(state.elapsed) }}.
-{% elif state.status == "failed" -%}
+{% case "failed" -%}
 {{ "✗" | red }} Pipeline {{ state.name | bold }} failed at {{ state.current_phase | bold }}.
-{% else -%}
+{% case _ -%}
 Pipeline {{ state.name | bold }} exited with status {{ state.status | bold }}.
-{% endif -%}
+{% endmatch -%}

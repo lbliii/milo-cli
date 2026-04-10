@@ -168,7 +168,7 @@ class Context:
             env = get_env()
 
         if template.startswith("string:"):
-            tmpl = env.from_string(template[7:])
+            tmpl = env.from_string(template[7:], name="inline")
         else:
             tmpl = env.get_template(template)
 

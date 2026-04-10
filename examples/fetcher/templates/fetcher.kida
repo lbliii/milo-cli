@@ -4,18 +4,19 @@
 
   {{ "URL:" | bold }} {{ state.url }}
 
-{% if state.status == "idle" %}
+{% match state.status %}
+{% case "idle" %}
   Press {{ "Enter" | green }} to fetch.
-{% elif state.status == "loading" %}
+{% case "loading" %}
   {{ status_line("warning", "Fetching..." | bold | yellow) }}
-{% elif state.status == "done" %}
+{% case "done" %}
   {{ status_line("success", "Done") }}
   {{ kv_pair("Status", state.status_code) }}
   {{ kv_pair("Size", state.content_length | filesizeformat) }}
-{% elif state.status == "error" %}
+{% case "error" %}
   {{ status_line("error", "Error") }}
   {{ state.error_message | dim }}
-{% endif %}
+{% endmatch %}
 
 {{ hr() }}
 {{ key_hints([{"key": "enter", "action": "fetch"}, {"key": "esc", "action": "quit"}]) }}
