@@ -129,7 +129,7 @@ ignore = [
 "src/milo/version_check.py" = ["S110", "S310"] # best-effort cache reads + known PyPI URL
 "src/milo/mcp.py" = ["ARG002"]            # MCP protocol methods require params signature
 "src/milo/gateway.py" = ["ARG002", "S110"] # MCP protocol methods + best-effort discovery
-"benchmarks/**/*.py" = ["T201"] # benchmarks may use print for diagnostics
+"benchmarks/**/*.py" = ["T201", "ARG", "S101"] # benchmarks: print, unused args, assert
 
 [dependency-groups]
 dev = [
