@@ -2,6 +2,22 @@
 
 All notable changes to Milo are documented here.
 
+## 0.2.0 — 2026-04-10
+
+### Added
+
+- **Saga effects expansion** — Race (first-wins with loser cancellation), All (wait-all with fail-fast), Take (pause until action dispatched), and Debounce (cancel-and-restart timer). Fixed Python 2 exception syntax bug in pipeline handler introspection. Added gateway test suite covering namespacing, routing, proxying, idle reaping, and error handling.
+- **Saga hardening** — SagaContext for structured cancellation trees, EffectResult handler registry, TakeEvery/TakeLatest higher-order effects, configurable thread pool (max_workers, on_pool_pressure), and comprehensive benchmarks and free-threading stress tests.
+- **Orchestration hardening** — Timeout wrapper effect, TryCall structured error handling, and saga cancellation tokens. PhasePolicy with retry/skip/stop failure semantics, DFS cycle detection, and phase context forwarding. Per-request timeout and graceful child restart for MCP gateway. Tuple/set/frozenset schema support, `$ref` for recursive dataclasses, and fallback warnings.
+- **Towncrier changelog** — Adopted Towncrier for changelog management. Fragments in `changelog.d/` are compiled into `CHANGELOG.md` at release time. CI enforces a fragment for every PR that touches `src/`.
+- **Extended theme colors** — `ThemeStyle` supports 256-color (int index), truecolor (`#rrggbb` hex), and background colors (`bg` field) alongside existing named ANSI colors.
+- **Pipeline TUI** — Interactive pipeline TUI in `buildpipe` example using `App` + `Store` + saga for real-time phase visualization with progress bar.
+- **`pipeline_progress` macro** — Reusable `pipeline_progress(state)` component macro in `_defs.kida` for rendering `PipelineState` with phase status and progress bar.
+
+### Changed
+
+- **kida-templates 0.4.0** — Adopt match blocks, try/fallback error boundaries, and unless conditionals in templates; fix color detection to use public terminal_color API.
+
 ## 0.1.1 — 2026-04-02
 
 ### Added

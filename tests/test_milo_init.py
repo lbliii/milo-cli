@@ -256,9 +256,11 @@ class TestLazyImports:
             _ = milo.NonExistentAttribute12345
 
     def test_version(self):
+        from importlib.metadata import version
+
         import milo
 
-        assert milo.__version__ == "0.1.1"
+        assert milo.__version__ == version("milo-cli")
 
     def test_py_mod_gil(self):
         import milo

@@ -199,7 +199,7 @@ Output:
 
 ```
   ✓ python: Python 3.14.0
-  ✓ milo: milo 0.1.1
+  ✓ milo: milo 0.2.0
   ✓ config:myapp.toml: Found 1 file(s)
   ✓ env:API_KEY: Set
   ✗ env:DATABASE_URL: Not set

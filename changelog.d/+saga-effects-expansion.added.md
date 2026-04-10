@@ -1,1 +1,0 @@
-Added Race (first-wins with loser cancellation), All (wait-all with fail-fast), Take (pause until action dispatched), and Debounce (cancel-and-restart timer) saga effects. Fixed Python 2 exception syntax bug in pipeline handler introspection. Added gateway test suite covering namespacing, routing, proxying, idle reaping, and error handling.
