@@ -17,6 +17,8 @@ class HelpState:
     usage: str = ""
     groups: tuple[dict[str, Any], ...] = ()
     examples: tuple[dict[str, Any], ...] = ()
+    commands: tuple[dict[str, Any], ...] = ()
+    options: tuple[dict[str, Any], ...] = ()
 
 
 class HelpRenderer(argparse.HelpFormatter):

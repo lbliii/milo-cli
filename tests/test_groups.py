@@ -327,3 +327,142 @@ class TestLlmsTxtWithGroups:
         txt = generate_llms_txt(cli)
         assert "## Commands" in txt
         assert "**init**" in txt
+
+
+# ---------------------------------------------------------------------------
+# ResolveResult types and dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestResolveResult:
+    """Verify _resolve_command_from_args returns correct discriminated types."""
+
+    def test_resolves_command(self):
+        from milo.commands import ResolvedCommand
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args(["init", "--name", "x"])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedCommand)
+        assert result.command.name == "init"
+
+    def test_resolves_group(self):
+        from milo.commands import ResolvedGroup
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args(["site"])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedGroup)
+        assert result.group.name == "site"
+
+    def test_resolves_nested_group(self):
+        from milo.commands import ResolvedGroup
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args(["site", "config"])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedGroup)
+        assert result.group.name == "config"
+
+    def test_resolves_nested_command(self):
+        from milo.commands import ResolvedCommand
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args(["site", "build"])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedCommand)
+        assert result.command.name == "build"
+
+    def test_resolves_nothing_no_args(self):
+        from milo.commands import ResolvedNothing
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args([])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedNothing)
+        assert result.attempted is None
+
+    def test_resolves_nothing_preserves_fmt(self):
+        from milo.commands import ResolvedNothing
+
+        cli = _make_cli_with_groups()
+        parser = cli.build_parser()
+        args = parser.parse_args([])
+        result = cli._resolve_command_from_args(args)
+        assert isinstance(result, ResolvedNothing)
+        assert result.fmt == "plain"
+
+
+# ---------------------------------------------------------------------------
+# Group bare invocation and help rendering
+# ---------------------------------------------------------------------------
+
+
+class TestGroupBareInvocation:
+    def test_group_bare_shows_help_not_error(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["site"])
+        assert result.exit_code == 0
+        assert result.stderr == ""
+        assert "build" in result.output
+        assert "serve" in result.output
+
+    def test_nested_group_bare_shows_help(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["site", "config"])
+        assert result.exit_code == 0
+        assert result.stderr == ""
+        assert "show" in result.output
+        assert "validate" in result.output
+
+    def test_unknown_command_still_suggests(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["siet"])
+        assert result.exit_code == 2
+        assert "Did you mean" in result.stderr
+
+    def test_root_no_args_shows_help(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke([])
+        assert result.exit_code == 0
+        assert "bengal" in result.output
+
+
+class TestHelpSubcommandListing:
+    def test_root_help_lists_commands_by_name(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke([])
+        assert "init" in result.output
+        assert "site" in result.output
+        assert "_command" not in result.output
+
+    def test_group_help_lists_subcommands_by_name(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["site"])
+        assert "build" in result.output
+        assert "serve" in result.output
+        assert "_command_site" not in result.output
+
+    def test_nested_group_help_lists_subcommands(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["site", "config"])
+        assert "show" in result.output
+        assert "validate" in result.output
+        assert "_command_config" not in result.output
+
+    def test_root_help_shows_options(self):
+        cli = _make_cli_with_groups()
+        result = cli.invoke([])
+        assert "--verbose" in result.output
+        assert "--help" in result.output
+
+    def test_group_help_no_argparse_internals(self):
+        """Group help should use registry data, not argparse positional args."""
+        cli = _make_cli_with_groups()
+        result = cli.invoke(["site"])
+        assert "positional arguments" not in result.output

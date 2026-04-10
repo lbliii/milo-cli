@@ -181,6 +181,38 @@ class Group:
             hidden=self.hidden,
         )
 
+    def format_help(self, prog_prefix: str = "") -> str:
+        """Render help from this group's command/group registries.
+
+        Returns the rendered help string. Does not print.
+        """
+        import sys
+
+        from milo.help import HelpState
+        from milo.templates import get_env
+
+        prog = f"{prog_prefix} {self.name}".strip() if prog_prefix else self.name
+        commands = tuple(
+            [
+                {"name": cmd.name, "help": getattr(cmd, "description", "")}
+                for cmd in self._commands.values()
+                if not getattr(cmd, "hidden", False)
+            ]
+            + [
+                {"name": g.name, "help": g.description}
+                for g in self._groups.values()
+                if not g.hidden
+            ]
+        )
+
+        state = HelpState(prog=prog, description=self.description, commands=commands)
+        env = get_env()
+        template = env.get_template("help.kida")
+        output = template.render(state=state)
+        sys.stdout.write(output + "\n")
+        sys.stdout.flush()
+        return output
+
     def walk_commands(self, prefix: str = ""):
         """Yield (dotted_path, CommandDef) for all commands in this tree."""
         path_prefix = f"{prefix}{self.name}." if prefix else f"{self.name}."

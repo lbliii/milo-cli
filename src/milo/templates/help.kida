@@ -1,13 +1,30 @@
 {{ state.prog | bold }}{% if state.description %} {{ "-" | dim }} {{ state.description }}{% endif %}
+{%- if state.commands %}
 
-{% for group in state.groups %}
+{{ "commands" | yellow | bold }}:
+{%- for cmd in state.commands %}
+  {{ cmd.name | cyan }}    {{ cmd.help }}
+{%- endfor %}
+{%- endif %}
+{%- for group in state.groups %}
+
 {{ group.title | yellow | bold }}:
-{% for action in group.actions %}  {% if action.option_strings %}{{ action.option_strings | join(", ") | green }}{% else %}{{ action.dest | cyan }}{% endif %}{% if action.metavar %} {{ action.metavar | dim }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" %} {{ ("(default: " ~ action.default ~ ")") | dim }}{% endif %}
-{% endfor %}
-{% endfor %}
-{% if state.examples %}
+{%- for action in group.actions %}
+  {% if action.option_strings %}{{ action.option_strings | join(", ") | green }}{% if action.metavar %} {{ action.metavar | dim }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" and action.default is not false and action.default != 0 and action.default != "" %} {{ ("(default: " ~ action.default ~ ")") | dim }}{% endif %}{% else %}{{ action.dest | cyan }}{% if action.metavar %} {{ action.metavar | dim }}{% endif %}    {{ action.help }}{% if action.default is not none and action.default != "==SUPPRESS==" and action.default is not false and action.default != 0 and action.default != "" %} {{ ("(default: " ~ action.default ~ ")") | dim }}{% endif %}{% endif %}
+{%- endfor %}
+{%- endfor %}
+{%- if state.options %}
+
+{{ "options" | yellow | bold }}:
+{%- for opt in state.options %}
+  {{ opt.flags | green }}{% if opt.metavar %} {{ opt.metavar | dim }}{% endif %}    {{ opt.help }}{% if opt.default %} {{ ("(default: " ~ opt.default ~ ")") | dim }}{% endif %}
+{%- endfor %}
+{%- endif %}
+{%- if state.examples %}
+
 {{ "examples" | yellow | bold }}:
-{% for ex in state.examples %}  {{ ("$ " ~ ex.command) | green }}{% if ex.description %}
+{%- for ex in state.examples %}
+  {{ ("$ " ~ ex.command) | green }}{% if ex.description %}
     {{ ex.description | dim }}{% endif %}
-{% endfor %}
-{% endif %}
+{%- endfor %}
+{%- endif %}
