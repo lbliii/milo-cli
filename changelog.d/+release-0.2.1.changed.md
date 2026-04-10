@@ -1,1 +1,1 @@
-Version bump to 0.2.1.
+Towncrier `title_format` updated to match established changelog heading style (`## version — date`).
