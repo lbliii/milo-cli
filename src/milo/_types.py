@@ -269,6 +269,78 @@ class TryCall:
     kwargs: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class Race:
+    """Run multiple sagas concurrently, return the first result.
+
+    Losers are cancelled via their cancel events as soon as a winner
+    completes.  If all racers fail, the first error is thrown into
+    the parent saga::
+
+        winner = yield Race(sagas=(fetch_primary(), fetch_fallback()))
+
+    Raises ``StateError`` if *sagas* is empty.
+    """
+
+    sagas: tuple
+
+
+@dataclass(frozen=True, slots=True)
+class All:
+    """Run multiple sagas concurrently, wait for all to complete.
+
+    Returns a tuple of results in the same order as the input sagas.
+    Fail-fast: if any saga raises, remaining sagas are cancelled and
+    the error is thrown into the parent::
+
+        a, b = yield All(sagas=(fetch_users(), fetch_roles()))
+
+    An empty tuple returns ``()`` immediately.
+    """
+
+    sagas: tuple
+
+
+@dataclass(frozen=True, slots=True)
+class Take:
+    """Pause the saga until a matching action is dispatched.
+
+    Waits for *future* actions only — actions dispatched before the
+    Take is yielded are not matched.  Returns the full ``Action``
+    object so the saga can inspect both type and payload::
+
+        action = yield Take("USER_CONFIRMED")
+        name = action.payload["name"]
+
+    An optional *timeout* (in seconds) raises ``TimeoutError`` if the
+    action is not dispatched in time.
+    """
+
+    action_type: str
+    timeout: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Debounce:
+    """Delay-then-fork: start a timer, fork *saga* when it expires.
+
+    If the parent saga yields another ``Debounce`` before the timer
+    fires, the previous timer is cancelled and restarted.  The parent
+    continues immediately (non-blocking)::
+
+        # In a keystroke handler saga:
+        while True:
+            key = yield Take("@@KEY")
+            yield Debounce(seconds=0.3, saga=search_saga)
+
+    The debounced saga runs independently; use ``Take`` if the parent
+    needs the result.
+    """
+
+    seconds: float
+    saga: Callable
+
+
 # ---------------------------------------------------------------------------
 # Commands (lightweight alternative to sagas)
 # ---------------------------------------------------------------------------
