@@ -238,6 +238,74 @@ class TestKeyHints:
         assert "quit" in out
 
 
+class TestPipelineProgress:
+    def _render_pipeline(self, env, state):
+        prefix = '{% from "components/_defs.kida" import pipeline_progress %}'
+        tmpl = env.from_string(prefix + "{{ pipeline_progress(state) }}", name="test_pipeline")
+        return tmpl.render(state=state)
+
+    def test_all_pending(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState
+
+        state = PipelineState(
+            name="build",
+            phases=(PhaseStatus(name="a"), PhaseStatus(name="b")),
+            status="pending",
+        )
+        out = self._render_pipeline(env, state)
+        assert "a" in out
+        assert "b" in out
+
+    def test_running_phase(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState
+
+        state = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="a", status="completed", elapsed=0.05),
+                PhaseStatus(name="b", status="running"),
+            ),
+            status="running",
+            progress=0.5,
+        )
+        out = self._render_pipeline(env, state)
+        assert "a" in out
+        assert "b" in out
+        # Progress bar should show ~50%
+        assert "50%" in out
+
+    def test_completed_pipeline(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState
+
+        state = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="a", status="completed", elapsed=0.05),
+                PhaseStatus(name="b", status="completed", elapsed=0.10),
+            ),
+            status="completed",
+            progress=1.0,
+            elapsed=0.15,
+        )
+        out = self._render_pipeline(env, state)
+        assert "done" in out
+
+    def test_failed_pipeline(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState
+
+        state = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="a", status="completed", elapsed=0.05),
+                PhaseStatus(name="b", status="failed", error="boom"),
+            ),
+            status="failed",
+        )
+        out = self._render_pipeline(env, state)
+        assert "boom" in out
+        assert "failed" in out
+
+
 class TestCompositeTemplates:
     def test_command_list(self, env):
         tmpl = env.get_template("components/command_list.kida")
