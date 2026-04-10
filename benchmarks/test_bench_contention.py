@@ -92,8 +92,7 @@ def test_bench_contention_with_listeners(benchmark, store_factory) -> None:
     def run() -> None:
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = [
-                pool.submit(_dispatch_n, store, action, DISPATCHES_PER_THREAD)
-                for _ in range(4)
+                pool.submit(_dispatch_n, store, action, DISPATCHES_PER_THREAD) for _ in range(4)
             ]
             wait(futures)
             for f in futures:

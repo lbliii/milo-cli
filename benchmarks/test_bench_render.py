@@ -85,8 +85,7 @@ def _large_state():
             for g in range(4)
         ],
         "examples": [
-            {"command": f"myapp cmd-0-{i} --flag", "description": f"Example {i}"}
-            for i in range(5)
+            {"command": f"myapp cmd-0-{i} --flag", "description": f"Example {i}"} for i in range(5)
         ],
     }
 

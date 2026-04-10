@@ -38,7 +38,9 @@ def test_bench_json_serialize_small_result(benchmark) -> None:
 
 def test_bench_json_serialize_large_result(benchmark) -> None:
     """Cost of serializing a large tool result (100 items)."""
-    items = [{"id": i, "name": f"item-{i}", "status": "active", "score": i * 1.5} for i in range(100)]
+    items = [
+        {"id": i, "name": f"item-{i}", "status": "active", "score": i * 1.5} for i in range(100)
+    ]
     result = {
         "content": [{"type": "text", "text": json.dumps(items, indent=2)}],
     }
