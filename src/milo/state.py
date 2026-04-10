@@ -55,6 +55,7 @@ class Store:
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._recording: list[dict] | None = [] if record else None
         self._record_path = record if isinstance(record, (str, Path)) else None
+        self._prev_hash: str = "0" * 16  # Merkle chain seed
         self._quit = threading.Event()
         self._exit_code = 0
         self._view_state = None
@@ -111,9 +112,11 @@ class Store:
             else:
                 self._state = result
 
-            # Record
+            # Record (Merkle chain: hash action + previous hash — O(1) per dispatch)
             if self._recording is not None:
-                state_hash = hashlib.sha256(repr(self._state).encode()).hexdigest()[:16]
+                chain_input = f"{self._prev_hash}:{action.type}:{action.payload}"
+                state_hash = hashlib.sha256(chain_input.encode()).hexdigest()[:16]
+                self._prev_hash = state_hash
                 self._recording.append(
                     {
                         "timestamp": time.time(),

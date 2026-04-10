@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 _TEMPLATE_DIR = Path(__file__).parent
+_default_env: Any = None
 
 
 def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
@@ -21,6 +22,12 @@ def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
             Pass a custom dict to override the default palette.
         **kwargs: Forwarded to ``kida.Environment``.
     """
+    global _default_env
+
+    # Return cached singleton when called with default args
+    if theme is None and not kwargs and _default_env is not None:
+        return _default_env
+
     from kida import Environment, FileSystemLoader
 
     loaders = []
@@ -55,5 +62,9 @@ def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
 
         env.globals["theme"] = ThemeProxy(resolved_theme, color=color)
         env._filters["style"] = make_style_filter(resolved_theme, color=color)
+
+    # Cache as default singleton when called with default args
+    if theme is None and not kwargs:
+        _default_env = env
 
     return env

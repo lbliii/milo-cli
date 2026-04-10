@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import functools
 import inspect
 import re as _re
 import types
@@ -92,6 +93,7 @@ _TYPE_MAP: dict[type, str] = {
 }
 
 
+@functools.lru_cache(maxsize=256)
 def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     """Generate MCP-compatible JSON Schema from function type annotations.
 
