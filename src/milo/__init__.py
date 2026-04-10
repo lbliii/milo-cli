@@ -55,6 +55,7 @@ def __getattr__(name: str):
         # State
         "Store": "state",
         "SagaContext": "state",
+        "EffectResult": "state",
         "combine_reducers": "state",
         # App
         "App": "app",

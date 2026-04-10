@@ -1278,3 +1278,206 @@ class TestAllCancellationPropagation:
 
         cancel_count = actions.count("@@SAGA_CANCELLED")
         assert cancel_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Composition tests — nested effect patterns
+# ---------------------------------------------------------------------------
+
+
+class TestEffectComposition:
+    def test_race_inside_all(self):
+        """All containing two Race effects — both races resolve, All collects results."""
+        from milo.state import Store
+
+        results = []
+
+        def race_ab():
+            def fast():
+                yield Delay(seconds=0.05)
+                return "fast_a"
+
+            def slow():
+                yield Delay(seconds=5.0)
+                return "slow_a"
+
+            winner = yield Race(sagas=(fast(), slow()))
+            return winner
+
+        def race_cd():
+            def fast():
+                yield Delay(seconds=0.05)
+                return "fast_b"
+
+            def slow():
+                yield Delay(seconds=5.0)
+                return "slow_b"
+
+            winner = yield Race(sagas=(fast(), slow()))
+            return winner
+
+        def parent():
+            a, b = yield All(sagas=(race_ab(), race_cd()))
+            results.append((a, b))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("fast_a", "fast_b")]
+
+    def test_all_inside_race(self):
+        """Race between two All effects — first All to complete wins."""
+        from milo.state import Store
+
+        results = []
+
+        def fast_pair():
+            def a():
+                yield Delay(seconds=0.05)
+                return "a"
+
+            def b():
+                yield Delay(seconds=0.05)
+                return "b"
+
+            pair = yield All(sagas=(a(), b()))
+            return pair
+
+        def slow_pair():
+            def c():
+                yield Delay(seconds=5.0)
+                return "c"
+
+            def d():
+                yield Delay(seconds=5.0)
+                return "d"
+
+            pair = yield All(sagas=(c(), d()))
+            return pair
+
+        def parent():
+            winner = yield Race(sagas=(fast_pair(), slow_pair()))
+            results.append(winner)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("a", "b")]
+
+    def test_fork_inside_race(self):
+        """Race where one racer forks a child — fork should be cancelled when race completes."""
+        from milo.state import Store
+
+        actions = []
+
+        def forker():
+            def child():
+                yield Delay(seconds=0.05)
+                yield Delay(seconds=10.0)  # Should be cancelled
+                yield Put(Action("CHILD_SURVIVED"))
+
+            yield Fork(saga=child(), attached=True)
+            yield Delay(seconds=5.0)
+            return "forker"
+
+        def fast():
+            yield Delay(seconds=0.1)
+            return "fast"
+
+        def parent():
+            winner = yield Race(sagas=(forker(), fast()))
+            yield Put(Action("WINNER", payload=winner))
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert "WINNER" in actions
+        assert "CHILD_SURVIVED" not in actions
+
+    def test_take_inside_all(self):
+        """All with multiple sagas waiting for different actions via Take."""
+        from milo.state import Store
+
+        results = []
+
+        def waiter_a():
+            action = yield Take("EVENT_A", timeout=2.0)
+            return action.payload
+
+        def waiter_b():
+            action = yield Take("EVENT_B", timeout=2.0)
+            return action.payload
+
+        def parent():
+            # Fork a saga that dispatches the events after a short delay
+            def dispatcher():
+                yield Delay(seconds=0.1)
+                yield Put(Action("EVENT_A", payload="hello"))
+                yield Put(Action("EVENT_B", payload="world"))
+
+            yield Fork(saga=dispatcher())
+            a, b = yield All(sagas=(waiter_a(), waiter_b()))
+            results.append((a, b))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(1.0)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("hello", "world")]
+
+    def test_debounce_with_take_pattern(self):
+        """Keystroke search pattern: Take + Debounce in a loop."""
+        from milo.state import Store
+
+        actions = []
+
+        def search_saga():
+            yield Put(Action("SEARCH_EXECUTED"))
+
+        def parent():
+            # Simulate: receive 3 rapid keys, debounce should fire once
+            for _ in range(3):
+                yield Take("@@KEY", timeout=1.0)
+                yield Debounce(seconds=0.15, saga=search_saga)
+            # Wait for debounce to fire
+            yield Delay(seconds=0.3)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        # Dispatch 3 rapid key events
+        time.sleep(0.05)
+        store.dispatch(Action("@@KEY", payload="a"))
+        time.sleep(0.02)
+        store.dispatch(Action("@@KEY", payload="b"))
+        time.sleep(0.02)
+        store.dispatch(Action("@@KEY", payload="c"))
+        time.sleep(0.6)
+        store._executor.shutdown(wait=True)
+
+        # Debounce should have fired exactly once (last one)
+        search_count = actions.count("SEARCH_EXECUTED")
+        assert search_count == 1
