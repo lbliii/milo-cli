@@ -121,6 +121,24 @@ class TestThemeStyle:
         s = ThemeStyle(bg="neon_purple")
         assert s.sgr_prefix() == ""
 
+    # -- Edge cases: invalid inputs handled gracefully -----------------------
+
+    def test_fg_256_negative_ignored(self):
+        s = ThemeStyle(fg=-1)
+        assert s.sgr_prefix() == ""
+
+    def test_fg_256_over_255_ignored(self):
+        s = ThemeStyle(fg=256)
+        assert s.sgr_prefix() == ""
+
+    def test_fg_hex_invalid_chars_ignored(self):
+        s = ThemeStyle(fg="#zzzzzz")
+        assert s.sgr_prefix() == ""
+
+    def test_fg_hex_short_ignored(self):
+        s = ThemeStyle(fg="#fff")
+        assert s.sgr_prefix() == ""
+
     def test_frozen(self):
         s = ThemeStyle(fg="red")
         with pytest.raises(AttributeError):

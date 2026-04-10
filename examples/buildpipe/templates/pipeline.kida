@@ -5,8 +5,4 @@
 {{ pipeline_progress(state) }}
 
 {{ hr() }}
-{% if state.status == "completed" or state.status == "failed" -%}
 {{ key_hints([{"key": "q", "action": "quit"}]) }}
-{% else -%}
-{{ key_hints([{"key": "q", "action": "cancel"}]) }}
-{% endif %}

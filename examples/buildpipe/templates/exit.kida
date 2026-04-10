@@ -4,5 +4,5 @@
 {% elif state.status == "failed" -%}
 {{ "✗" | red }} Pipeline {{ state.name | bold }} failed at {{ state.current_phase | bold }}.
 {% else -%}
-Pipeline {{ state.name | bold }} cancelled.
+Pipeline {{ state.name | bold }} exited with status {{ state.status | bold }}.
 {% endif -%}

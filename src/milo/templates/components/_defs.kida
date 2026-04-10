@@ -207,8 +207,8 @@
 {% endif -%}
 {%- endfor -%}
 {%- if state.status == "running" -%}
-{%- set pct = (state.progress * 100) | int -%}
-{%- set filled = pct // 2 -%}
+{%- set pct = [[0, (state.progress * 100) | int] | max, 100] | min -%}
+{%- set filled = [[0, pct // 2] | max, 50] | min -%}
 
   {{ ("█" * filled ~ "░" * (50 - filled)) | cyan }}  {{ pct }}%
 {%- elif state.status == "completed" -%}

@@ -91,11 +91,16 @@ def _color_codes(color: str | int, *, ground: str) -> str:
 
     if isinstance(color, int):
         # 256-color: \033[38;5;Nm or \033[48;5;Nm
+        if not (0 <= color <= 255):
+            return ""
         return f"{base};5;{color}"
 
     if isinstance(color, str) and color.startswith("#") and len(color) == 7:
         # Truecolor: \033[38;2;r;g;bm or \033[48;2;r;g;bm
-        r, g, b = _parse_hex(color)
+        try:
+            r, g, b = _parse_hex(color)
+        except ValueError:
+            return ""
         return f"{base};2;{r};{g};{b}"
 
     if isinstance(color, str) and color in named_map:
