@@ -161,6 +161,8 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         properties[name] = prop
 
         has_default = param.default is not inspect.Parameter.empty
+        if has_default:
+            prop["default"] = param.default
         if not has_default and not is_optional:
             required.append(name)
 

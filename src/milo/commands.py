@@ -725,9 +725,11 @@ class CLI:
             else:
                 kwargs["type"] = str
 
-            # Set default from signature if available
+            # Set default from signature or schema
             if param and param.default is not inspect.Parameter.empty and json_type != "boolean":
                 kwargs["default"] = param.default
+            elif "default" not in kwargs and "default" in param_schema:
+                kwargs["default"] = param_schema["default"]
 
             # Required vs optional
             if param_name in required_set and json_type != "boolean":

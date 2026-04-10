@@ -297,6 +297,66 @@ class TestGroupLazy:
 
 
 # ---------------------------------------------------------------------------
+# Lazy commands: default value propagation
+# ---------------------------------------------------------------------------
+
+
+class TestLazyDefaults:
+    def test_lazy_command_uses_signature_defaults(self):
+        """Lazy commands should use function defaults when args are omitted."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "add",
+            "_lazy_handlers:add",
+            description="Add numbers",
+        )
+        # b has default=0 in the handler; omitting --b should use 0, not None
+        result = cli.run(["add", "--a", "5"])
+        assert result == 5
+
+    def test_lazy_command_precomputed_schema_with_defaults(self):
+        """Pre-computed schemas with 'default' fields should propagate."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "add",
+            "_lazy_handlers:add",
+            description="Add numbers",
+            schema={
+                "type": "object",
+                "properties": {
+                    "a": {"type": "integer"},
+                    "b": {"type": "integer", "default": 0},
+                },
+                "required": ["a"],
+            },
+        )
+        result = cli.run(["add", "--a", "5"])
+        assert result == 5
+
+    def test_lazy_command_bool_default_false(self):
+        """Boolean defaults should work for lazy commands."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "greet",
+            "_lazy_handlers:greet",
+            description="Say hello",
+        )
+        result = cli.run(["greet", "--name", "World"])
+        assert result == "Hello, World!"
+
+    def test_lazy_command_bool_default_override(self):
+        """Boolean flags should be overridable for lazy commands."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "greet",
+            "_lazy_handlers:greet",
+            description="Say hello",
+        )
+        result = cli.run(["greet", "--name", "World", "--loud"])
+        assert result == "HELLO, WORLD!"
+
+
+# ---------------------------------------------------------------------------
 # MCP with lazy commands
 # ---------------------------------------------------------------------------
 
