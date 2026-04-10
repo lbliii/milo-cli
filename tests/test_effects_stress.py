@@ -347,7 +347,10 @@ def test_stress_pool_pressure_fires_under_load():
 
     time.sleep(0.2)
     barrier.set()
-    done.wait(timeout=10.0)
+    assert done.wait(timeout=10.0), (
+        "Timed out waiting for worker sagas to complete; possible deadlock "
+        "or remaining counter was not fully decremented"
+    )
     store.shutdown()
 
     assert len(pressure_events) > 0, "Pool pressure callback never fired"

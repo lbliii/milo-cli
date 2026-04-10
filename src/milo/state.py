@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -109,7 +109,8 @@ def _handle_select(effect: Select, _context: SagaContext, store: Store) -> Effec
 
 def _handle_fork(effect: Fork, context: SagaContext, store: Store) -> EffectResult:
     child_ctx = context.child() if effect.attached else context.detached_child()
-    store._tracked_submit(store._run_saga, effect.saga, child_ctx)
+    saga = effect.saga if isinstance(effect.saga, Generator) else effect.saga()
+    store._tracked_submit(store._run_saga, saga, child_ctx)
     return EffectResult.send(child_ctx.cancel)
 
 
@@ -342,6 +343,12 @@ class SagaContext:
         with self._lock:
             self.children.append(child)
 
+    def _remove_child(self, child: SagaContext) -> None:
+        import contextlib
+
+        with self._lock, contextlib.suppress(ValueError):
+            self.children.remove(child)
+
     def cancel_tree(self) -> None:
         """Cancel this context and all descendants transitively."""
         self.cancel.set()
@@ -434,7 +441,12 @@ class Store:
                 with self._tasks_lock:
                     self._active_tasks -= 1
 
-        return self._executor.submit(_wrapper)
+        try:
+            return self._executor.submit(_wrapper)
+        except Exception:
+            with self._tasks_lock:
+                self._active_tasks -= 1
+            raise
 
     @property
     def state(self) -> Any:
@@ -619,6 +631,9 @@ class Store:
                 old_timer, old_ctx = pending_debounce[0]
                 old_timer.cancel()
                 old_ctx.cancel.set()
+            # Prune this child from parent to prevent unbounded growth
+            if context.parent is not None:
+                context.parent._remove_child(context)
 
     def _execute_timeout(self, effect: Call | Retry, seconds: float) -> Any:
         """Execute a blocking effect with a timeout deadline.
