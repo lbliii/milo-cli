@@ -11,8 +11,6 @@ import sys
 import threading
 import time
 
-import pytest
-
 from milo._types import (
     Action,
     All,
@@ -26,7 +24,6 @@ from milo._types import (
     TakeLatest,
 )
 from milo.state import Store
-
 
 # Skip marker for GIL-enabled builds (tests still run, just flagged)
 _GIL_ENABLED = getattr(sys, "_is_gil_enabled", lambda: True)()
@@ -45,7 +42,7 @@ def test_stress_100_simultaneous_sagas():
     completed = [0]
 
     def _saga():
-        result = yield Call(fn=lambda: threading.current_thread().name)
+        yield Call(fn=lambda: threading.current_thread().name)
         with lock:
             completed[0] += 1
             if completed[0] >= total:

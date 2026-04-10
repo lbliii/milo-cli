@@ -54,7 +54,7 @@ _CONTINUE = "continue"  # Re-check cancellation at top of loop
 class EffectResult:
     """What an effect handler returns to tell the saga runner how to advance the generator."""
 
-    __slots__ = ("action", "value", "error")
+    __slots__ = ("action", "error", "value")
 
     def __init__(self, action: str, value: Any = None, error: Exception | None = None) -> None:
         self.action = action
@@ -87,7 +87,7 @@ class EffectResult:
 # ---------------------------------------------------------------------------
 
 
-def _handle_call(effect: Call, context: SagaContext, store: Store) -> EffectResult:
+def _handle_call(effect: Call, _context: SagaContext, _store: Store) -> EffectResult:
     try:
         result = effect.fn(*effect.args, **effect.kwargs)
     except Exception as e:
@@ -95,12 +95,12 @@ def _handle_call(effect: Call, context: SagaContext, store: Store) -> EffectResu
     return EffectResult.send(result)
 
 
-def _handle_put(effect: Put, context: SagaContext, store: Store) -> EffectResult:
+def _handle_put(effect: Put, _context: SagaContext, store: Store) -> EffectResult:
     store.dispatch(effect.action)
     return EffectResult.next()
 
 
-def _handle_select(effect: Select, context: SagaContext, store: Store) -> EffectResult:
+def _handle_select(effect: Select, _context: SagaContext, store: Store) -> EffectResult:
     state = store._state
     if effect.selector:
         state = effect.selector(state)
@@ -108,22 +108,19 @@ def _handle_select(effect: Select, context: SagaContext, store: Store) -> Effect
 
 
 def _handle_fork(effect: Fork, context: SagaContext, store: Store) -> EffectResult:
-    if effect.attached:
-        child_ctx = context.child()
-    else:
-        child_ctx = context.detached_child()
+    child_ctx = context.child() if effect.attached else context.detached_child()
     store._tracked_submit(store._run_saga, effect.saga, child_ctx)
     return EffectResult.send(child_ctx.cancel)
 
 
-def _handle_delay(effect: Delay, context: SagaContext, store: Store) -> EffectResult:
+def _handle_delay(effect: Delay, context: SagaContext, _store: Store) -> EffectResult:
     context.cancel.wait(timeout=effect.seconds)
     if context.is_cancelled:
         return EffectResult.cont()
     return EffectResult.next()
 
 
-def _handle_retry(effect: Retry, context: SagaContext, store: Store) -> EffectResult:
+def _handle_retry(effect: Retry, _context: SagaContext, _store: Store) -> EffectResult:
     result = _execute_retry(
         effect.fn, effect.args, effect.kwargs,
         effect.max_attempts, effect.backoff, effect.base_delay, effect.max_delay,
@@ -131,7 +128,7 @@ def _handle_retry(effect: Retry, context: SagaContext, store: Store) -> EffectRe
     return EffectResult.send(result)
 
 
-def _handle_timeout(effect: Timeout, context: SagaContext, store: Store) -> EffectResult:
+def _handle_timeout(effect: Timeout, _context: SagaContext, store: Store) -> EffectResult:
     try:
         result = store._execute_timeout(effect.effect, effect.seconds)
     except TimeoutError as e:
@@ -139,7 +136,7 @@ def _handle_timeout(effect: Timeout, context: SagaContext, store: Store) -> Effe
     return EffectResult.send(result)
 
 
-def _handle_trycall(effect: TryCall, context: SagaContext, store: Store) -> EffectResult:
+def _handle_trycall(effect: TryCall, _context: SagaContext, _store: Store) -> EffectResult:
     try:
         result = effect.fn(*effect.args, **effect.kwargs)
         return EffectResult.send((result, None))
@@ -325,7 +322,7 @@ class SagaContext:
     class with ``__slots__`` rather than a frozen dataclass.
     """
 
-    __slots__ = ("saga_id", "cancel", "parent", "children", "_lock")
+    __slots__ = ("_lock", "cancel", "children", "parent", "saga_id")
 
     def __init__(
         self,

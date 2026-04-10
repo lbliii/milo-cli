@@ -1110,7 +1110,7 @@ class TestSagaContext:
 
         def bad_saga():
             raise ValueError("boom")
-            yield  # noqa: unreachable — makes it a generator
+            yield  # makes it a generator
 
         def reducer(state, action):
             if action.type == "@@SAGA_ERROR":
@@ -1169,7 +1169,7 @@ class TestForkAttached:
             return state or 0
 
         store = Store(reducer, None)
-        ctx = store.run_saga(parent(), cancel=cancel)
+        store.run_saga(parent(), cancel=cancel)
         time.sleep(0.05)
         cancel.set()  # Cancel parent
         time.sleep(0.3)
@@ -1225,7 +1225,7 @@ class TestRaceCancellationPropagation:
             return "b"
 
         def parent():
-            try:
+            try:  # noqa: SIM105
                 yield Race(sagas=(slow_a(), slow_b()))
             except Exception:
                 pass
@@ -1262,7 +1262,7 @@ class TestAllCancellationPropagation:
             return "b"
 
         def parent():
-            try:
+            try:  # noqa: SIM105
                 yield All(sagas=(slow_a(), slow_b()))
             except Exception:
                 pass

@@ -509,7 +509,7 @@ def test_bench_debounce_retrigger(benchmark, retrigger_count) -> None:
         yield Put(Action("SEARCH_DONE"))
 
     def _parent(n=retrigger_count):
-        for i in range(n):
+        for _i in range(n):
             yield Take("KEY", timeout=5.0)
             yield Debounce(seconds=0.05, saga=_search)
         # Wait for debounce to fire
