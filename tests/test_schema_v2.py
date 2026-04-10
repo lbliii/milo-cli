@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import warnings
 from dataclasses import dataclass, field
 from typing import Annotated, Literal, TypedDict
 
@@ -414,3 +415,132 @@ class TestAnnotatedConstraints:
         prop = schema["properties"]["tags"]
         assert prop["type"] == "array"
         assert prop["minItems"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Tuple / set / frozenset support
+# ---------------------------------------------------------------------------
+
+
+class TestTupleSetFrozenset:
+    def test_tuple_str_ellipsis(self) -> None:
+        schema = _type_to_schema(tuple[str, ...])
+        assert schema == {"type": "array", "items": {"type": "string"}}
+
+    def test_tuple_int(self) -> None:
+        schema = _type_to_schema(tuple[int])
+        assert schema == {"type": "array", "items": {"type": "integer"}}
+
+    def test_bare_tuple(self) -> None:
+        schema = _type_to_schema(tuple)
+        assert schema == {"type": "array"}
+
+    def test_set_int(self) -> None:
+        schema = _type_to_schema(set[int])
+        assert schema == {"type": "array", "items": {"type": "integer"}, "uniqueItems": True}
+
+    def test_frozenset_str(self) -> None:
+        schema = _type_to_schema(frozenset[str])
+        assert schema == {"type": "array", "items": {"type": "string"}, "uniqueItems": True}
+
+    def test_bare_set(self) -> None:
+        schema = _type_to_schema(set)
+        assert schema == {"type": "array"}
+
+    def test_bare_frozenset(self) -> None:
+        schema = _type_to_schema(frozenset)
+        assert schema == {"type": "array"}
+
+    def test_tuple_in_function(self) -> None:
+        def f(tags: tuple[str, ...]) -> None: ...
+
+        schema = function_to_schema(f)
+        assert schema["properties"]["tags"] == {"type": "array", "items": {"type": "string"}}
+
+    def test_set_in_function(self) -> None:
+        def f(ids: set[int]) -> None: ...
+
+        schema = function_to_schema(f)
+        prop = schema["properties"]["ids"]
+        assert prop["type"] == "array"
+        assert prop["uniqueItems"] is True
+
+
+# ---------------------------------------------------------------------------
+# Warning on fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackWarning:
+    def test_unknown_type_emits_warning(self) -> None:
+        class CustomClass:
+            pass
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = _type_to_schema(CustomClass)
+
+        assert schema == {"type": "string"}
+        assert len(w) == 1
+        assert "CustomClass" in str(w[0].message)
+
+    def test_known_types_no_warning(self) -> None:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            _type_to_schema(str)
+            _type_to_schema(int)
+            _type_to_schema(list[str])
+            _type_to_schema(dict[str, int])
+
+        assert len(w) == 0
+
+
+# ---------------------------------------------------------------------------
+# $ref for recursive dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Node:
+    value: str
+    children: list[Node] = field(default_factory=list)
+
+
+@dataclass
+class Left:
+    right: Right | None = None
+
+
+@dataclass
+class Right:
+    left: Left | None = None
+
+
+class TestSchemaRef:
+    def test_self_reference_produces_ref(self) -> None:
+        schema = _type_to_schema(Node)
+        assert schema["type"] == "object"
+        assert schema["properties"]["value"] == {"type": "string"}
+        children = schema["properties"]["children"]
+        assert children["type"] == "array"
+        assert children["items"] == {"$ref": "#/$defs/Node"}
+
+    def test_self_reference_in_function(self) -> None:
+        def f(tree: Node) -> None: ...
+
+        schema = function_to_schema(f)
+        assert "$defs" in schema
+        assert "Node" in schema["$defs"]
+        node_schema = schema["$defs"]["Node"]
+        assert node_schema["type"] == "object"
+        assert "value" in node_schema["properties"]
+
+    def test_mutual_recursion_produces_ref(self) -> None:
+        schema = _type_to_schema(Left)
+        assert schema["type"] == "object"
+        # Left.right → Right, Right.left → Left (cycle) → $ref
+        right_schema = schema["properties"]["right"]
+        # Right is a nested dataclass
+        assert right_schema["type"] == "object"
+        left_ref = right_schema["properties"]["left"]
+        assert left_ref == {"$ref": "#/$defs/Left"}
