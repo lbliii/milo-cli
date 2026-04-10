@@ -18,6 +18,7 @@ Can also be run directly for debugging:
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import threading
 import time
@@ -30,6 +31,8 @@ from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import _stderr, _write_error, _write_result
 from milo._mcp_router import dispatch
 from milo.registry import list_clis
+
+_logger = logging.getLogger("milo.gateway")
 
 
 def main() -> None:
@@ -184,14 +187,14 @@ def _discover_one_child(
     try:
         result = child.send_call("resources/list", {})
         resources = result.get("resources", [])
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning("Failed to discover resources from %s: %s", cli_name, e)
 
     try:
         result = child.send_call("prompts/list", {})
         prompts = result.get("prompts", [])
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.warning("Failed to discover prompts from %s: %s", cli_name, e)
 
     return cli_name, tools, resources, prompts
 

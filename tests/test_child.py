@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from milo._child import ChildProcess
@@ -106,3 +107,98 @@ class TestChildProcess:
         result = child.send_call("test", {})
         assert result == {"ok": True}
         assert mock_popen_cls.call_count == 2
+
+
+class TestRequestTimeout:
+    def test_default_request_timeout(self) -> None:
+        child = ChildProcess("test", ["cmd"])
+        assert child.request_timeout == 30.0
+
+    def test_custom_request_timeout(self) -> None:
+        child = ChildProcess("test", ["cmd"], request_timeout=10.0)
+        assert child.request_timeout == 10.0
+
+    @patch("milo._child.subprocess.Popen")
+    def test_per_call_timeout_override(self, mock_popen_cls: MagicMock) -> None:
+        """Per-call timeout is passed through to _read_line."""
+        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        call_resp = {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
+        mock_proc = _make_mock_popen([init_resp, call_resp])
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["cmd"], request_timeout=30.0)
+        # Use a per-call timeout — should still work since mock responds instantly
+        result = child.send_call("test", {}, timeout=5.0)
+        assert result == {"ok": True}
+
+
+class TestGracefulKill:
+    @patch("milo._child.subprocess.Popen")
+    def test_graceful_kill_sends_sigterm_first(self, mock_popen_cls: MagicMock) -> None:
+        """_graceful_kill sends SIGTERM and waits before escalating."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["cmd"])
+        child.ensure_alive()
+        child.kill()
+
+        # SIGTERM sent via terminate()
+        mock_proc.terminate.assert_called_once()
+        # wait() called with grace period
+        mock_proc.wait.assert_called_once_with(timeout=5)
+        # kill() NOT called because wait() succeeded (no TimeoutExpired)
+        mock_proc.kill.assert_not_called()
+        assert child._proc is None
+
+    @patch("milo._child.subprocess.Popen")
+    def test_graceful_kill_escalates_to_sigkill(self, mock_popen_cls: MagicMock) -> None:
+        """If SIGTERM grace period expires, escalate to SIGKILL."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        # Simulate: terminate works but wait times out
+        mock_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=5)
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["cmd"])
+        child.ensure_alive()
+        child.kill()
+
+        mock_proc.terminate.assert_called_once()
+        mock_proc.kill.assert_called_once()
+        assert child._proc is None
+
+    @patch("milo._child.subprocess.Popen")
+    def test_graceful_kill_handles_already_dead(self, mock_popen_cls: MagicMock) -> None:
+        """If process already exited, _graceful_kill handles ProcessLookupError."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        mock_proc.terminate.side_effect = ProcessLookupError
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["cmd"])
+        child.ensure_alive()
+        child.kill()  # Should not raise
+
+        assert child._proc is None
+
+    @patch("milo._child.subprocess.Popen")
+    def test_graceful_kill_on_noop_when_no_proc(self, mock_popen_cls: MagicMock) -> None:
+        """_graceful_kill is a no-op when _proc is None."""
+        child = ChildProcess("test", ["cmd"])
+        assert child._proc is None
+        child.kill()  # Should not raise
+        assert child._proc is None
