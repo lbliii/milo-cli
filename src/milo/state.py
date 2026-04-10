@@ -243,9 +243,7 @@ class Store:
                             effect = saga.send((None, call_err))
                     case Race(child_sagas):
                         if not child_sagas:
-                            raise StateError(
-                                ErrorCode.STA_SAGA, "Race requires at least one saga"
-                            )
+                            raise StateError(ErrorCode.STA_SAGA, "Race requires at least one saga")
                         try:
                             result = self._execute_race(child_sagas, cancel)
                         except Exception as race_err:
@@ -292,7 +290,9 @@ class Store:
                                         break
                             try:
                                 effect = saga.throw(
-                                    TimeoutError(f"Take('{action_type}') timed out after {timeout}s")
+                                    TimeoutError(
+                                        f"Take('{action_type}') timed out after {timeout}s"
+                                    )
                                 )
                             except StopIteration:
                                 return
@@ -306,12 +306,12 @@ class Store:
                         child_cancel = threading.Event()
 
                         def _debounce_fire(
-                            s=inner_saga, cc=child_cancel, store=self,
+                            s=inner_saga,
+                            cc=child_cancel,
+                            store=self,
                         ):
                             if not cc.is_set():
-                                store._executor.submit(
-                                    store._run_saga, s(), cc
-                                )
+                                store._executor.submit(store._run_saga, s(), cc)
 
                         timer = threading.Timer(seconds, _debounce_fire)
                         timer.daemon = True
@@ -384,8 +384,12 @@ class Store:
                 )
 
     def _run_saga_capturing(
-        self, saga: Any, cancel: threading.Event,
-        result_box: list, error_box: list, done: threading.Event,
+        self,
+        saga: Any,
+        cancel: threading.Event,
+        result_box: list,
+        error_box: list,
+        done: threading.Event,
     ) -> None:
         """Step through a saga like _run_saga, but capture the return value.
 
@@ -475,8 +479,11 @@ class Store:
             child_errors.append(error_box)
 
             def _notify_wrapper(
-                saga=child_saga, cancel=child_cancel,
-                rb=result_box, eb=error_box, done=child_done,
+                saga=child_saga,
+                cancel=child_cancel,
+                rb=result_box,
+                eb=error_box,
+                done=child_done,
             ):
                 self._run_saga_capturing(saga, cancel, rb, eb, done)
                 with condition:
@@ -528,8 +535,11 @@ class Store:
             child_errors.append(error_box)
 
             def _notify_wrapper(
-                saga=child_saga, cancel=child_cancel,
-                rb=result_box, eb=error_box, done=child_done,
+                saga=child_saga,
+                cancel=child_cancel,
+                rb=result_box,
+                eb=error_box,
+                done=child_done,
             ):
                 self._run_saga_capturing(saga, cancel, rb, eb, done)
                 with condition:

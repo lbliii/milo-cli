@@ -194,7 +194,9 @@ class TestProxyCall:
         children = {"taskman": child}
         routing = {"taskman.add": ("taskman", "add")}
 
-        result = _proxy_call(children, routing, {"name": "taskman.add", "arguments": {"title": "hi"}})
+        result = _proxy_call(
+            children, routing, {"name": "taskman.add", "arguments": {"title": "hi"}}
+        )
 
         child.send_call.assert_called_once_with(
             "tools/call", {"name": "add", "arguments": {"title": "hi"}}
@@ -271,7 +273,9 @@ class TestProxyPrompt:
         children = {"ghub": child}
         routing = {"ghub.review": ("ghub", "review")}
 
-        result = _proxy_prompt(children, routing, {"name": "ghub.review", "arguments": {"pr": "123"}})
+        result = _proxy_prompt(
+            children, routing, {"name": "ghub.review", "arguments": {"pr": "123"}}
+        )
 
         child.send_call.assert_called_once_with(
             "prompts/get", {"name": "review", "arguments": {"pr": "123"}}
@@ -327,7 +331,9 @@ class TestGatewayHandler:
 
     def test_list_resources(self):
         clis = {"myapp": {"command": ["myapp"]}}
-        children = {"myapp": _make_child("myapp", resources=[{"uri": "milo://stats", "name": "stats"}])}
+        children = {
+            "myapp": _make_child("myapp", resources=[{"uri": "milo://stats", "name": "stats"}])
+        }
         state = _discover_all(clis, children)
         handler = _GatewayHandler(clis, state, children)
 
@@ -336,7 +342,9 @@ class TestGatewayHandler:
 
     def test_list_prompts(self):
         clis = {"myapp": {"command": ["myapp"]}}
-        children = {"myapp": _make_child("myapp", prompts=[{"name": "help", "description": "Help"}])}
+        children = {
+            "myapp": _make_child("myapp", prompts=[{"name": "help", "description": "Help"}])
+        }
         state = _discover_all(clis, children)
         handler = _GatewayHandler(clis, state, children)
 
@@ -456,6 +464,4 @@ class TestErrorHandling:
 
         _proxy_prompt(children, routing, {"name": "ghub.review"})
 
-        child.send_call.assert_called_once_with(
-            "prompts/get", {"name": "review", "arguments": {}}
-        )
+        child.send_call.assert_called_once_with("prompts/get", {"name": "review", "arguments": {}})
