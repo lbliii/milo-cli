@@ -57,8 +57,8 @@ def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
 
         resolved_theme = theme if theme is not None else DEFAULT_THEME
 
-        # Detect color capability from the environment
-        color = getattr(env, "_terminal_caps", None) is not None
+        # Use kida's terminal_color capability flag
+        color = env.terminal_color is True
 
         env.globals["theme"] = ThemeProxy(resolved_theme, color=color)
         env._filters["style"] = make_style_filter(resolved_theme, color=color)
