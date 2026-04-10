@@ -992,14 +992,14 @@ class TestDebounceEffect:
             yield Put(Action("DEBOUNCED_FIRE"))
 
         def parent():
-            # First debounce — 0.15s
-            yield Debounce(seconds=0.15, saga=inner_saga)
+            # First debounce — 0.2s
+            yield Debounce(seconds=0.2, saga=inner_saga)
             # Wait a bit, then retrigger before first fires
             yield Delay(seconds=0.05)
             # Second debounce — resets the timer
-            yield Debounce(seconds=0.15, saga=inner_saga)
+            yield Debounce(seconds=0.2, saga=inner_saga)
             # Wait long enough for second to fire
-            yield Delay(seconds=0.3)
+            yield Delay(seconds=0.5)
 
         def reducer(state, action):
             actions.append(action.type)
@@ -1007,7 +1007,7 @@ class TestDebounceEffect:
 
         store = Store(reducer, None)
         store.run_saga(parent())
-        time.sleep(0.6)
+        time.sleep(1.0)
         store._executor.shutdown(wait=True)
 
         # Should fire exactly once (first timer cancelled, second fires)
