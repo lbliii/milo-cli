@@ -328,6 +328,7 @@ def test_bench_race(benchmark, race_count) -> None:
         def _s():
             yield Delay(seconds=5.0)
             return f"slow_{n}"
+
         return _s
 
     def _parent(n=race_count):
@@ -396,6 +397,7 @@ def test_bench_all(benchmark, all_count) -> None:
         def _w():
             yield Delay(seconds=0.01)
             return i
+
         return _w
 
     def _parent(n=all_count):
@@ -445,6 +447,7 @@ def test_bench_take_latency(benchmark) -> None:
         store.run_saga(_take_saga())
         # Small delay to ensure Take is registered, then trigger
         import time
+
         time.sleep(0.01)
         store.dispatch(Action("TRIGGER"))
         done.wait(timeout=5.0)
@@ -481,6 +484,7 @@ def test_bench_take_multiple_waiters(benchmark, waiter_count) -> None:
         for _ in range(waiter_count):
             store.run_saga(_waiter())
         import time
+
         time.sleep(0.02)
         store.dispatch(Action("BROADCAST"))
         done.wait(timeout=5.0)
@@ -527,6 +531,7 @@ def test_bench_debounce_retrigger(benchmark, retrigger_count) -> None:
         store = Store(_reducer, 0)
         store.run_saga(_parent())
         import time
+
         time.sleep(0.02)
         for _ in range(retrigger_count):
             store.dispatch(Action("KEY"))
@@ -568,6 +573,7 @@ def test_bench_take_every(benchmark) -> None:
         store = Store(_reducer, 0)
         ctx = store.run_saga(_watcher())
         import time
+
         time.sleep(0.02)
         for _ in range(10):
             store.dispatch(Action("EVT"))
@@ -602,6 +608,7 @@ def test_bench_take_latest(benchmark) -> None:
         store = Store(_reducer, 0)
         ctx = store.run_saga(_watcher())
         import time
+
         time.sleep(0.02)
         for i in range(10):
             store.dispatch(Action("SEARCH", payload=i))
@@ -684,6 +691,7 @@ def test_bench_take_fork_loop(benchmark) -> None:
         store = Store(_reducer, 0)
         store.run_saga(_event_loop())
         import time
+
         time.sleep(0.02)
         for _ in range(5):
             store.dispatch(Action("EVENT"))

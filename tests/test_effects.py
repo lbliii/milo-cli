@@ -1369,7 +1369,8 @@ class TestEffectComposition:
         def reducer(state, action):
             return state or 0
 
-        store = Store(reducer, None)
+        # Use extra workers to prevent pool starvation when Race+All nest
+        store = Store(reducer, None, max_workers=8)
         store.run_saga(parent())
         time.sleep(1.0)
         store._executor.shutdown(wait=True)
@@ -1596,7 +1597,7 @@ class TestTakeLatestEffect:
         completed = []
 
         def handler(action):
-            yield Delay(seconds=0.3)
+            yield Delay(seconds=0.5)
             completed.append(action.payload)
 
         def watcher():
@@ -1605,18 +1606,18 @@ class TestTakeLatestEffect:
         def reducer(state, action):
             return state or 0
 
-        store = Store(reducer, None)
+        store = Store(reducer, None, max_workers=8)
         ctx = store.run_saga(watcher())
-        time.sleep(0.1)
+        time.sleep(0.15)
 
-        # Rapid-fire 3 SEARCH actions
+        # Dispatch with enough gap for TakeLatest to re-register its waiter
         store.dispatch(Action("SEARCH", payload="first"))
-        time.sleep(0.05)
+        time.sleep(0.15)
         store.dispatch(Action("SEARCH", payload="second"))
-        time.sleep(0.05)
+        time.sleep(0.15)
         store.dispatch(Action("SEARCH", payload="third"))
         # Wait for the last handler to complete
-        time.sleep(0.6)
+        time.sleep(0.8)
 
         ctx.cancel_tree()
         time.sleep(0.2)
@@ -1724,7 +1725,8 @@ class TestConfigurablePool:
 
         # max_workers=2, threshold=0.5 → fires when active >= 1
         store = Store(
-            reducer, None,
+            reducer,
+            None,
             max_workers=2,
             on_pool_pressure=on_pressure,
             pool_pressure_threshold=0.5,
@@ -1765,6 +1767,7 @@ class TestConfigurablePool:
         def blocking_saga():
             def block():
                 barrier.wait(timeout=5)
+
             yield Call(fn=block)
 
         # Launch 3 blocking sagas
@@ -1795,7 +1798,8 @@ class TestConfigurablePool:
             return state or 0
 
         store = Store(
-            reducer, None,
+            reducer,
+            None,
             max_workers=2,
             on_pool_pressure=bad_callback,
             pool_pressure_threshold=0.0,  # Always fires

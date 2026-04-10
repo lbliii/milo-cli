@@ -123,8 +123,13 @@ def _handle_delay(effect: Delay, context: SagaContext, _store: Store) -> EffectR
 
 def _handle_retry(effect: Retry, _context: SagaContext, _store: Store) -> EffectResult:
     result = _execute_retry(
-        effect.fn, effect.args, effect.kwargs,
-        effect.max_attempts, effect.backoff, effect.base_delay, effect.max_delay,
+        effect.fn,
+        effect.args,
+        effect.kwargs,
+        effect.max_attempts,
+        effect.backoff,
+        effect.base_delay,
+        effect.max_delay,
     )
     return EffectResult.send(result)
 
@@ -169,9 +174,7 @@ def _handle_take(effect: Take, context: SagaContext, store: Store) -> EffectResu
     waiter_event = threading.Event()
     result_box: list = []
     with store._lock:
-        store._action_waiters.setdefault(effect.action_type, []).append(
-            (waiter_event, result_box)
-        )
+        store._action_waiters.setdefault(effect.action_type, []).append((waiter_event, result_box))
     wait_interval = 0.1
     deadline = None if effect.timeout is None else time.monotonic() + effect.timeout
     while not waiter_event.is_set():
@@ -201,7 +204,10 @@ def _handle_take(effect: Take, context: SagaContext, store: Store) -> EffectResu
 
 
 def _handle_debounce(
-    effect: Debounce, context: SagaContext, store: Store, pending: list,
+    effect: Debounce,
+    context: SagaContext,
+    store: Store,
+    pending: list,
 ) -> EffectResult:
     # Cancel any pending debounce timer from a previous yield
     if pending:
@@ -276,7 +282,9 @@ def _handle_take_latest(effect: TakeLatest, context: SagaContext, store: Store) 
 
 
 def _cleanup_take_waiter(
-    store: Store, action_type: str, waiter_event: threading.Event,
+    store: Store,
+    action_type: str,
+    waiter_event: threading.Event,
 ) -> None:
     """Remove an unconsumed Take waiter from the store."""
     with store._lock:

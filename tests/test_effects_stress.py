@@ -76,6 +76,7 @@ def test_stress_race_with_nested_forks():
             yield Delay(seconds=0.01)
             with lock:
                 fork_results.append(label)
+
         return _gc
 
     def _racer(idx):
@@ -88,6 +89,7 @@ def test_stress_race_with_nested_forks():
             else:
                 yield Delay(seconds=5.0)
             return f"racer_{idx}"
+
         return _r
 
     results = []
@@ -125,15 +127,18 @@ def test_stress_all_with_multi_thread_dispatch():
         def _w():
             action = yield Take(action_type, timeout=10.0)
             return action.payload
+
         return _w
 
     def _parent():
-        a, b, c, d = yield All(sagas=(
-            _waiter("EVT_A")(),
-            _waiter("EVT_B")(),
-            _waiter("EVT_C")(),
-            _waiter("EVT_D")(),
-        ))
+        a, b, c, d = yield All(
+            sagas=(
+                _waiter("EVT_A")(),
+                _waiter("EVT_B")(),
+                _waiter("EVT_C")(),
+                _waiter("EVT_D")(),
+            )
+        )
         results.extend([a, b, c, d])
         done.set()
 
@@ -146,8 +151,12 @@ def test_stress_all_with_multi_thread_dispatch():
 
     # Dispatch from 4 separate threads
     threads = []
-    for name, payload in [("EVT_A", "alpha"), ("EVT_B", "beta"),
-                          ("EVT_C", "gamma"), ("EVT_D", "delta")]:
+    for name, payload in [
+        ("EVT_A", "alpha"),
+        ("EVT_B", "beta"),
+        ("EVT_C", "gamma"),
+        ("EVT_D", "delta"),
+    ]:
         t = threading.Thread(target=store.dispatch, args=(Action(name, payload=payload),))
         threads.append(t)
         t.start()
@@ -336,7 +345,8 @@ def test_stress_pool_pressure_fires_under_load():
     total = 8
     remaining[0] = total
     store = Store(
-        reducer, 0,
+        reducer,
+        0,
         max_workers=4,
         on_pool_pressure=_on_pressure,
         pool_pressure_threshold=0.75,  # fires at 3+ active
