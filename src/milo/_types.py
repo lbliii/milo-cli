@@ -348,6 +348,48 @@ class Debounce:
     saga: Callable
 
 
+@dataclass(frozen=True, slots=True)
+class TakeEvery:
+    """Fork a new saga for every matching action (auto-restart pattern).
+
+    Blocks the parent saga until cancelled.  For each dispatched action
+    whose type matches *action_type*, a new saga is forked with the
+    action as argument::
+
+        # Fork a handler for every CLICK action:
+        yield TakeEvery("CLICK", handle_click)
+
+        def handle_click(action):
+            url = action.payload["url"]
+            result = yield Call(fetch, args=(url,))
+            yield Put(Action("FETCHED", payload=result))
+
+    The watcher loop runs until the parent saga is cancelled.
+    """
+
+    action_type: str
+    saga: Callable  # (action: Action) -> Generator
+
+
+@dataclass(frozen=True, slots=True)
+class TakeLatest:
+    """Fork a saga for the latest matching action, cancelling the previous.
+
+    Like :class:`TakeEvery` but only the most recent saga runs — when a
+    new matching action arrives, the previous fork is cancelled before
+    the new one starts::
+
+        # Only the latest search runs:
+        yield TakeLatest("SEARCH", run_search)
+
+    Useful for typeahead/autocomplete patterns where earlier results
+    are obsolete.
+    """
+
+    action_type: str
+    saga: Callable  # (action: Action) -> Generator
+
+
 # ---------------------------------------------------------------------------
 # Commands (lightweight alternative to sagas)
 # ---------------------------------------------------------------------------

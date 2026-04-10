@@ -19,6 +19,8 @@ from milo._types import (
     Retry,
     Select,
     Take,
+    TakeEvery,
+    TakeLatest,
     Timeout,
     TryCall,
 )
@@ -1481,3 +1483,333 @@ class TestEffectComposition:
         # Debounce should have fired exactly once (last one)
         search_count = actions.count("SEARCH_EXECUTED")
         assert search_count == 1
+
+
+class TestTakeEveryEffect:
+    def test_take_every_forks_for_each_action(self):
+        """TakeEvery('CLICK', handler) forks 3 handlers when 3 CLICK actions dispatched."""
+        from milo.state import Store
+
+        results = []
+
+        def handle_click(action):
+            results.append(action.payload)
+            yield Put(Action("CLICK_HANDLED", payload=action.payload))
+
+        def watcher():
+            yield TakeEvery("CLICK", handle_click)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("CLICK", payload="btn1"))
+        time.sleep(0.05)
+        store.dispatch(Action("CLICK", payload="btn2"))
+        time.sleep(0.05)
+        store.dispatch(Action("CLICK", payload="btn3"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert sorted(results) == ["btn1", "btn2", "btn3"]
+
+    def test_take_every_cancel_stops_watching(self):
+        """Cancelling the parent stops the TakeEvery watcher loop."""
+        from milo.state import Store
+
+        actions = []
+
+        def handler(action):
+            yield Put(Action("HANDLED"))
+
+        def watcher():
+            yield TakeEvery("EVT", handler)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("EVT", payload=1))
+        time.sleep(0.15)
+
+        # Cancel the watcher
+        ctx.cancel_tree()
+        time.sleep(0.2)
+
+        # Dispatch after cancel — should NOT be handled
+        handled_before = actions.count("HANDLED")
+        store.dispatch(Action("EVT", payload=2))
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        handled_after = actions.count("HANDLED")
+        assert handled_before == 1
+        assert handled_after == handled_before  # No new handlers after cancel
+
+    def test_take_every_ignores_unrelated_actions(self):
+        """TakeEvery only forks for matching action types."""
+        from milo.state import Store
+
+        results = []
+
+        def handler(action):
+            results.append(action.type)
+            yield Put(Action("HANDLED"))
+
+        def watcher():
+            yield TakeEvery("TARGET", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("OTHER", payload="x"))
+        store.dispatch(Action("TARGET", payload="y"))
+        store.dispatch(Action("OTHER", payload="z"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["TARGET"]
+
+
+class TestTakeLatestEffect:
+    def test_take_latest_cancels_previous(self):
+        """TakeLatest cancels previous handler when new action arrives, only last completes."""
+        from milo.state import Store
+
+        completed = []
+
+        def handler(action):
+            yield Delay(seconds=0.3)
+            completed.append(action.payload)
+
+        def watcher():
+            yield TakeLatest("SEARCH", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        # Rapid-fire 3 SEARCH actions
+        store.dispatch(Action("SEARCH", payload="first"))
+        time.sleep(0.05)
+        store.dispatch(Action("SEARCH", payload="second"))
+        time.sleep(0.05)
+        store.dispatch(Action("SEARCH", payload="third"))
+        # Wait for the last handler to complete
+        time.sleep(0.6)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        # Only the last one should have completed
+        assert completed == ["third"]
+
+    def test_take_latest_cancel_stops_watching(self):
+        """Cancelling the parent stops TakeLatest and cancels the active fork."""
+        from milo.state import Store
+
+        actions = []
+
+        def handler(action):
+            yield Delay(seconds=0.5)
+            yield Put(Action("COMPLETED"))
+
+        def watcher():
+            yield TakeLatest("EVT", handler)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("EVT", payload=1))
+        time.sleep(0.1)
+
+        # Cancel before handler completes
+        ctx.cancel_tree()
+        time.sleep(0.7)
+        store._executor.shutdown(wait=True)
+
+        assert "COMPLETED" not in actions
+
+    def test_take_latest_single_action_completes(self):
+        """With only one action, TakeLatest lets it complete normally."""
+        from milo.state import Store
+
+        results = []
+
+        def handler(action):
+            yield Delay(seconds=0.05)
+            results.append(action.payload)
+
+        def watcher():
+            yield TakeLatest("DO", handler)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        ctx = store.run_saga(watcher())
+        time.sleep(0.1)
+
+        store.dispatch(Action("DO", payload="only"))
+        time.sleep(0.3)
+
+        ctx.cancel_tree()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["only"]
+
+
+class TestConfigurablePool:
+    def test_custom_max_workers(self):
+        """Store accepts max_workers parameter."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=8)
+        assert store._max_workers == 8
+        assert store._executor._max_workers == 8
+        store._executor.shutdown(wait=True)
+
+    def test_default_max_workers(self):
+        """Default max_workers is 4."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        assert store._max_workers == 4
+        store._executor.shutdown(wait=True)
+
+    def test_pool_pressure_callback_fires(self):
+        """on_pool_pressure fires when active tasks exceed threshold."""
+        from milo.state import Store
+
+        pressure_calls = []
+
+        def on_pressure(active, max_w):
+            pressure_calls.append((active, max_w))
+
+        def reducer(state, action):
+            return state or 0
+
+        # max_workers=2, threshold=0.5 → fires when active >= 1
+        store = Store(
+            reducer, None,
+            max_workers=2,
+            on_pool_pressure=on_pressure,
+            pool_pressure_threshold=0.5,
+        )
+
+        barrier = threading.Event()
+
+        def blocking_saga():
+            yield Call(fn=lambda: barrier.wait(timeout=5))
+
+        # Launch 2 sagas that block
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        time.sleep(0.2)
+
+        barrier.set()
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        # Should have fired at least once (when active >= 1)
+        assert len(pressure_calls) >= 1
+        # Each call should have (active_count, max_workers=2)
+        for active, max_w in pressure_calls:
+            assert max_w == 2
+            assert active >= 1
+
+    def test_pool_active_property(self):
+        """pool_active reports currently running tasks."""
+        from milo.state import Store
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=4)
+
+        barrier = threading.Event()
+
+        def blocking_saga():
+            def block():
+                barrier.wait(timeout=5)
+            yield Call(fn=block)
+
+        # Launch 3 blocking sagas
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        store.run_saga(blocking_saga())
+        time.sleep(0.2)
+
+        snapshot = store.pool_active
+
+        barrier.set()
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # While blocked, should have had 3 active tasks
+        assert snapshot >= 3
+        # After completion, should be 0
+        assert store.pool_active == 0
+
+    def test_pool_pressure_callback_error_swallowed(self):
+        """Errors in on_pool_pressure callback are swallowed, not propagated."""
+        from milo.state import Store
+
+        def bad_callback(active, max_w):
+            raise RuntimeError("callback boom")
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(
+            reducer, None,
+            max_workers=2,
+            on_pool_pressure=bad_callback,
+            pool_pressure_threshold=0.0,  # Always fires
+        )
+
+        results = []
+
+        def simple_saga():
+            result = yield Call(fn=lambda: 42)
+            results.append(result)
+
+        store.run_saga(simple_saga())
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        # Saga should still complete despite callback error
+        assert results == [42]

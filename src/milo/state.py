@@ -30,6 +30,8 @@ from milo._types import (
     Select,
     Sequence,
     Take,
+    TakeEvery,
+    TakeLatest,
     TickCmd,
     Timeout,
     TryCall,
@@ -110,7 +112,7 @@ def _handle_fork(effect: Fork, context: SagaContext, store: Store) -> EffectResu
         child_ctx = context.child()
     else:
         child_ctx = context.detached_child()
-    store._executor.submit(store._run_saga, effect.saga, child_ctx)
+    store._tracked_submit(store._run_saga, effect.saga, child_ctx)
     return EffectResult.send(child_ctx.cancel)
 
 
@@ -213,13 +215,66 @@ def _handle_debounce(
 
     def _debounce_fire(s=effect.saga, cc=child_ctx, st=store):
         if not cc.is_cancelled:
-            st._executor.submit(st._run_saga, s(), cc)
+            st._tracked_submit(st._run_saga, s(), cc)
 
     timer = threading.Timer(effect.seconds, _debounce_fire)
     timer.daemon = True
     timer.start()
     pending.append((timer, child_ctx))
     return EffectResult.next()
+
+
+def _handle_take_every(effect: TakeEvery, context: SagaContext, store: Store) -> EffectResult:
+    """Block until cancelled, forking a new saga for every matching action."""
+    while not context.is_cancelled:
+        # Wait for the next matching action
+        waiter_event = threading.Event()
+        result_box: list = []
+        with store._lock:
+            store._action_waiters.setdefault(effect.action_type, []).append(
+                (waiter_event, result_box)
+            )
+        # Poll with short intervals for cancellation
+        while not waiter_event.is_set():
+            if context.is_cancelled:
+                _cleanup_take_waiter(store, effect.action_type, waiter_event)
+                return EffectResult.cont()
+            waiter_event.wait(timeout=0.1)
+        if result_box:
+            action = result_box[0]
+            child_ctx = context.child()
+            store._tracked_submit(store._run_saga, effect.saga(action), child_ctx)
+    return EffectResult.cont()
+
+
+def _handle_take_latest(effect: TakeLatest, context: SagaContext, store: Store) -> EffectResult:
+    """Block until cancelled, forking a saga for the latest matching action only."""
+    prev_ctx: SagaContext | None = None
+    while not context.is_cancelled:
+        waiter_event = threading.Event()
+        result_box: list = []
+        with store._lock:
+            store._action_waiters.setdefault(effect.action_type, []).append(
+                (waiter_event, result_box)
+            )
+        while not waiter_event.is_set():
+            if context.is_cancelled:
+                _cleanup_take_waiter(store, effect.action_type, waiter_event)
+                if prev_ctx is not None:
+                    prev_ctx.cancel_tree()
+                return EffectResult.cont()
+            waiter_event.wait(timeout=0.1)
+        if result_box:
+            action = result_box[0]
+            # Cancel previous fork before starting new one
+            if prev_ctx is not None:
+                prev_ctx.cancel_tree()
+            child_ctx = context.child()
+            prev_ctx = child_ctx
+            store._tracked_submit(store._run_saga, effect.saga(action), child_ctx)
+    if prev_ctx is not None:
+        prev_ctx.cancel_tree()
+    return EffectResult.cont()
 
 
 def _cleanup_take_waiter(
@@ -249,6 +304,8 @@ _DEFAULT_HANDLERS: dict[type, Callable] = {
     Race: _handle_race,
     All: _handle_all,
     Take: _handle_take,
+    TakeEvery: _handle_take_every,
+    TakeLatest: _handle_take_latest,
     # Debounce handled specially (needs pending_debounce state)
 }
 
@@ -324,12 +381,20 @@ class Store:
         middleware: tuple[Callable, ...] = (),
         *,
         record: bool | str | Path = False,
+        max_workers: int = 4,
+        on_pool_pressure: Callable[[int, int], None] | None = None,
+        pool_pressure_threshold: float = 0.8,
     ) -> None:
         self._reducer = reducer
         self._state = initial_state
         self._lock = threading.Lock()
         self._listeners: list[Callable] = []
-        self._executor = ThreadPoolExecutor(max_workers=4)
+        self._max_workers = max_workers
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._on_pool_pressure = on_pool_pressure
+        self._pool_pressure_threshold = pool_pressure_threshold
+        self._active_tasks = 0
+        self._tasks_lock = threading.Lock()
         self._recording: list[dict] | None = [] if record else None
         self._record_path = record if isinstance(record, (str, Path)) else None
         self._prev_hash: str = "0" * 16  # Merkle chain seed
@@ -351,9 +416,37 @@ class Store:
     def _get_state(self) -> Any:
         return self._state
 
+    def _tracked_submit(self, fn, *args):
+        """Submit work to the pool, tracking active tasks for pressure detection."""
+        with self._tasks_lock:
+            self._active_tasks += 1
+            active = self._active_tasks
+        if (
+            self._on_pool_pressure is not None
+            and active >= self._max_workers * self._pool_pressure_threshold
+        ):
+            try:
+                self._on_pool_pressure(active, self._max_workers)
+            except Exception:
+                _logger.debug("on_pool_pressure callback failed", exc_info=True)
+
+        def _wrapper():
+            try:
+                fn(*args)
+            finally:
+                with self._tasks_lock:
+                    self._active_tasks -= 1
+
+        return self._executor.submit(_wrapper)
+
     @property
     def state(self) -> Any:
         return self._state
+
+    @property
+    def pool_active(self) -> int:
+        """Number of currently active tasks in the thread pool."""
+        return self._active_tasks
 
     def dispatch(self, action: Action) -> None:
         """Dispatch action through middleware -> reducer."""
@@ -460,7 +553,7 @@ class Store:
         if context is None:
             ctx_cancel = cancel or threading.Event()
             context = SagaContext(cancel=ctx_cancel)
-        self._executor.submit(self._run_saga, saga, context)
+        self._tracked_submit(self._run_saga, saga, context)
         return context
 
     def _run_saga(self, saga: Any, context: SagaContext | None = None) -> None:
@@ -710,14 +803,14 @@ class Store:
         """Execute a Cmd, Batch, Sequence, or TickCmd."""
         match cmd:
             case Cmd(fn):
-                self._executor.submit(self._run_cmd, fn)
+                self._tracked_submit(self._run_cmd, fn)
             case Batch(cmds):
                 for c in cmds:
                     self._exec_cmd(c)
             case Sequence(cmds):
-                self._executor.submit(self._run_sequence, cmds)
+                self._tracked_submit(self._run_sequence, cmds)
             case TickCmd(interval):
-                self._executor.submit(self._run_tick, interval)
+                self._tracked_submit(self._run_tick, interval)
 
     def _run_cmd(self, fn: Any) -> None:
         """Run a single Cmd thunk and dispatch its result."""
@@ -749,7 +842,7 @@ class Store:
                     futures = []
                     for c in batch_cmds:
                         if isinstance(c, Cmd):
-                            futures.append(self._executor.submit(self._run_cmd, c.fn))
+                            futures.append(self._tracked_submit(self._run_cmd, c.fn))
                         else:
                             self._exec_cmd(c)
                     concurrent.futures.wait(futures, timeout=60)
