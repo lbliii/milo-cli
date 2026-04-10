@@ -791,8 +791,7 @@ class CLI:
                 suggestion = self.suggest_command(result.attempted)
                 if suggestion:
                     sys.stderr.write(
-                        f"Unknown command: {result.attempted!r}. "
-                        f"Did you mean {suggestion!r}?\n"
+                        f"Unknown command: {result.attempted!r}. Did you mean {suggestion!r}?\n"
                     )
                     return None
             self._format_root_help()
@@ -979,7 +978,11 @@ class CLI:
             {"flags": "-q, --quiet", "help": "Suppress non-error output"},
             {"flags": "--no-color", "help": "Disable color output"},
             {"flags": "-n, --dry-run", "help": "Show what would happen without making changes"},
-            {"flags": "-o, --output-file", "metavar": "FILE", "help": "Write output to FILE instead of stdout"},
+            {
+                "flags": "-o, --output-file",
+                "metavar": "FILE",
+                "help": "Write output to FILE instead of stdout",
+            },
         ]
 
         if self.version:
