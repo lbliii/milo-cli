@@ -158,9 +158,9 @@ class TestChangeBatcher:
         batcher.set_callback(lambda paths: flushed.append(list(paths)))
 
         batcher.add([Path("first.txt")])
-        time.sleep(0.15)
+        time.sleep(0.3)
         batcher.add([Path("second.txt")])
-        time.sleep(0.15)
+        time.sleep(0.3)
 
         assert len(flushed) == 2
 

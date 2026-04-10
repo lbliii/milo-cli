@@ -7,7 +7,21 @@ import time
 
 import pytest
 
-from milo._types import Action, Call, Delay, Fork, Put, Retry, Select, Timeout, TryCall
+from milo._types import (
+    Action,
+    All,
+    Call,
+    Debounce,
+    Delay,
+    Fork,
+    Put,
+    Race,
+    Retry,
+    Select,
+    Take,
+    Timeout,
+    TryCall,
+)
 
 
 class TestSagaStepping:
@@ -500,3 +514,523 @@ class TestSagaCancellation:
 
         assert "@@SAGA_CANCELLED" in actions
         assert not done.is_set()
+
+
+class TestRaceEffect:
+    def test_race_dataclass(self):
+        r = Race(sagas=(lambda: None, lambda: None))
+        assert len(r.sagas) == 2
+
+    def test_race_dataclass_frozen(self):
+        r = Race(sagas=())
+        with pytest.raises(AttributeError):
+            r.sagas = ()  # type: ignore[misc]
+
+    def test_race_basic(self):
+        """First saga to complete wins."""
+        from milo.state import Store
+
+        results = []
+
+        def fast():
+            yield Delay(seconds=0.05)
+            return "fast"
+
+        def slow():
+            yield Delay(seconds=5.0)
+            return "slow"
+
+        def parent():
+            winner = yield Race(sagas=(fast(), slow()))
+            results.append(winner)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["fast"]
+
+    def test_race_loser_cancelled(self):
+        """Losing sagas should be cancelled."""
+        from milo.state import Store
+
+        actions = []
+
+        def fast():
+            yield Delay(seconds=0.05)
+            return "fast"
+
+        def slow():
+            yield Delay(seconds=0.05)
+            yield Delay(seconds=10.0)  # Should be cancelled before this completes
+            return "slow"
+
+        def parent():
+            yield Race(sagas=(fast(), slow()))
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert "@@SAGA_CANCELLED" in actions
+
+    def test_race_with_failing_saga(self):
+        """If the first to finish raises, that error propagates."""
+        from milo.state import Store
+
+        errors = []
+
+        def fail_fast():
+            yield Delay(seconds=0.05)
+            raise ValueError("boom")
+
+        def slow():
+            yield Delay(seconds=5.0)
+            return "slow"
+
+        def parent():
+            try:
+                yield Race(sagas=(fail_fast(), slow()))
+            except ValueError as e:
+                errors.append(str(e))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        # The error from fail_fast propagates as @@SAGA_ERROR since
+        # it's thrown into the parent which catches it
+        # But the capturing wrapper catches and stores the error
+        # The parent saga gets the error thrown into it
+        assert errors == ["boom"]
+
+    def test_race_single_saga(self):
+        """Race with one saga just returns its result."""
+        from milo.state import Store
+
+        results = []
+
+        def only():
+            yield Delay(seconds=0.05)
+            return "only"
+
+        def parent():
+            winner = yield Race(sagas=(only(),))
+            results.append(winner)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["only"]
+
+    def test_race_empty_raises(self):
+        """Race with no sagas raises StateError."""
+        from milo.state import Store
+
+        errors = []
+
+        def parent():
+            yield Race(sagas=())
+
+        def reducer(state, action):
+            if action.type == "@@SAGA_ERROR":
+                errors.append(action.payload)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        store._executor.shutdown(wait=True)
+
+        assert len(errors) == 1
+        assert "at least one saga" in errors[0]["error"]
+
+
+class TestAllEffect:
+    def test_all_dataclass(self):
+        a = All(sagas=(lambda: None, lambda: None))
+        assert len(a.sagas) == 2
+
+    def test_all_dataclass_frozen(self):
+        a = All(sagas=())
+        with pytest.raises(AttributeError):
+            a.sagas = ()  # type: ignore[misc]
+
+    def test_all_effect_basic(self):
+        """All waits for all sagas and returns results in order."""
+        from milo.state import Store
+
+        results = []
+
+        def saga_a():
+            yield Delay(seconds=0.05)
+            return "a"
+
+        def saga_b():
+            yield Delay(seconds=0.1)
+            return "b"
+
+        def parent():
+            result = yield All(sagas=(saga_a(), saga_b()))
+            results.append(result)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("a", "b")]
+
+    def test_all_effect_one_failure_cancels_rest(self):
+        """If one saga fails, the rest are cancelled and error propagates."""
+        from milo.state import Store
+
+        errors = []
+        actions = []
+
+        def good():
+            yield Delay(seconds=5.0)
+            return "good"
+
+        def bad():
+            yield Delay(seconds=0.05)
+            raise ValueError("bad")
+
+        def parent():
+            try:
+                yield All(sagas=(good(), bad()))
+            except ValueError as e:
+                errors.append(str(e))
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert errors == ["bad"]
+        assert "@@SAGA_CANCELLED" in actions
+
+    def test_all_effect_empty(self):
+        """All with empty tuple returns empty tuple immediately."""
+        from milo.state import Store
+
+        results = []
+
+        def parent():
+            result = yield All(sagas=())
+            results.append(result)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        store._executor.shutdown(wait=True)
+
+        assert results == [()]
+
+    def test_all_effect_single_saga(self):
+        """All with one saga wraps result in 1-tuple."""
+        from milo.state import Store
+
+        results = []
+
+        def only():
+            yield Delay(seconds=0.05)
+            return "only"
+
+        def parent():
+            result = yield All(sagas=(only(),))
+            results.append(result)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.3)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("only",)]
+
+    def test_all_effect_preserves_order(self):
+        """Results are ordered by input position, not completion time."""
+        from milo.state import Store
+
+        results = []
+
+        def slow():
+            yield Delay(seconds=0.15)
+            return "slow"
+
+        def fast():
+            yield Delay(seconds=0.05)
+            return "fast"
+
+        def parent():
+            result = yield All(sagas=(slow(), fast()))
+            results.append(result)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert results == [("slow", "fast")]
+
+
+class TestTakeEffect:
+    def test_take_dataclass(self):
+        t = Take(action_type="@@KEY")
+        assert t.action_type == "@@KEY"
+        assert t.timeout is None
+
+    def test_take_dataclass_with_timeout(self):
+        t = Take(action_type="@@KEY", timeout=5.0)
+        assert t.timeout == 5.0
+
+    def test_take_dataclass_frozen(self):
+        t = Take(action_type="@@KEY")
+        with pytest.raises(AttributeError):
+            t.action_type = "other"  # type: ignore[misc]
+
+    def test_take_basic(self):
+        """Take pauses saga until matching action is dispatched."""
+        from milo.state import Store
+
+        results = []
+
+        def saga():
+            action = yield Take("USER_CONFIRMED")
+            results.append(action.payload)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(saga())
+        time.sleep(0.1)
+        # Saga should be blocked
+        assert results == []
+
+        store.dispatch(Action("USER_CONFIRMED", payload="yes"))
+        time.sleep(0.1)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["yes"]
+
+    def test_take_with_timeout(self):
+        """Take with timeout returns action if dispatched in time."""
+        from milo.state import Store
+
+        results = []
+
+        def saga():
+            action = yield Take("FAST_ACTION", timeout=2.0)
+            results.append(action.payload)
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(saga())
+        time.sleep(0.05)
+        store.dispatch(Action("FAST_ACTION", payload="got it"))
+        time.sleep(0.1)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["got it"]
+
+    def test_take_timeout_fires(self):
+        """Take raises TimeoutError when action isn't dispatched in time."""
+        from milo.state import Store
+
+        errors = []
+
+        def saga():
+            try:
+                yield Take("NEVER_COMES", timeout=0.1)
+            except TimeoutError as e:
+                errors.append(str(e))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(saga())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert len(errors) == 1
+        assert "NEVER_COMES" in errors[0]
+        assert "timed out" in errors[0]
+
+    def test_take_ignores_past_actions(self):
+        """Take waits for future actions only, not already-dispatched ones."""
+        from milo.state import Store
+
+        results = []
+
+        def saga():
+            # Dispatch happens before Take
+            yield Put(Action("EARLY_ACTION", payload="early"))
+            yield Delay(seconds=0.05)
+            # Now take — should NOT match the already-dispatched action
+            try:
+                yield Take("EARLY_ACTION", timeout=0.15)
+                results.append("matched")
+            except TimeoutError:
+                results.append("timed_out")
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(saga())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert results == ["timed_out"]
+
+    def test_take_multiple_waiters(self):
+        """Multiple sagas can Take the same action type."""
+        from milo.state import Store
+
+        results = []
+
+        def waiter(name):
+            action = yield Take("SHARED_EVENT")
+            results.append((name, action.payload))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(waiter("a"))
+        store.run_saga(waiter("b"))
+        time.sleep(0.1)
+        store.dispatch(Action("SHARED_EVENT", payload="hello"))
+        time.sleep(0.2)
+        store._executor.shutdown(wait=True)
+
+        assert len(results) == 2
+        assert ("a", "hello") in results
+        assert ("b", "hello") in results
+
+
+class TestDebounceEffect:
+    def test_debounce_dataclass(self):
+        d = Debounce(seconds=0.3, saga=lambda: None)
+        assert d.seconds == 0.3
+
+    def test_debounce_dataclass_frozen(self):
+        d = Debounce(seconds=0.3, saga=lambda: None)
+        with pytest.raises(AttributeError):
+            d.seconds = 1.0  # type: ignore[misc]
+
+    def test_debounce_basic(self):
+        """Debounce fires the inner saga after the delay."""
+        from milo.state import Store
+
+        actions = []
+
+        def inner_saga():
+            yield Put(Action("DEBOUNCED_FIRE"))
+
+        def parent():
+            yield Debounce(seconds=0.1, saga=inner_saga)
+            yield Delay(seconds=0.3)  # Wait for debounce to fire
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert "DEBOUNCED_FIRE" in actions
+
+    def test_debounce_retrigger_resets_timer(self):
+        """Re-yielding Debounce cancels previous timer and starts new one."""
+        from milo.state import Store
+
+        actions = []
+
+        def inner_saga():
+            yield Put(Action("DEBOUNCED_FIRE"))
+
+        def parent():
+            # First debounce — 0.15s
+            yield Debounce(seconds=0.15, saga=inner_saga)
+            # Wait a bit, then retrigger before first fires
+            yield Delay(seconds=0.05)
+            # Second debounce — resets the timer
+            yield Debounce(seconds=0.15, saga=inner_saga)
+            # Wait long enough for second to fire
+            yield Delay(seconds=0.3)
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.6)
+        store._executor.shutdown(wait=True)
+
+        # Should fire exactly once (first timer cancelled, second fires)
+        fire_count = actions.count("DEBOUNCED_FIRE")
+        assert fire_count == 1
+
+    def test_debounce_cancelled_on_saga_exit(self):
+        """Pending debounce is cancelled when parent saga ends."""
+        from milo.state import Store
+
+        actions = []
+
+        def inner_saga():
+            yield Put(Action("SHOULD_NOT_FIRE"))
+
+        def parent():
+            yield Debounce(seconds=0.3, saga=inner_saga)
+            # Parent exits immediately — debounce should be cancelled
+
+        def reducer(state, action):
+            actions.append(action.type)
+            return state or 0
+
+        store = Store(reducer, None)
+        store.run_saga(parent())
+        time.sleep(0.5)
+        store._executor.shutdown(wait=True)
+
+        assert "SHOULD_NOT_FIRE" not in actions
