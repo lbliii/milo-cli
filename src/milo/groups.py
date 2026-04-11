@@ -67,6 +67,7 @@ class Group:
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        display_result: bool = True,
     ) -> Callable:
         """Register a function as a command within this group."""
         from milo.commands import _make_command_def
@@ -81,6 +82,7 @@ class Group:
                 hidden=hidden,
                 examples=tuple(examples),
                 confirm=confirm,
+                display_result=display_result,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -100,6 +102,7 @@ class Group:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        display_result: bool = True,
     ) -> Any:
         """Register a lazy-loaded command within this group.
 
@@ -115,6 +118,7 @@ class Group:
             aliases=aliases,
             tags=tags,
             hidden=hidden,
+            display_result=display_result,
         )
         self._commands[name] = cmd
         for alias in aliases:

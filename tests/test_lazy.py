@@ -297,6 +297,157 @@ class TestGroupLazy:
 
 
 # ---------------------------------------------------------------------------
+# Lazy commands: default value propagation
+# ---------------------------------------------------------------------------
+
+
+class TestLazyDefaults:
+    def test_lazy_command_uses_signature_defaults(self):
+        """Lazy commands should use function defaults when args are omitted."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "add",
+            "_lazy_handlers:add",
+            description="Add numbers",
+        )
+        # b has default=0 in the handler; omitting --b should use 0, not None
+        result = cli.run(["add", "--a", "5"])
+        assert result == 5
+
+    def test_lazy_command_precomputed_schema_with_defaults(self):
+        """Pre-computed schemas with 'default' fields should propagate."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "add",
+            "_lazy_handlers:add",
+            description="Add numbers",
+            schema={
+                "type": "object",
+                "properties": {
+                    "a": {"type": "integer"},
+                    "b": {"type": "integer", "default": 0},
+                },
+                "required": ["a"],
+            },
+        )
+        result = cli.run(["add", "--a", "5"])
+        assert result == 5
+
+    def test_lazy_command_bool_default_false(self):
+        """Boolean defaults should work for lazy commands."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "greet",
+            "_lazy_handlers:greet",
+            description="Say hello",
+        )
+        result = cli.run(["greet", "--name", "World"])
+        assert result == "Hello, World!"
+
+    def test_lazy_command_bool_default_override(self):
+        """Boolean flags should be overridable for lazy commands."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "greet",
+            "_lazy_handlers:greet",
+            description="Say hello",
+        )
+        result = cli.run(["greet", "--name", "World", "--loud"])
+        assert result == "HELLO, WORLD!"
+
+    def test_schema_defaults_are_json_serializable(self):
+        """function_to_schema() should only store JSON-safe defaults."""
+        import json
+
+        from milo.schema import function_to_schema
+
+        def handler(name: str, count: int = 5, flag: bool = True) -> str:
+            return ""
+
+        schema = function_to_schema(handler)
+        # Should not raise
+        json.dumps(schema)
+        assert schema["properties"]["count"]["default"] == 5
+        assert schema["properties"]["flag"]["default"] is True
+
+    def test_schema_omits_non_serializable_defaults(self):
+        """Non-JSON-serializable defaults should be omitted from schema."""
+        import json
+        from enum import Enum
+        from pathlib import Path
+
+        from milo.schema import function_to_schema
+
+        class Color(Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        def handler(output: Path = Path("."), color: Color = Color.RED) -> str:
+            return ""
+
+        schema = function_to_schema(handler)
+        # Should not raise
+        json.dumps(schema)
+        # Non-serializable defaults should NOT be in the schema
+        assert "default" not in schema["properties"]["output"]
+        assert "default" not in schema["properties"]["color"]
+
+
+# ---------------------------------------------------------------------------
+# display_result suppression
+# ---------------------------------------------------------------------------
+
+
+class TestDisplayResult:
+    def test_display_result_false_suppresses_plain(self):
+        """display_result=False suppresses plain stdout output."""
+        cli = CLI(name="app")
+
+        @cli.command("info", display_result=False)
+        def info() -> dict:
+            return {"status": "ok", "count": 42}
+
+        result = cli.invoke(["info"])
+        assert result.output == ""
+        assert result.result == {"status": "ok", "count": 42}
+
+    def test_display_result_false_allows_json(self):
+        """display_result=False still outputs with --format json."""
+        cli = CLI(name="app")
+
+        @cli.command("info", display_result=False)
+        def info() -> dict:
+            return {"status": "ok"}
+
+        result = cli.invoke(["info", "--format", "json"])
+        assert '"status"' in result.output
+
+    def test_display_result_true_default(self):
+        """By default, display_result=True and output is shown."""
+        cli = CLI(name="app")
+
+        @cli.command("info")
+        def info() -> str:
+            return "hello"
+
+        result = cli.invoke(["info"])
+        assert "hello" in result.output
+
+    def test_lazy_display_result_false(self):
+        """Lazy commands support display_result=False."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "add",
+            "_lazy_handlers:add",
+            description="Add numbers",
+            display_result=False,
+        )
+        result = cli.invoke(["add", "--a", "3", "--b", "7"])
+        assert result.output == ""
+        assert result.result == 10
+
+
+# ---------------------------------------------------------------------------
 # MCP with lazy commands
 # ---------------------------------------------------------------------------
 
