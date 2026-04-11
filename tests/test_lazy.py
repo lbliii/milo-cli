@@ -373,18 +373,24 @@ class TestLazyDefaults:
     def test_schema_omits_non_serializable_defaults(self):
         """Non-JSON-serializable defaults should be omitted from schema."""
         import json
+        from enum import Enum
         from pathlib import Path
 
         from milo.schema import function_to_schema
 
-        def handler(output: Path = Path(".")) -> str:
+        class Color(Enum):
+            RED = "red"
+            BLUE = "blue"
+
+        def handler(output: Path = Path("."), color: Color = Color.RED) -> str:
             return ""
 
         schema = function_to_schema(handler)
         # Should not raise
         json.dumps(schema)
-        # Path default should NOT be in the schema
+        # Non-serializable defaults should NOT be in the schema
         assert "default" not in schema["properties"]["output"]
+        assert "default" not in schema["properties"]["color"]
 
 
 # ---------------------------------------------------------------------------

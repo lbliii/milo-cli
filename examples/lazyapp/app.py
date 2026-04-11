@@ -49,7 +49,7 @@ cli.lazy_command(
         "type": "object",
         "properties": {
             "target": {"type": "string"},
-            "dry_run": {"type": "boolean"},
+            "dry_run": {"type": "boolean", "default": False},
         },
         "required": ["target"],
     },
@@ -63,7 +63,7 @@ cli.lazy_command(
         "type": "object",
         "properties": {
             "target": {"type": "string"},
-            "steps": {"type": "integer"},
+            "steps": {"type": "integer", "default": 1},
         },
         "required": ["target"],
     },
@@ -77,8 +77,8 @@ cli.lazy_command(
     schema={
         "type": "object",
         "properties": {
-            "target": {"type": "string"},
-            "lines": {"type": "integer"},
+            "target": {"type": "string", "default": "production"},
+            "lines": {"type": "integer", "default": 20},
         },
     },
 )
