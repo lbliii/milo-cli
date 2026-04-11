@@ -220,6 +220,7 @@ class CLI:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        display_result: bool = True,
     ) -> Callable:
         """Register a function as a CLI command.
 
@@ -232,6 +233,8 @@ class CLI:
             confirm: If set, prompt user with this message before executing.
             annotations: MCP tool annotations (readOnlyHint, destructiveHint,
                 idempotentHint, openWorldHint).
+            display_result: If False, suppress plain-format output while still
+                returning data for ``--format json`` or ``--output``.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -245,6 +248,7 @@ class CLI:
                 examples=tuple(examples),
                 confirm=confirm,
                 annotations=annotations,
+                display_result=display_result,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -267,11 +271,16 @@ class CLI:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        display_result: bool = True,
     ) -> LazyCommandDef:
         """Register a lazy-loaded command.
 
         The handler module is not imported until the command is invoked.
         This keeps CLI startup fast for large command sets.
+
+        When providing a pre-computed *schema*, include ``"default"`` fields
+        in properties for optional parameters so argparse receives the correct
+        defaults without importing the handler module.
         """
         cmd = LazyCommandDef(
             name=name,
@@ -284,6 +293,7 @@ class CLI:
             examples=examples,
             confirm=confirm,
             annotations=annotations,
+            display_result=display_result,
         )
         self._commands[name] = cmd
         for alias in aliases:
@@ -704,11 +714,12 @@ class CLI:
             # Determine type
             json_type = param_schema.get("type", "string")
             if json_type == "boolean":
-                default = (
-                    param.default
-                    if param and param.default is not inspect.Parameter.empty
-                    else False
-                )
+                if param and param.default is not inspect.Parameter.empty:
+                    default = param.default
+                elif "default" in param_schema:
+                    default = param_schema["default"]
+                else:
+                    default = False
                 kwargs["action"] = "store_true"
                 kwargs["default"] = default
             elif json_type == "integer":
@@ -881,13 +892,17 @@ class CLI:
                 ctx.error(f"after_command hook failed: {type(exc).__name__}: {exc}")
 
         # Format and output (to file or stdout)
-        output_file = ctx.output_file
-        if output_file:
-            formatted = format_output(result, fmt=fmt)
-            with open(output_file, "w") as f:
-                f.write(formatted + "\n")
-        else:
-            write_output(result, fmt=fmt)
+        # When display_result=False, suppress plain-format stdout output but
+        # still honor explicit --format or --output requests.
+        suppress = not cmd.display_result and fmt == "plain" and not ctx.output_file
+        if not suppress:
+            output_file = ctx.output_file
+            if output_file:
+                formatted = format_output(result, fmt=fmt)
+                with open(output_file, "w") as f:
+                    f.write(formatted + "\n")
+            else:
+                write_output(result, fmt=fmt)
 
         return result
 

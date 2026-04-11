@@ -59,6 +59,8 @@ class CommandDef:
     """If non-empty, prompt for confirmation before running."""
     annotations: dict[str, Any] = field(default_factory=dict)
     """MCP tool annotations (readOnlyHint, destructiveHint, etc.)."""
+    display_result: bool = True
+    """If False, suppress plain-format output (return value still available for --format json)."""
 
 
 class LazyCommandDef:
@@ -80,6 +82,7 @@ class LazyCommandDef:
         "annotations",
         "confirm",
         "description",
+        "display_result",
         "examples",
         "hidden",
         "import_path",
@@ -100,6 +103,7 @@ class LazyCommandDef:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        display_result: bool = True,
     ) -> None:
         self.name = name
         self.description = description
@@ -110,6 +114,7 @@ class LazyCommandDef:
         self.examples = tuple(examples)
         self.confirm = confirm
         self.annotations = annotations or {}
+        self.display_result = display_result
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -159,6 +164,7 @@ class LazyCommandDef:
                 examples=self.examples,
                 confirm=self.confirm,
                 annotations=self.annotations,
+                display_result=self.display_result,
             )
             return self._resolved
 
@@ -185,6 +191,7 @@ def _make_command_def(
     examples: tuple[dict[str, Any], ...] = (),
     confirm: str = "",
     annotations: dict[str, Any] | None = None,
+    display_result: bool = True,
 ) -> CommandDef:
     """Build a CommandDef from a function and decorator kwargs."""
     from milo.schema import function_to_schema
@@ -204,6 +211,7 @@ def _make_command_def(
         examples=examples,
         confirm=confirm,
         annotations=annotations or {},
+        display_result=display_result,
     )
 
 
