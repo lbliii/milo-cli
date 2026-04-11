@@ -1,0 +1,1 @@
+Lazy commands now propagate function signature defaults to argparse. Schema defaults are JSON-safe, boolean schema defaults are respected, and a new `display_result=False` option suppresses plain-format output while preserving `--format json`.
