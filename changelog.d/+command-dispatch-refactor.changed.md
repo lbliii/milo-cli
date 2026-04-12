@@ -1,0 +1,1 @@
+Refactored `CLI` command dispatch internals to share builtin-mode handling, command resolution, hook execution, middleware execution, generator consumption, and output writing across `run()`, `call()`, and `call_raw()` without changing the public API.

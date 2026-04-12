@@ -75,6 +75,23 @@ class ResolvedNothing:
 ResolveResult = ResolvedCommand | ResolvedGroup | ResolvedNothing
 
 
+@dataclass(frozen=True, slots=True)
+class CommandExecution:
+    """Resolved command plus execution metadata."""
+
+    found: CommandDef | LazyCommandDef
+    command: CommandDef
+    fmt: str
+    confirm_msg: str
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltinMode:
+    """A built-in top-level mode that does not dispatch a registered command."""
+
+    name: str
+
+
 class _MiloArgumentParser(argparse.ArgumentParser):
     """ArgumentParser subclass that provides did-you-mean suggestions."""
 
@@ -771,149 +788,35 @@ class CLI:
         self._parser = parser
         args = parser.parse_args(argv)
 
-        # --completions mode
-        if getattr(args, "completions", None):
-            from milo.completions import install_completions
-
-            sys.stdout.write(install_completions(self, args.completions))
-            return None
-
-        # --llms-txt mode
-        if getattr(args, "llms_txt", False):
-            from milo.llms import generate_llms_txt
-
-            sys.stdout.write(generate_llms_txt(self))
-            return None
-
-        # --mcp mode
-        if getattr(args, "mcp", False):
-            from milo.mcp import run_mcp_server
-
-            run_mcp_server(self)
-            return None
-
-        # --mcp-install mode
-        if getattr(args, "mcp_install", False):
-            self._mcp_install()
-            return None
-
-        # --mcp-uninstall mode
-        if getattr(args, "mcp_uninstall", False):
-            self._mcp_uninstall()
+        builtin_mode = self._resolve_builtin_mode(args)
+        if builtin_mode is not None:
+            self._run_builtin_mode(args, builtin_mode)
             return None
 
         # Build execution context from global options
         ctx = self._build_context(args)
-
-        # Resolve command from args (may be nested in groups)
-        result = self._resolve_command_from_args(args)
-
-        if isinstance(result, ResolvedGroup):
-            result.group.format_help(result.prog)
+        execution = self._resolve_command_execution(args)
+        if execution is None:
             return None
 
-        if isinstance(result, ResolvedNothing):
-            if result.attempted:
-                suggestion = self.suggest_command(result.attempted)
-                if suggestion:
-                    sys.stderr.write(
-                        f"Unknown command: {result.attempted!r}. Did you mean {suggestion!r}?\n"
-                    )
-                    return None
-            self._format_root_help()
-            return None
-
-        found = result.command
-        fmt = result.fmt
-
-        # Resolve lazy commands
-        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
-
-        # Confirmation prompt
-        confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
-        if confirm_msg and not ctx.dry_run and not ctx.confirm(confirm_msg):
+        if execution.confirm_msg and not ctx.dry_run and not ctx.confirm(execution.confirm_msg):
             sys.stderr.write("Aborted.\n")
             return None
 
-        # Extract command arguments and inject context
-        sig = inspect.signature(cmd.handler)
-        kwargs: dict[str, Any] = {}
-        for param_name, param in sig.parameters.items():
-            if param_name == "ctx" or _is_context_param(param):
-                kwargs[param_name] = ctx
-            elif hasattr(args, param_name):
-                kwargs[param_name] = getattr(args, param_name)
-
-        # Set context for get_context() access
-        from milo.context import set_context
-
-        set_context(ctx)
-
-        # Before-command hooks
-        for hook in self._before_command:
-            try:
-                hook(ctx, cmd.name, kwargs)
-            except SystemExit:
-                raise
-            except Exception as exc:
-                ctx.error(f"before_command hook failed: {type(exc).__name__}: {exc}")
-                sys.exit(1)
-
-        # Call handler through middleware if present
-        try:
-            if self._middleware:
-                from milo.middleware import MCPCall
-
-                call = MCPCall(method="command", name=cmd.name, arguments=kwargs)
-                result = self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
-            else:
-                result = cmd.handler(**kwargs)
-        except SystemExit:
-            raise
-        except KeyboardInterrupt:
-            sys.stderr.write("\nInterrupted.\n")
-            sys.exit(130)
-        except Exception as exc:
-            from milo._errors import MiloError, format_error
-
-            if isinstance(exc, MiloError):
-                ctx.error(format_error(exc))
-            else:
-                ctx.error(f"{type(exc).__name__}: {exc}")
-            if ctx.debug:
-                import traceback
-
-                traceback.print_exc(file=sys.stderr)
-            sys.exit(1)
-
-        # Handle streaming generators
-        from milo.streaming import consume_generator, is_generator_result
-
-        if is_generator_result(result):
-            progress_list, final_value = consume_generator(result)
-            for p in progress_list:
-                sys.stderr.write(f"  {p.status}\n")
-            result = final_value
-
-        # After-command hooks
-        for hook in self._after_command:
-            try:
-                hook(ctx, cmd.name, result)
-            except Exception as exc:
-                ctx.error(f"after_command hook failed: {type(exc).__name__}: {exc}")
-
-        # Format and output (to file or stdout)
-        # When display_result=False, suppress plain-format stdout output but
-        # still honor explicit --format or --output-file requests.
-        suppress = not cmd.display_result and fmt == "plain" and not ctx.output_file
+        result = self._execute_command(
+            execution.command,
+            ctx,
+            self._build_run_kwargs(args, ctx, execution.command),
+        )
+        result = self._consume_result(result)
+        self._run_after_command_hooks(ctx, execution.command.name, result)
+        suppress = (
+            not execution.command.display_result
+            and execution.fmt == "plain"
+            and not ctx.output_file
+        )
         if not suppress:
-            output_file = ctx.output_file
-            if output_file:
-                formatted = format_output(result, fmt=fmt)
-                with open(output_file, "w") as f:
-                    f.write(formatted + "\n")
-            else:
-                write_output(result, fmt=fmt)
+            self._write_command_output(result, execution.fmt, ctx.output_file)
 
         return result
 
@@ -959,6 +862,209 @@ class CLI:
             exception=exception,
             stderr=captured_err.getvalue(),
         )
+
+    def _resolve_builtin_mode(self, args: argparse.Namespace) -> BuiltinMode | None:
+        """Return the selected built-in top-level mode, if any."""
+        if getattr(args, "completions", None):
+            return BuiltinMode("completions")
+        if getattr(args, "llms_txt", False):
+            return BuiltinMode("llms_txt")
+        if getattr(args, "mcp", False):
+            return BuiltinMode("mcp")
+        if getattr(args, "mcp_install", False):
+            return BuiltinMode("mcp_install")
+        if getattr(args, "mcp_uninstall", False):
+            return BuiltinMode("mcp_uninstall")
+        return None
+
+    def _run_builtin_mode(self, args: argparse.Namespace, mode: BuiltinMode) -> None:
+        """Execute a built-in top-level mode."""
+        if mode.name == "completions":
+            from milo.completions import install_completions
+
+            sys.stdout.write(install_completions(self, args.completions))
+            return
+        if mode.name == "llms_txt":
+            from milo.llms import generate_llms_txt
+
+            sys.stdout.write(generate_llms_txt(self))
+            return
+        if mode.name == "mcp":
+            from milo.mcp import run_mcp_server
+
+            run_mcp_server(self)
+            return
+        if mode.name == "mcp_install":
+            self._mcp_install()
+            return
+        if mode.name == "mcp_uninstall":
+            self._mcp_uninstall()
+            return
+        raise AssertionError(f"Unknown builtin mode: {mode.name}")
+
+    def _resolve_command_execution(self, args: argparse.Namespace) -> CommandExecution | None:
+        """Resolve parsed args to an executable command or handle help cases."""
+        result = self._resolve_command_from_args(args)
+
+        if isinstance(result, ResolvedGroup):
+            result.group.format_help(result.prog)
+            return None
+
+        if isinstance(result, ResolvedNothing):
+            if result.attempted:
+                suggestion = self.suggest_command(result.attempted)
+                if suggestion:
+                    sys.stderr.write(
+                        f"Unknown command: {result.attempted!r}. Did you mean {suggestion!r}?\n"
+                    )
+                    return None
+            self._format_root_help()
+            return None
+
+        found = result.command
+        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
+        return CommandExecution(found=found, command=cmd, fmt=result.fmt, confirm_msg=confirm_msg)
+
+    def _build_run_kwargs(
+        self, args: argparse.Namespace, ctx: Context, command: CommandDef
+    ) -> dict[str, Any]:
+        """Build handler kwargs from parsed args, injecting the active context."""
+        return self._build_handler_kwargs_from_namespace(args, ctx, command)
+
+    def _build_handler_kwargs_from_namespace(
+        self, args: argparse.Namespace, ctx: Context, command: CommandDef
+    ) -> dict[str, Any]:
+        """Build handler kwargs from an argparse namespace."""
+        sig = inspect.signature(command.handler)
+        kwargs: dict[str, Any] = {}
+        for param_name, param in sig.parameters.items():
+            if param_name == "ctx" or _is_context_param(param):
+                kwargs[param_name] = ctx
+            elif hasattr(args, param_name):
+                kwargs[param_name] = getattr(args, param_name)
+        return kwargs
+
+    def _get_resolved_command(
+        self, command_name: str
+    ) -> tuple[CommandDef | LazyCommandDef, CommandDef]:
+        """Resolve a command name to the registered definition and eager command."""
+        found = self.get_command(command_name)
+        if not found:
+            suggestion = self.suggest_command(command_name)
+            msg = f"Unknown command: {command_name!r}"
+            if suggestion:
+                msg += f". Did you mean {suggestion!r}?"
+            raise ValueError(msg)
+        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        return found, cmd
+
+    def _filter_call_kwargs(self, command: CommandDef, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """Filter programmatic kwargs to handler parameters, excluding context injection."""
+        sig = inspect.signature(command.handler)
+        return {
+            k: v
+            for k, v in kwargs.items()
+            if k in sig.parameters and not _is_context_param(sig.parameters[k])
+        }
+
+    def _new_call_context(self) -> Context:
+        """Create a default context for programmatic command calls."""
+        from milo.context import Context as ContextClass
+
+        return ContextClass()
+
+    def _execute_command(
+        self,
+        command: CommandDef,
+        ctx: Context,
+        kwargs: dict[str, Any],
+        *,
+        method: str = "command",
+        call_name: str | None = None,
+        raise_on_error: bool = False,
+    ) -> Any:
+        """Execute a command with context setup, hooks, middleware, and error handling."""
+        from milo.context import set_context
+
+        set_context(ctx)
+        self._run_before_command_hooks(ctx, command.name, kwargs)
+
+        try:
+            if self._middleware:
+                from milo.middleware import MCPCall
+
+                call = MCPCall(
+                    method=method,
+                    name=call_name or command.name,
+                    arguments=kwargs,
+                )
+                return self._middleware.execute(ctx, call, lambda c: command.handler(**c.arguments))
+            return command.handler(**kwargs)
+        except SystemExit:
+            raise
+        except KeyboardInterrupt:
+            if raise_on_error:
+                raise
+            sys.stderr.write("\nInterrupted.\n")
+            sys.exit(130)
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            from milo._errors import MiloError, format_error
+
+            if isinstance(exc, MiloError):
+                ctx.error(format_error(exc))
+            else:
+                ctx.error(f"{type(exc).__name__}: {exc}")
+            if ctx.debug:
+                import traceback
+
+                traceback.print_exc(file=sys.stderr)
+            sys.exit(1)
+
+    def _run_before_command_hooks(
+        self, ctx: Context, command_name: str, kwargs: dict[str, Any]
+    ) -> None:
+        """Execute before-command hooks."""
+        for hook in self._before_command:
+            try:
+                hook(ctx, command_name, kwargs)
+            except SystemExit:
+                raise
+            except Exception as exc:
+                ctx.error(f"before_command hook failed: {type(exc).__name__}: {exc}")
+                sys.exit(1)
+
+    def _run_after_command_hooks(self, ctx: Context, command_name: str, result: Any) -> None:
+        """Execute after-command hooks."""
+        for hook in self._after_command:
+            try:
+                hook(ctx, command_name, result)
+            except Exception as exc:
+                ctx.error(f"after_command hook failed: {type(exc).__name__}: {exc}")
+
+    def _consume_result(self, result: Any, *, emit_progress: bool = True) -> Any:
+        """Consume generator-based command results."""
+        from milo.streaming import consume_generator, is_generator_result
+
+        if not is_generator_result(result):
+            return result
+
+        progress_list, final_value = consume_generator(result)
+        if emit_progress:
+            for p in progress_list:
+                sys.stderr.write(f"  {p.status}\n")
+        return final_value
+
+    def _write_command_output(self, result: Any, fmt: str, output_file: str) -> None:
+        """Write command output to stdout or a file."""
+        if output_file:
+            formatted = format_output(result, fmt=fmt)
+            with open(output_file, "w") as f:
+                f.write(formatted + "\n")
+            return
+        write_output(result, fmt=fmt)
 
     def _build_context(self, args: argparse.Namespace) -> Context:
         """Build a Context from parsed global options."""
@@ -1080,42 +1186,12 @@ class CLI:
             cli.call("greet", name="Alice")
             cli.call("site.build", output="_site")
         """
-        found = self.get_command(command_name)
-        if not found:
-            suggestion = self.suggest_command(command_name)
-            msg = f"Unknown command: {command_name!r}"
-            if suggestion:
-                msg += f". Did you mean {suggestion!r}?"
-            raise ValueError(msg)
-
-        # Resolve lazy commands
-        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
-
-        sig = inspect.signature(cmd.handler)
-        # Filter to only valid parameters (exclude context params)
-        valid = {
-            k: v
-            for k, v in kwargs.items()
-            if k in sig.parameters and not _is_context_param(sig.parameters[k])
-        }
-
-        if self._middleware:
-            from milo.context import Context as ContextClass
-            from milo.middleware import MCPCall
-
-            ctx = ContextClass()
-            call = MCPCall(method="command", name=command_name, arguments=valid)
-            result = self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
-        else:
-            result = cmd.handler(**valid)
-
-        # Handle streaming generators
-        from milo.streaming import consume_generator, is_generator_result
-
-        if is_generator_result(result):
-            _, result = consume_generator(result)
-
-        return result
+        _found, cmd = self._get_resolved_command(command_name)
+        ctx = self._new_call_context()
+        result = self._execute_command(
+            cmd, ctx, self._filter_call_kwargs(cmd, kwargs), raise_on_error=True
+        )
+        return self._consume_result(result, emit_progress=False)
 
     def call_raw(self, command_name: str, **kwargs: Any) -> Any:
         """Call a command without consuming generators.
@@ -1124,31 +1200,16 @@ class CLI:
         returns a generator, it is *not* consumed.  The MCP server uses
         this to stream ``Progress`` yields as notifications.
         """
-        found = self.get_command(command_name)
-        if not found:
-            suggestion = self.suggest_command(command_name)
-            msg = f"Unknown command: {command_name!r}"
-            if suggestion:
-                msg += f". Did you mean {suggestion!r}?"
-            raise ValueError(msg)
-
-        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
-
-        sig = inspect.signature(cmd.handler)
-        valid = {
-            k: v
-            for k, v in kwargs.items()
-            if k in sig.parameters and not _is_context_param(sig.parameters[k])
-        }
-
-        if self._middleware:
-            from milo.context import Context as ContextClass
-            from milo.middleware import MCPCall
-
-            ctx = ContextClass()
-            call = MCPCall(method="tools/call", name=command_name, arguments=valid)
-            return self._middleware.execute(ctx, call, lambda c: cmd.handler(**c.arguments))
-        return cmd.handler(**valid)
+        _found, cmd = self._get_resolved_command(command_name)
+        ctx = self._new_call_context()
+        return self._execute_command(
+            cmd,
+            ctx,
+            self._filter_call_kwargs(cmd, kwargs),
+            method="tools/call",
+            call_name=command_name,
+            raise_on_error=True,
+        )
 
     def suggest_command(self, name: str) -> str | None:
         """Suggest the closest command name for typo correction."""
