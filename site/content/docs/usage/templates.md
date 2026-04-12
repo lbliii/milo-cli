@@ -1,5 +1,6 @@
 ---
 title: Templates
+nav_title: Templates
 description: Kida-powered terminal rendering with built-in form, field, help, and progress templates.
 weight: 60
 draft: false

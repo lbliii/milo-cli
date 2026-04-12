@@ -25,8 +25,12 @@ Build a three-screen installer using Flows, Forms, and Sagas — the full Milo s
 
 :::{/cards}
 
-## Coming soon
+:::{dropdown} Tutorial ideas
+:icon: lightbulb
 
-- **Build a Dashboard** — real-time status display with `@@TICK` and sagas
-- **Build a File Browser** — keyboard navigation, directory tree, and file preview
-- **Build a Test Runner** — watch mode, progress bars, and session recording
+Have a tutorial you'd like to see? [Open an issue](https://github.com/lbliii/milo-cli/issues) with a description of what you'd like to build.
+
+- Real-time status dashboard with `@@TICK` and sagas
+- File browser with keyboard navigation and directory tree
+- Test runner with watch mode, progress bars, and session recording
+:::

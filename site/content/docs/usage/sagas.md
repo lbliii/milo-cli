@@ -1,11 +1,12 @@
 ---
 title: Sagas
-description: Generator-based side effects with Call, Put, Select, Fork, and Delay.
+nav_title: Sagas
+description: Generator-based side effects with Call, Put, Select, Fork, Delay, Race, All, Take, and more.
 weight: 20
 draft: false
 lang: en
 tags: [sagas, effects, side-effects, concurrency]
-keywords: [sagas, effects, call, put, select, fork, delay, generator]
+keywords: [sagas, effects, call, put, select, fork, delay, race, all, take, debounce, retry, generator]
 category: usage
 icon: arrows-split
 ---
@@ -142,6 +143,141 @@ If `fetch_data` raises an exception, the saga runner retries up to `max_attempts
 | `backoff` | `"exponential"` | `"exponential"`, `"linear"`, or `"fixed"` |
 | `base_delay` | `1.0` | Initial delay in seconds between retries |
 | `max_delay` | `30.0` | Cap on delay between retries |
+
+:::{/tab-item}
+
+:::{tab-item} Timeout
+:icon: clock
+
+Wrap a blocking effect with a deadline:
+
+```python
+from milo import Timeout, Call
+
+result = yield Timeout(Call(fetch_data, args=(url,)), seconds=5)
+```
+
+Raises `TimeoutError` if the effect doesn't complete in time. Only wraps blocking effects (`Call` and `Retry`).
+
+:::{/tab-item}
+
+:::{tab-item} TryCall
+
+Call a function, returning `(result, None)` on success or `(None, error)` on failure — exceptions don't crash the saga:
+
+```python
+from milo import TryCall, Put, Action
+
+result, error = yield TryCall(fn=might_fail)
+if error:
+    yield Put(Action("FETCH_FAILED", payload=str(error)))
+else:
+    yield Put(Action("FETCH_OK", payload=result))
+```
+
+:::{/tab-item}
+
+:::{tab-item} Race
+:icon: zap
+
+Run multiple sagas concurrently, return the first result. Losers are cancelled:
+
+```python
+from milo import Race
+
+winner = yield Race(sagas=(fetch_primary(), fetch_fallback()))
+```
+
+If all racers fail, the first error is thrown into the parent saga.
+
+:::{/tab-item}
+
+:::{tab-item} All
+
+Run multiple sagas concurrently, wait for all to complete:
+
+```python
+from milo import All
+
+users, roles = yield All(sagas=(fetch_users(), fetch_roles()))
+```
+
+Returns a tuple of results in the same order as the input sagas. Fail-fast: if any saga raises, remaining sagas are cancelled.
+
+:::{/tab-item}
+
+:::{tab-item} Take
+:icon: pause
+
+Pause the saga until a matching action is dispatched:
+
+```python
+from milo import Take
+
+action = yield Take("USER_CONFIRMED")
+name = action.payload["name"]
+```
+
+Waits for *future* actions only — actions dispatched before the `Take` is yielded are not matched. An optional `timeout` (in seconds) raises `TimeoutError` if the action doesn't arrive in time:
+
+```python
+action = yield Take("USER_CONFIRMED", timeout=10.0)
+```
+
+:::{/tab-item}
+
+:::{tab-item} Debounce
+:icon: timer
+
+Delay-then-fork: start a timer, fork `saga` when it expires. If another `Debounce` is yielded before the timer fires, the previous timer is cancelled and restarted. The parent continues immediately (non-blocking):
+
+```python
+from milo import Debounce, Take
+
+# In a keystroke handler saga:
+while True:
+    key = yield Take("@@KEY")
+    yield Debounce(seconds=0.3, saga=search_saga)
+```
+
+:::{/tab-item}
+:::{/tab-set}
+
+## Watcher patterns
+
+For recurring event handling, use `TakeEvery` or `TakeLatest` instead of manual `Take` loops.
+
+:::{tab-set}
+:::{tab-item} TakeEvery
+
+Fork a handler for every matching action. All handlers run concurrently:
+
+```python
+from milo import TakeEvery
+
+yield TakeEvery("CLICK", handle_click)
+
+def handle_click(action):
+    url = action.payload["url"]
+    result = yield Call(fetch, args=(url,))
+    yield Put(Action("FETCHED", payload=result))
+```
+
+Blocks the parent saga until cancelled. Use this when every event matters (e.g., logging, side effects per click).
+
+:::{/tab-item}
+
+:::{tab-item} TakeLatest
+
+Like `TakeEvery`, but cancels the previous handler when a new action arrives:
+
+```python
+from milo import TakeLatest
+
+yield TakeLatest("SEARCH", run_search)
+```
+
+Use this for typeahead/autocomplete patterns where earlier results are obsolete.
 
 :::{/tab-item}
 :::{/tab-set}
