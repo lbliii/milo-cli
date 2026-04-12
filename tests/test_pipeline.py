@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from dataclasses import replace
 
-from milo._types import Action, Call, Put
-from milo._types import Key, Quit, SpecialKey
+import pytest
+
+from milo._types import Action, Call, Key, Put, Quit, SpecialKey
 from milo.pipeline import (
     PHASE_COMPLETE,
     PHASE_FAILED,
@@ -959,9 +958,9 @@ class TestPipelineViewState:
             vs.expanded = True
 
     def test_import_from_milo(self):
-        from milo import PipelineViewState as PVS
+        from milo import PipelineViewState as PipelineViewStateImport
 
-        assert PVS is PipelineViewState
+        assert PipelineViewStateImport is PipelineViewState
 
     def test_make_detail_reducer_import(self):
         from milo import make_detail_reducer as mdr
