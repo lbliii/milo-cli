@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import threading
 import time
@@ -472,6 +471,7 @@ class Store:
     def _base_dispatch(self, action: Action) -> None:
         """Core dispatch: reducer + saga scheduling + cmd execution + recording."""
         quit_signal = False
+        record_entry = None
 
         with self._lock:
             try:
@@ -502,19 +502,13 @@ class Store:
             else:
                 self._state = result
 
-            # Record (Merkle chain: hash action + previous hash — O(1) per dispatch)
+            # Record: compute chain hash inside lock (maintains ordering),
+            # defer the append + timestamp to outside the lock.
             if self._recording is not None:
                 chain_input = f"{self._prev_hash}:{action.type}:{action.payload}"
-                state_hash = hashlib.sha256(chain_input.encode()).hexdigest()[:16]
+                state_hash = format(hash(chain_input) & 0xFFFFFFFFFFFFFFFF, "016x")
                 self._prev_hash = state_hash
-                self._recording.append(
-                    {
-                        "timestamp": time.time(),
-                        "action_type": action.type,
-                        "action_payload": action.payload,
-                        "state_hash": state_hash,
-                    }
-                )
+                record_entry = (action.type, action.payload, state_hash)
 
             # Notify Take waiters (inside lock to avoid missed actions)
             waiters = self._action_waiters.pop(action.type, None)
@@ -522,6 +516,18 @@ class Store:
                 for event, result_box in waiters:
                     result_box.append(action)
                     event.set()
+
+        # Append recording entry outside the lock (list.append is thread-safe in CPython)
+        if record_entry is not None:
+            action_type, action_payload, state_hash = record_entry
+            self._recording.append(
+                {
+                    "timestamp": time.time(),
+                    "action_type": action_type,
+                    "action_payload": action_payload,
+                    "state_hash": state_hash,
+                }
+            )
 
         # Store latest view state for renderer to pick up
         if view is not None:
@@ -825,8 +831,7 @@ class Store:
             case Cmd(fn):
                 self._tracked_submit(self._run_cmd, fn)
             case Batch(cmds):
-                for c in cmds:
-                    self._exec_cmd(c)
+                self._submit_batch(cmds)
             case Sequence(cmds):
                 self._tracked_submit(self._run_sequence, cmds)
             case TickCmd(interval):
@@ -848,6 +853,59 @@ class Store:
                 )
             except Exception:
                 _logger.debug("Failed to dispatch @@CMD_ERROR", exc_info=True)
+
+    def _submit_batch(self, cmds: tuple) -> None:
+        """Submit batch commands with a single pressure check.
+
+        Performs one pressure check and bulk-increments the task counter,
+        then submits each Cmd directly to the executor. This avoids
+        per-Cmd pressure checks and lock acquisitions.
+        """
+        # Count how many Cmds we'll submit directly
+        direct_cmds = []
+        other_cmds = []
+        for c in cmds:
+            if isinstance(c, Cmd):
+                direct_cmds.append(c.fn)
+            else:
+                other_cmds.append(c)
+
+        # Bulk-increment active tasks and single pressure check
+        if direct_cmds:
+            count = len(direct_cmds)
+            with self._tasks_lock:
+                self._active_tasks += count
+                active = self._active_tasks
+            if (
+                self._on_pool_pressure is not None
+                and active >= self._max_workers * self._pool_pressure_threshold
+            ):
+                try:
+                    self._on_pool_pressure(active, self._max_workers)
+                except Exception:
+                    _logger.debug("on_pool_pressure callback failed", exc_info=True)
+
+            # Submit all Cmds directly — one executor.submit per Cmd but no
+            # per-Cmd _tracked_submit overhead (no per-Cmd lock + pressure check)
+            for fn in direct_cmds:
+
+                def _wrapper(f=fn):
+                    try:
+                        self._run_cmd(f)
+                    finally:
+                        with self._tasks_lock:
+                            self._active_tasks -= 1
+
+                try:
+                    self._executor.submit(_wrapper)
+                except Exception:
+                    with self._tasks_lock:
+                        self._active_tasks -= 1
+                    raise
+
+        # Handle non-Cmd entries (nested Batch, Sequence, etc.)
+        for c in other_cmds:
+            self._exec_cmd(c)
 
     def _run_sequence(self, cmds: tuple) -> None:
         """Run commands serially, dispatching each result before the next."""

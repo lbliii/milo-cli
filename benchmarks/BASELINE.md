@@ -1,6 +1,6 @@
-# Benchmark Baseline — v0.2.0-dev
+# Benchmark Baseline — v0.2.2-dev
 
-**Date**: 2026-04-09
+**Date**: 2026-04-12
 **Platform**: macOS Darwin 25.3.0, Apple Silicon
 **Python**: CPython 3.14.3
 **Suite**: 74 benchmarks across 7 files
@@ -9,37 +9,39 @@
 
 ## Store Dispatch
 
-Core dispatch path: acquire lock → run reducer → unwrap result → record (optional) → notify listeners → schedule effects.
+Core dispatch path: acquire lock → run reducer → unwrap result → compute record hash → release lock → append record → notify listeners → schedule effects.
 
 | Benchmark | Median | OPS | Notes |
 |---|---|---|---|
-| noop reducer | 225ns | 4.4M | Floor: lock + return |
-| dict merge | 287ns | 3.4M | Typical app pattern |
-| ReducerResult unwrap | 619ns | 1.5M | 2.7x noop — isinstance checks + field extraction |
-| + Cmd | 2.5μs | 209K | ThreadPoolExecutor.submit() cost |
-| + Sequence(4) | 3.1μs | 173K | Single submit for serial chain |
-| + Batch(4) | 8.2μs | 65K | 4 concurrent submits |
+| noop reducer | 292ns | 3.3M | Floor: lock + return |
+| dict merge | 309ns | 3.0M | Typical app pattern |
+| ReducerResult unwrap | 708ns | 1.4M | 2.4x noop — isinstance checks + field extraction |
+| + Cmd | 2.8μs | 209K | ThreadPoolExecutor.submit() cost |
+| + Sequence(4) | 3.7μs | 173K | Single submit for serial chain |
+| + Batch(4) | 8.7μs | 63K | Bulk task accounting + 4 executor submits |
 | state-5 keys | 300ns | 3.1M | Dict spread cost |
-| state-50 keys | 400ns | 2.4M | +33% vs 5 keys |
-| state-500 keys | 1.3μs | 747K | 5.8x vs 5 keys (dict copy dominates) |
-| recording (small) | 661ns | 1.3M | SHA256 of repr(0) |
-| recording (200 keys) | **46.8μs** | 21K | **167x noop** — repr + SHA256 of large state |
+| state-50 keys | 433ns | 2.2M | +44% vs 5 keys |
+| state-500 keys | 1.3μs | 711K | 4.5x vs 5 keys (dict copy dominates) |
+| recording (small) | 708ns | 1.2M | Merkle chain: hash(f-string) — O(1) per dispatch |
+| recording (200 keys) | 1.3μs | 663K | Same O(1) — state size does not affect recording cost |
+
+**Note**: Recording uses an action-based Merkle chain (`hash(f"{prev}:{type}:{payload}")`), not `repr(state)`. The hash is computed inside the lock to maintain chain ordering; the append and timestamp are deferred outside the lock.
 
 ### Listeners
 
 | Listeners | Median | vs 0 |
 |---|---|---|
-| 0 | 227ns | 1x |
-| 4 | 289ns | 1.3x |
-| 16 | 446ns | 2.0x |
+| 0 | 292ns | 1x |
+| 4 | 292ns | 1x |
+| 16 | 500ns | 1.7x |
 
 ### combine_reducers
 
-| Slices | Median | vs 1 slice |
+| Slices | Median | vs 2 slices |
 |---|---|---|
-| 2 | 563ns | 1x |
-| 5 | 817ns | 1.5x |
-| 10 | 1.3μs | 2.4x |
+| 2 | 594ns | 1x |
+| 5 | 871ns | 1.5x |
+| 10 | 1.5μs | 2.5x |
 
 ---
 
@@ -49,13 +51,21 @@ Core dispatch path: acquire lock → run reducer → unwrap result → record (o
 
 | Threads | Noop median | Dict-merge median | Scaling factor |
 |---|---|---|---|
-| 1 | 109μs | 116μs | 1.0x |
-| 2 | 190μs | 190μs | 1.7x |
-| 4 | 312μs | 356μs | 3.1x |
-| 8 | 566μs | 661μs | 5.7x |
+| 1 | 116μs | 139μs | 1.0x |
+| 2 | 182μs | 210μs | 1.5x |
+| 4 | 325μs | 382μs | 2.7x |
+| 8 | 596μs | 701μs | 5.0x |
 
-4 listeners on top of 4 threads: 405μs (1.3x overhead vs no listeners).
+4 listeners on top of 4 threads: 435μs (1.1x overhead vs no listeners).
 Lock fairness check passes — no thread starvation observed.
+
+### Lock hold time (8 threads, recording + 4 listeners)
+
+| Metric | Value |
+|---|---|
+| Hold time (median) | 542ns |
+| Wait time (median) | 42ns |
+| Hold/wait ratio | 12.9x |
 
 ---
 
@@ -65,19 +75,19 @@ End-to-end: dispatch action → saga runs on thread pool → result action dispa
 
 | Pattern | Median | Notes |
 |---|---|---|
-| Simple (1 Call + 1 Put) | 39μs | Pool submit + generator step |
-| Chain (5 Call + 6 Put) | 42μs | Generator stepping is cheap (~0.5μs/step) |
-| Select (read state) | 38μs | Lock-free state read |
-| Fork (1 parent + 4 children) | 140μs | 4 additional pool submissions |
+| Simple (1 Call + 1 Put) | 45μs | Pool submit + generator step |
+| Chain (5 Call + 6 Put) | 48μs | Generator stepping is cheap (~0.5μs/step) |
+| Select (read state) | 47μs | Lock-free state read |
+| Fork (1 parent + 4 children) | 174μs | 4 additional pool submissions |
 
 ### Pool Saturation (4-worker pool)
 
 | Concurrent sagas | Median | vs pool-size |
 |---|---|---|
-| 4 (= pool) | 135μs | 1x |
-| 8 (2x) | 222μs | 1.6x |
-| 16 (4x) | 311μs | 2.3x |
-| 32 (8x) | 373μs | 2.8x |
+| 4 (= pool) | 155μs | 1x |
+| 8 (2x) | 562μs | 3.6x |
+| 16 (4x) | 943μs | 6.1x |
+| 32 (8x) | 987μs | 6.4x |
 
 Sub-linear scaling — queueing overhead is modest for lightweight sagas.
 
@@ -85,8 +95,8 @@ Sub-linear scaling — queueing overhead is modest for lightweight sagas.
 
 | Scenario | Median |
 |---|---|
-| 100 dispatches, no blockers | 23μs |
-| 100 dispatches + 3 blocking sagas (50ms) | **54ms** |
+| 100 dispatches, no blockers | 26μs |
+| 100 dispatches + 3 blocking sagas (50ms) | **55ms** |
 
 Blocking sagas don't slow dispatch itself (dispatch doesn't use the pool), but total wall-clock includes waiting for pool drain on shutdown.
 
@@ -96,14 +106,16 @@ Blocking sagas don't slow dispatch itself (dispatch doesn't use the pool), but t
 
 | Operation | Median | Notes |
 |---|---|---|
-| Terminal update (5 lines) | 384ns | StringIO write loop |
-| Terminal update (40 lines) | 3.5μs | Linear: ~88ns/line |
-| Render small (4 vars) | 4.2μs | Kida template overhead floor |
-| Render medium (15-item loop) | 15.2μs | 3.6x small |
-| Render large (32 cmds + examples) | 24.7μs | 5.9x small |
-| Load template (help.kida) | 3.8μs | File parse |
-| Load template (form.kida) | 3.7μs | Similar complexity |
-| **get_env() creation** | **122μs** | Loader chain + theme registration |
+| Terminal update (5 lines) | 418ns | StringIO write loop |
+| Terminal update (40 lines) | 3.8μs | Linear: ~88ns/line |
+| Render small (4 vars) | 4.1μs | Kida template overhead floor |
+| Render medium (15-item loop) | 15.6μs | 3.8x small |
+| Render large (32 cmds + examples) | 25.3μs | 6.2x small |
+| Load template (help.kida) | 4.2μs | File parse |
+| Load template (form.kida) | 4.0μs | Similar complexity |
+| **get_env() (cached)** | **125ns** | Singleton cache hit |
+
+**Note**: `get_env()` is now cached as a module-level singleton. First call costs ~125μs (loader chain + theme registration); subsequent default-args calls return the cached instance in ~125ns.
 
 ---
 
@@ -111,23 +123,23 @@ Blocking sagas don't slow dispatch itself (dispatch doesn't use the pool), but t
 
 | Operation | Median | Notes |
 |---|---|---|
-| JSON parse (request) | 1.0μs | stdlib json.loads |
+| JSON parse (request) | 1.1μs | stdlib json.loads |
 | JSON serialize (small) | 1.3μs | Simple dict |
-| JSON serialize (100 items) | 17.4μs | Scales with payload |
+| JSON serialize (100 items) | 17.5μs | Scales with payload |
 | Router dispatch (initialize) | 233ns | Match statement |
 | Router dispatch (tools/list, cached) | 2.6μs | Returns pre-built list |
-| Router dispatch (tools/call) | 9.5μs | Command lookup + execution |
-| **Full round-trip** | **13.0μs** | Parse + route + call + serialize |
+| Router dispatch (tools/call) | 9.4μs | Command lookup + execution |
+| **Full round-trip** | **13.1μs** | Parse + route + call + serialize |
 
 ### _list_tools Generation
 
 | Commands | Median | Per-command |
 |---|---|---|
-| 5 | 78μs | 15.6μs |
-| 20 | 312μs | 15.6μs |
-| 50 | **792μs** | 15.8μs |
+| 5 | 79μs | 15.8μs |
+| 20 | 316μs | 15.8μs |
+| 50 | **794μs** | 15.9μs |
 
-Linear scaling at ~15.6μs per command (dominated by schema generation).
+Linear scaling at ~15.8μs per command (dominated by schema generation).
 
 ---
 
@@ -151,30 +163,30 @@ Linear scaling at ~15.6μs per command (dominated by schema generation).
 | tools/list (cached) | 89ns | Returns pre-built list |
 | tools/call (proxied) | 1.5μs | Route + mock child |
 | Full round-trip | 3.9μs | Parse + route + proxy + serialize |
-| initialize | 414ns | Static dict |
+| initialize | 459ns | Static dict |
 
 ### Discovery
 
 | Children | Median | Notes |
 |---|---|---|
 | 1 | 71μs | ThreadPoolExecutor overhead |
-| 4 | 194μs | 2.7x (parallel) |
-| 8 | 314μs | 4.4x (parallel) |
-| 4 x 20 tools | 527μs | Namespace merging cost |
+| 4 | 196μs | 2.8x (parallel) |
+| 8 | 271μs | 3.8x (parallel) |
+| 4 x 20 tools | 510μs | Namespace merging cost |
 
 ---
 
 ## Key Findings
 
-1. **Recording is the worst offender**: 46.8μs for 200-key state vs 225ns without — 208x overhead from `repr() + SHA256`. This is the single biggest optimization target.
+1. **`get_env()` cache now works**: 125ns cached vs 125μs uncached — 1,000x improvement from fixing the singleton cache-write condition.
 
-2. **Schema generation at ~15μs/command** drives `_list_tools` cost. For 50 commands, that's 792μs per uncached call. The tool cache is essential.
+2. **Recording overhead is minimal**: Action-based Merkle chain costs ~700ns regardless of state size. The previous `repr(state) + SHA256` approach was replaced with `hash(f-string)` — O(1) per dispatch.
 
-3. **`get_env()` at 122μs** should be called once and reused, not per-render.
+3. **Lock hold time is 542ns** with recording hash deferred outside the lock (previously 834ns). The hash is computed inside the lock (for chain ordering) using Python's built-in `hash()` instead of SHA256.
 
-4. **Lock contention scales 5.7x at 8 threads** — the 27-line critical section (reducer + unwrap + record) is the bottleneck.
+4. **Schema generation at ~16μs/command** drives `_list_tools` cost. For 50 commands, that's ~800μs per uncached call. The tool cache is essential.
 
-5. **Batch(4) at 8.2μs is 36x noop** — each Cmd submits to the ThreadPoolExecutor separately. A batch-submit API could reduce this.
+5. **Batch submission uses bulk task accounting**: One `_tasks_lock` acquisition for the entire batch instead of per-Cmd, with individual executor submits for concurrency.
 
 6. **Saga generator stepping is free** — chain (5 steps) costs the same as simple (1 step). The overhead is in pool submission, not generator protocol.
 

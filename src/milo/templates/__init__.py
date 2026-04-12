@@ -25,7 +25,8 @@ def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
     global _default_env
 
     # Return cached singleton when called with default args
-    if theme is None and not kwargs and _default_env is not None:
+    is_default = theme is None and not kwargs
+    if is_default and _default_env is not None:
         return _default_env
 
     from kida import Environment, FileSystemLoader
@@ -64,7 +65,7 @@ def get_env(*, theme: dict | None = None, **kwargs: Any) -> Any:
         env._filters["style"] = make_style_filter(resolved_theme, color=color)
 
     # Cache as default singleton when called with default args
-    if theme is None and not kwargs:
+    if is_default:
         _default_env = env
 
     return env

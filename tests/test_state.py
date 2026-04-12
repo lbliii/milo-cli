@@ -70,6 +70,62 @@ class TestStore:
         assert len(store.recording) == 2
         store.shutdown()
 
+    def test_recording_concurrent(self):
+        """Recording integrity under 8-thread contention.
+
+        Verifies that moving the recording append outside the dispatch lock
+        preserves all entries with valid hash chains and no corruption.
+        """
+
+        def reducer(state, action):
+            if action.type == "@@INIT":
+                return state
+            if action.payload:
+                return {**state, **action.payload}
+            return state
+
+        threads = 8
+        dispatches_per_thread = 200
+        store = Store(reducer, {"count": 0}, record=True)
+
+        def dispatch_n(thread_id):
+            for i in range(dispatches_per_thread):
+                store.dispatch(
+                    Action("update", payload={"count": i, "thread": thread_id})
+                )
+
+        workers = [
+            threading.Thread(target=dispatch_n, args=(t,)) for t in range(threads)
+        ]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+
+        recording = store.recording
+        assert recording is not None
+
+        # 1 @@INIT + (8 threads * 200 dispatches) = 1601 entries
+        expected = 1 + threads * dispatches_per_thread
+        assert len(recording) == expected, (
+            f"Expected {expected} recording entries, got {len(recording)}"
+        )
+
+        # Every entry has required fields
+        for i, entry in enumerate(recording):
+            assert "action_type" in entry, f"Entry {i} missing action_type"
+            assert "state_hash" in entry, f"Entry {i} missing state_hash"
+            assert "timestamp" in entry, f"Entry {i} missing timestamp"
+            assert len(entry["state_hash"]) == 16, (
+                f"Entry {i} hash length: {len(entry['state_hash'])}"
+            )
+
+        # No duplicate state hashes (chain ensures uniqueness)
+        hashes = [e["state_hash"] for e in recording]
+        assert len(set(hashes)) == len(hashes), "Duplicate state hashes detected"
+
+        store.shutdown()
+
     def test_reducer_error(self):
         def bad_reducer(state, action):
             raise ValueError("boom")
