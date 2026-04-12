@@ -2,6 +2,13 @@
 
 All notable changes to Milo are documented here.
 
+## 0.2.2 — 2026-04-12
+
+### Fixed
+
+- Lazy commands now propagate function signature defaults to argparse. Schema defaults are JSON-safe, boolean schema defaults are respected, boolean `default=True` parameters use `--no-xxx` flags, schema `enum` values become argparse `choices`, and a new `display_result=False` option suppresses plain-format output while preserving `--output-file` and `--format json`. `Group.lazy_command()` now supports `examples`, `confirm`, and `annotations` kwargs for parity with `CLI.lazy_command()`.
+- Boolean `default=True` parameters now generate `--no-xxx` flags, schema `enum` values become argparse `choices`, and `Group.lazy_command()` supports `examples`, `confirm`, and `annotations` kwargs for parity with `CLI.lazy_command()`.
+
 ## 0.2.1 — 2026-04-10
 
 ### Fixed
