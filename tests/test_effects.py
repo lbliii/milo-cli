@@ -1543,14 +1543,15 @@ class TestTakeEveryEffect:
         store.dispatch(Action("EVT", payload=1))
         time.sleep(0.15)
 
-        # Cancel the watcher
+        # Cancel the watcher — give extra time for free-threaded builds (3.14t)
+        # where the watcher poll loop (0.1s intervals) needs to observe cancellation
         ctx.cancel_tree()
-        time.sleep(0.2)
+        time.sleep(0.5)
 
         # Dispatch after cancel — should NOT be handled
         handled_before = actions.count("HANDLED")
         store.dispatch(Action("EVT", payload=2))
-        time.sleep(0.2)
+        time.sleep(0.5)
         store._executor.shutdown(wait=True)
 
         handled_after = actions.count("HANDLED")
