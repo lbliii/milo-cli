@@ -1,0 +1,1 @@
+Boolean `default=True` parameters now generate `--no-xxx` flags, schema `enum` values become argparse `choices`, and `Group.lazy_command()` supports `examples`, `confirm`, and `annotations` kwargs for parity with `CLI.lazy_command()`.

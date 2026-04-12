@@ -6,6 +6,7 @@ import dataclasses
 import enum
 import functools
 import inspect
+import json
 import re as _re
 import types
 import typing
@@ -164,7 +165,12 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         if has_default and isinstance(
             param.default, (str, int, float, bool, type(None), list, dict)
         ):
-            prop["default"] = param.default
+            try:
+                json.dumps(param.default)
+            except TypeError, ValueError:
+                pass  # non-serializable nested value — omit default
+            else:
+                prop["default"] = param.default
         if not has_default and not is_optional:
             required.append(name)
 

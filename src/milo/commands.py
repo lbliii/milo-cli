@@ -234,7 +234,7 @@ class CLI:
             annotations: MCP tool annotations (readOnlyHint, destructiveHint,
                 idempotentHint, openWorldHint).
             display_result: If False, suppress plain-format output while still
-                returning data for ``--format json`` or ``--output``.
+                returning data for ``--format json`` or ``--output-file``.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -720,8 +720,15 @@ class CLI:
                     default = param_schema["default"]
                 else:
                     default = False
-                kwargs["action"] = "store_true"
                 kwargs["default"] = default
+                if default is True:
+                    # default=True → --no-xxx flag to disable
+                    flag = f"--no-{param_name.replace('_', '-')}"
+                    kwargs["action"] = "store_false"
+                    parser.add_argument(flag, dest=param_name, **kwargs)
+                    continue
+                else:
+                    kwargs["action"] = "store_true"
             elif json_type == "integer":
                 kwargs["type"] = int
             elif json_type == "number":
@@ -735,6 +742,10 @@ class CLI:
                     kwargs["type"] = float
             else:
                 kwargs["type"] = str
+
+            # Enum choices from schema
+            if "enum" in param_schema:
+                kwargs["choices"] = param_schema["enum"]
 
             # Set default from signature or schema
             if param and param.default is not inspect.Parameter.empty and json_type != "boolean":
@@ -893,7 +904,7 @@ class CLI:
 
         # Format and output (to file or stdout)
         # When display_result=False, suppress plain-format stdout output but
-        # still honor explicit --format or --output requests.
+        # still honor explicit --format or --output-file requests.
         suppress = not cmd.display_result and fmt == "plain" and not ctx.output_file
         if not suppress:
             output_file = ctx.output_file

@@ -102,6 +102,9 @@ class Group:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
+        confirm: str = "",
+        annotations: dict[str, Any] | None = None,
         display_result: bool = True,
     ) -> Any:
         """Register a lazy-loaded command within this group.
@@ -118,6 +121,9 @@ class Group:
             aliases=aliases,
             tags=tags,
             hidden=hidden,
+            examples=examples,
+            confirm=confirm,
+            annotations=annotations,
             display_result=display_result,
         )
         self._commands[name] = cmd
