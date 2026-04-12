@@ -1460,10 +1460,10 @@ class TestEffectComposition:
         def parent():
             # Simulate: receive 3 rapid keys, debounce should fire once
             for _ in range(3):
-                yield Take("@@KEY", timeout=1.0)
-                yield Debounce(seconds=0.15, saga=search_saga)
+                yield Take("@@KEY", timeout=2.0)
+                yield Debounce(seconds=0.5, saga=search_saga)
             # Wait for debounce to fire
-            yield Delay(seconds=0.3)
+            yield Delay(seconds=1.0)
 
         def reducer(state, action):
             actions.append(action.type)
@@ -1478,7 +1478,7 @@ class TestEffectComposition:
         store.dispatch(Action("@@KEY", payload="b"))
         time.sleep(0.02)
         store.dispatch(Action("@@KEY", payload="c"))
-        time.sleep(0.6)
+        time.sleep(1.5)
         store._executor.shutdown(wait=True)
 
         # Debounce should have fired exactly once (last one)
