@@ -194,6 +194,91 @@
 {{ panel(content | trim, title=title) }}
 {%- enddef -%}
 
+{#- ── Phase detail: bordered log panel for a single phase ────────── -#}
+{%- def phase_detail(phase, log_scroll=0, log_height=10, auto_follow=true) -%}
+{%- set b = box.round -%}
+{%- set title = phase.name ~ (" (FAILED)" if phase.status == "failed" else "") -%}
+{%- set title_str = " " ~ title ~ " " -%}
+{%- set inner_w = 50 -%}
+{%- set hdr_fill = [inner_w - (title_str | length), 1] | max -%}
+{{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * hdr_fill }}{{ b.tr }}
+{%- if phase.logs -%}
+{%- set visible_start = log_scroll -%}
+{%- set visible_end = log_scroll + log_height -%}
+{%- if visible_start > 0 %}
+{{ b.v }} {{ ("... " ~ (visible_start | string) ~ " more above") | dim | pad(inner_w - 2) }} {{ b.v }}
+{%- endif -%}
+{%- for entry in phase.logs[visible_start:visible_end] %}
+{%- if entry.stream == "stderr" %}
+{{ b.v }} {{ entry.line | yellow | pad(inner_w - 2) }} {{ b.v }}
+{%- else %}
+{{ b.v }} {{ entry.line | pad(inner_w - 2) }} {{ b.v }}
+{%- endif -%}
+{%- endfor -%}
+{%- if (phase.logs | length) > visible_end %}
+{{ b.v }} {{ ("... " ~ ((phase.logs | length) - visible_end) | string ~ " more below") | dim | pad(inner_w - 2) }} {{ b.v }}
+{%- endif -%}
+{%- if auto_follow %}
+{{ b.v }} {{ "[AUTO]" | dim | pad(inner_w - 2) }} {{ b.v }}
+{%- endif -%}
+{%- if phase.status == "failed" and phase.error %}
+{{ b.v }} {{ "" | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ ("Error: " ~ phase.error) | red | pad(inner_w - 2) }} {{ b.v }}
+{%- endif %}
+{%- else -%}
+{%- if phase.status == "failed" and phase.error %}
+{{ b.v }} {{ ("Error: " ~ phase.error) | red | pad(inner_w - 2) }} {{ b.v }}
+{%- else %}
+{{ b.v }} {{ "No output captured." | dim | pad(inner_w - 2) }} {{ b.v }}
+{%- endif %}
+{%- endif %}
+{{ b.bl }}{{ b.h * inner_w }}{{ b.br }}
+{%- enddef -%}
+
+{#- ── Pipeline detail: interactive TUI with cursor + detail pane ──── -#}
+{%- def pipeline_detail(state) -%}
+{%- set ps = state.pipeline -%}
+{%- for phase in ps.phases -%}
+{%- set is_selected = loop.index0 == state.selected_phase -%}
+{%- match phase.status -%}
+{%- case "completed" -%}
+{%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.check | green }} {% else %}    {{ icons.check | green }} {% endif -%}
+{{ phase.name | bold }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
+{% case "running" -%}
+{%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.dot | cyan | bold }} {% else %}    {{ icons.dot | cyan | bold }} {% endif -%}
+{{ phase.name | bold | cyan }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ "..." | dim }}
+{% case "failed" -%}
+{%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.cross | red | bold }} {% else %}    {{ icons.cross | red | bold }} {% endif -%}
+{{ phase.name | bold | red }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ phase.error | dim }}
+{% case _ -%}
+{%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.dot | dim }} {% else %}    {{ icons.dot | dim }} {% endif -%}
+{{ phase.name | dim }}
+{% endmatch -%}
+{%- if state.expanded and is_selected %}
+{{ phase_detail(phase, state.log_scroll, state.log_height, state.auto_follow) }}
+{% endif -%}
+{%- endfor -%}
+{%- match ps.status -%}
+{%- case "running" -%}
+{%- set pct = [[0, (ps.progress * 100) | int] | max, 100] | min -%}
+{%- set filled = [[0, pct // 2] | max, 50] | min -%}
+
+  {{ ("█" * filled ~ "░" * (50 - filled)) | cyan }}  {{ pct }}%
+{%- case "completed" -%}
+
+  {{ ("█" * 50) | green }}  {{ "done" | bold | green }} {{ format_time(ps.elapsed) | dim }}
+{%- case "failed" -%}
+
+  {{ "pipeline failed" | red | bold }}
+{%- endmatch %}
+
+{%- if state.expanded -%}
+{{ key_hints([{"key": "↑↓", "action": "scroll"}, {"key": "⏎", "action": "collapse"}, {"key": "f", "action": "follow"}, {"key": "q", "action": "quit"}]) }}
+{%- else -%}
+{{ key_hints([{"key": "↑↓", "action": "select"}, {"key": "⏎", "action": "expand"}, {"key": "q", "action": "quit"}]) }}
+{%- endif -%}
+{%- enddef -%}
+
 {#- ── Pipeline progress: phase list with status + progress bar ───── -#}
 {%- def pipeline_progress(state) -%}
 {%- for phase in state.phases -%}

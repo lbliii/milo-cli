@@ -44,11 +44,12 @@ class TestMCPResourcesList:
     def test_list_resources(self, cli: CLI) -> None:
         client = MCPClient(cli)
         resources = client.list_resources()
-        # 2 user resources + 1 built-in (milo://stats)
-        assert len(resources) == 3
+        # 2 user resources + 2 built-in (milo://stats, milo://pipeline/timeline)
+        assert len(resources) == 4
         names = [r["name"] for r in resources]
         assert "get_config" in names
         assert "Server Statistics" in names
+        assert "Pipeline Timeline" in names
 
     def test_resource_fields(self, cli: CLI) -> None:
         client = MCPClient(cli)
@@ -84,3 +85,62 @@ class TestInitializeCapabilities:
         result = client.initialize()
         assert "resources" in result["capabilities"]
         assert "prompts" in result["capabilities"]
+
+
+class TestPipelineTimelineResource:
+    def test_listed_in_builtin_resources(self, cli: CLI) -> None:
+        client = MCPClient(cli)
+        resources = client.list_resources()
+        uris = [r["uri"] for r in resources]
+        assert "milo://pipeline/timeline" in uris
+
+    def test_read_no_active_pipeline(self, cli: CLI) -> None:
+        """When no pipeline is active, returns null pipeline."""
+        client = MCPClient(cli)
+        result = client.read_resource("milo://pipeline/timeline")
+        import json
+
+        contents = result["contents"]
+        assert len(contents) == 1
+        data = json.loads(contents[0]["text"])
+        assert data["pipeline"] is None
+        assert data["phases"] == []
+
+    def test_read_with_active_pipeline(self, cli: CLI) -> None:
+        """When a pipeline is published, returns its timeline."""
+        from milo.pipeline import PhaseLog, PhaseStatus, PipelineState, set_active_pipeline
+
+        state = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(
+                    name="discover",
+                    status="completed",
+                    elapsed=0.52,
+                    logs=(PhaseLog(line="found 10 files"),),
+                ),
+                PhaseStatus(name="parse", status="running"),
+            ),
+            status="running",
+            progress=0.5,
+            elapsed=0.0,
+        )
+        set_active_pipeline(state)
+        try:
+            client = MCPClient(cli)
+            result = client.read_resource("milo://pipeline/timeline")
+            import json
+
+            data = json.loads(result["contents"][0]["text"])
+            assert data["pipeline"] == "build"
+            assert data["status"] == "running"
+            assert data["progress"] == 0.5
+            assert len(data["phases"]) == 2
+            assert data["phases"][0]["name"] == "discover"
+            assert data["phases"][0]["status"] == "completed"
+            assert data["phases"][0]["elapsed"] == 0.52
+            assert data["phases"][0]["log_count"] == 1
+            assert data["phases"][1]["name"] == "parse"
+            assert data["phases"][1]["status"] == "running"
+        finally:
+            set_active_pipeline(None)
