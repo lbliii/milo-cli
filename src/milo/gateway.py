@@ -120,9 +120,7 @@ def _print_status() -> None:
         if command:
             try:
                 child = ChildProcess(name, command, request_timeout=5.0)
-                result = child.send_call(
-                    "resources/read", {"uri": "milo://pipeline/timeline"}
-                )
+                result = child.send_call("resources/read", {"uri": "milo://pipeline/timeline"})
                 contents = result.get("contents", [])
                 if contents:
                     import json as _json

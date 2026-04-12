@@ -303,9 +303,7 @@ class Pipeline:
                 )
                 max_logs = max_logs_map.get(phase_name, 200)
                 new_phases = tuple(
-                    replace(p, logs=(*p.logs, entry)[-max_logs:])
-                    if p.name == phase_name
-                    else p
+                    replace(p, logs=(*p.logs, entry)[-max_logs:]) if p.name == phase_name else p
                     for p in state.phases
                 )
                 return replace(state, phases=new_phases)
@@ -400,8 +398,8 @@ class Pipeline:
 
 # Module-level holder for the most recent PipelineState, written by a Store
 # listener and read by the milo://pipeline/timeline MCP resource.
-_active_pipeline_state: contextvars.ContextVar[PipelineState | None] = (
-    contextvars.ContextVar("_milo_active_pipeline_state", default=None)
+_active_pipeline_state: contextvars.ContextVar[PipelineState | None] = contextvars.ContextVar(
+    "_milo_active_pipeline_state", default=None
 )
 
 
@@ -474,9 +472,7 @@ def make_detail_reducer(
         reducer = make_detail_reducer(pipeline.build_reducer())
     """
 
-    def detail_reducer(
-        state: PipelineViewState | None, action: Action
-    ) -> PipelineViewState | Quit:
+    def detail_reducer(state: PipelineViewState | None, action: Action) -> PipelineViewState | Quit:
         if action.type == "@@INIT":
             inner = pipeline_reducer(None, action)
             return PipelineViewState(pipeline=inner)
@@ -517,9 +513,7 @@ def make_detail_reducer(
                     if new_follow:
                         selected = state.pipeline.phases[state.selected_phase]
                         max_scroll = max(0, len(selected.logs) - state.log_height)
-                        return replace(
-                            state, auto_follow=True, log_scroll=max_scroll
-                        )
+                        return replace(state, auto_follow=True, log_scroll=max_scroll)
                     return replace(state, auto_follow=False)
                 if key.char == " ":
                     return replace(state, expanded=False, log_scroll=0)
@@ -619,8 +613,8 @@ def _validate_dependencies(phases: list[Phase]) -> None:
 # Output capture (opt-in via capture_output=True)
 # ---------------------------------------------------------------------------
 
-_phase_buffer: contextvars.ContextVar[list[tuple[str, str, float]] | None] = (
-    contextvars.ContextVar("_milo_phase_buffer", default=None)
+_phase_buffer: contextvars.ContextVar[list[tuple[str, str, float]] | None] = contextvars.ContextVar(
+    "_milo_phase_buffer", default=None
 )
 
 # Ref-counted proxy management — proxy stays installed while any phase captures.
@@ -714,7 +708,9 @@ def _call_handler_captured(
 def _flush_logs(name: str, logs: list[tuple[str, str, float]]) -> Any:
     """Yield Put(PHASE_LOG) for each captured line."""
     for line, stream, ts in logs:
-        yield Put(Action(PHASE_LOG, {"name": name, "line": line, "stream": stream, "timestamp": ts}))
+        yield Put(
+            Action(PHASE_LOG, {"name": name, "line": line, "stream": stream, "timestamp": ts})
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -765,9 +761,7 @@ def _run_phase_inline(
         yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
         try:
             if capture:
-                result, logs = yield Call(
-                    lambda: _call_handler_captured(phase.handler, context)
-                )
+                result, logs = yield Call(lambda: _call_handler_captured(phase.handler, context))
                 yield from _flush_logs(name, logs)
             else:
                 result = yield Call(lambda: _call_handler(phase.handler, context))
@@ -818,9 +812,7 @@ def _make_phase_saga(
             yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
             try:
                 if capture:
-                    result, logs = yield Call(
-                        lambda: _call_handler_captured(handler, context)
-                    )
+                    result, logs = yield Call(lambda: _call_handler_captured(handler, context))
                     yield from _flush_logs(name, logs)
                 else:
                     result = yield Call(lambda: _call_handler(handler, context))

@@ -391,9 +391,7 @@ class TestPhaseDetail:
     def test_auto_follow_indicator(self, env):
         from milo.pipeline import PhaseLog, PhaseStatus
 
-        phase = PhaseStatus(
-            name="a", status="running", logs=(PhaseLog(line="hello"),)
-        )
+        phase = PhaseStatus(name="a", status="running", logs=(PhaseLog(line="hello"),))
         out = self._render_detail(env, phase, auto_follow=True)
         assert "AUTO" in out
 
@@ -401,9 +399,7 @@ class TestPhaseDetail:
 class TestPipelineDetail:
     def _render_detail(self, env, state):
         prefix = '{% from "components/_defs.kida" import pipeline_detail %}'
-        tmpl = env.from_string(
-            prefix + "{{ pipeline_detail(state) }}", name="test_pipeline_detail"
-        )
+        tmpl = env.from_string(prefix + "{{ pipeline_detail(state) }}", name="test_pipeline_detail")
         return tmpl.render(state=state)
 
     def test_overview_mode(self, env):
