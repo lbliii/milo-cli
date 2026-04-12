@@ -747,7 +747,6 @@ class CLI:
             if "enum" in param_schema:
                 kwargs["choices"] = param_schema["enum"]
 
-
             # Set default from signature or schema
             if param and param.default is not inspect.Parameter.empty and json_type != "boolean":
                 kwargs["default"] = param.default
