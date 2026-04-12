@@ -720,8 +720,15 @@ class CLI:
                     default = param_schema["default"]
                 else:
                     default = False
-                kwargs["action"] = "store_true"
                 kwargs["default"] = default
+                if default is True:
+                    # default=True → --no-xxx flag to disable
+                    flag = f"--no-{param_name.replace('_', '-')}"
+                    kwargs["action"] = "store_false"
+                    parser.add_argument(flag, dest=param_name, **kwargs)
+                    continue
+                else:
+                    kwargs["action"] = "store_true"
             elif json_type == "integer":
                 kwargs["type"] = int
             elif json_type == "number":
@@ -735,6 +742,10 @@ class CLI:
                     kwargs["type"] = float
             else:
                 kwargs["type"] = str
+
+            # Enum choices from schema
+            if "enum" in param_schema:
+                kwargs["choices"] = param_schema["enum"]
 
             # Set default from signature or schema
             if param and param.default is not inspect.Parameter.empty and json_type != "boolean":
