@@ -318,3 +318,142 @@ class TestCompositeTemplates:
         assert "Commands" in out
         assert "new" in out
         assert "(ls)" in out
+
+
+class TestPhaseDetail:
+    def _render_detail(self, env, phase, log_scroll=0, log_height=10, auto_follow=True):
+        prefix = '{% from "components/_defs.kida" import phase_detail %}'
+        tmpl = env.from_string(
+            prefix
+            + "{{ phase_detail(phase, log_scroll=log_scroll, log_height=log_height, auto_follow=auto_follow) }}",
+            name="test_detail",
+        )
+        return tmpl.render(
+            phase=phase, log_scroll=log_scroll, log_height=log_height, auto_follow=auto_follow
+        )
+
+    def test_empty_logs_no_capture(self, env):
+        from milo.pipeline import PhaseStatus
+
+        phase = PhaseStatus(name="build", status="completed", elapsed=1.0)
+        out = self._render_detail(env, phase)
+        assert "No output captured." in out
+        assert "build" in out
+
+    def test_with_logs(self, env):
+        from milo.pipeline import PhaseLog, PhaseStatus
+
+        phase = PhaseStatus(
+            name="parse",
+            status="running",
+            logs=(
+                PhaseLog(line="Parsing config..."),
+                PhaseLog(line="Found 10 files"),
+            ),
+        )
+        out = self._render_detail(env, phase)
+        assert "Parsing config..." in out
+        assert "Found 10 files" in out
+        assert "parse" in out
+
+    def test_failed_phase_with_error(self, env):
+        from milo.pipeline import PhaseStatus
+
+        phase = PhaseStatus(name="build", status="failed", error="YAML parse error")
+        out = self._render_detail(env, phase)
+        assert "FAILED" in out
+        assert "YAML parse error" in out
+
+    def test_failed_with_logs_shows_error(self, env):
+        from milo.pipeline import PhaseLog, PhaseStatus
+
+        phase = PhaseStatus(
+            name="build",
+            status="failed",
+            error="boom",
+            logs=(PhaseLog(line="starting..."),),
+        )
+        out = self._render_detail(env, phase)
+        assert "starting..." in out
+        assert "boom" in out
+        assert "FAILED" in out
+
+    def test_scrolling_overflow_indicators(self, env):
+        from milo.pipeline import PhaseLog, PhaseStatus
+
+        logs = tuple(PhaseLog(line=f"line {i}") for i in range(20))
+        phase = PhaseStatus(name="a", status="running", logs=logs)
+        out = self._render_detail(env, phase, log_scroll=5, log_height=5)
+        assert "more above" in out
+        assert "more below" in out
+        assert "line 5" in out
+
+    def test_auto_follow_indicator(self, env):
+        from milo.pipeline import PhaseLog, PhaseStatus
+
+        phase = PhaseStatus(name="a", status="running", logs=(PhaseLog(line="hello"),))
+        out = self._render_detail(env, phase, auto_follow=True)
+        assert "AUTO" in out
+
+
+class TestPipelineDetail:
+    def _render_detail(self, env, state):
+        prefix = '{% from "components/_defs.kida" import pipeline_detail %}'
+        tmpl = env.from_string(prefix + "{{ pipeline_detail(state) }}", name="test_pipeline_detail")
+        return tmpl.render(state=state)
+
+    def test_overview_mode(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState, PipelineViewState
+
+        ps = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="a", status="completed", elapsed=0.5),
+                PhaseStatus(name="b", status="running"),
+                PhaseStatus(name="c"),
+            ),
+            status="running",
+            progress=0.33,
+        )
+        vs = PipelineViewState(pipeline=ps, selected_phase=1)
+        out = self._render_detail(env, vs)
+        assert "a" in out
+        assert "b" in out
+        assert "c" in out
+        assert "expand" in out  # key hints
+        assert "select" in out
+
+    def test_detail_mode_key_hints(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState, PipelineViewState
+
+        ps = PipelineState(
+            name="build",
+            phases=(PhaseStatus(name="a", status="completed", elapsed=0.5),),
+            status="completed",
+            progress=1.0,
+            elapsed=0.5,
+        )
+        vs = PipelineViewState(pipeline=ps, selected_phase=0, expanded=True)
+        out = self._render_detail(env, vs)
+        assert "scroll" in out
+        assert "collapse" in out
+        assert "follow" in out
+
+    def test_expanded_shows_detail_pane(self, env):
+        from milo.pipeline import PhaseLog, PhaseStatus, PipelineState, PipelineViewState
+
+        ps = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(
+                    name="a",
+                    status="running",
+                    logs=(PhaseLog(line="working..."),),
+                ),
+            ),
+            status="running",
+            progress=0.0,
+        )
+        vs = PipelineViewState(pipeline=ps, selected_phase=0, expanded=True)
+        out = self._render_detail(env, vs)
+        assert "working..." in out

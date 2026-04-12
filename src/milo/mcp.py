@@ -76,6 +76,8 @@ class _CLIHandler:
         uri = params.get("uri", "")
         if uri == "milo://stats":
             return _stats_resource(self._logger)
+        if uri == "milo://pipeline/timeline":
+            return _pipeline_timeline_resource()
         new_correlation_id()
         start = time.monotonic()
         try:
@@ -176,6 +178,12 @@ def _builtin_resources() -> list[dict[str, Any]]:
             "description": "Request latency, error counts, and throughput for this MCP server",
             "mimeType": "application/json",
         },
+        {
+            "uri": "milo://pipeline/timeline",
+            "name": "Pipeline Timeline",
+            "description": "Phase execution timeline for the active pipeline (timing, status, log counts)",
+            "mimeType": "application/json",
+        },
     ]
 
 
@@ -184,6 +192,23 @@ def _stats_resource(logger: RequestLogger) -> dict[str, Any]:
     stats = logger.stats()
     text = json.dumps(stats, indent=2)
     return {"contents": [{"uri": "milo://stats", "text": text, "mimeType": "application/json"}]}
+
+
+def _pipeline_timeline_resource() -> dict[str, Any]:
+    """Return the active pipeline's execution timeline as an MCP resource."""
+    from milo.pipeline import get_active_pipeline, pipeline_to_timeline
+
+    state = get_active_pipeline()
+    if state is None:
+        data: dict[str, Any] = {"pipeline": None, "status": "no active pipeline", "phases": []}
+    else:
+        data = pipeline_to_timeline(state)
+    text = json.dumps(data, indent=2)
+    return {
+        "contents": [
+            {"uri": "milo://pipeline/timeline", "text": text, "mimeType": "application/json"}
+        ]
+    }
 
 
 def _list_tools(cli: CLI) -> list[dict[str, Any]]:

@@ -79,11 +79,63 @@ def _print_registry() -> None:
 
 
 def _print_status() -> None:
-    """Print gateway status (placeholder for F7 observability)."""
+    """Print gateway status: registered CLIs, child health, and request metrics."""
     clis = list_clis()
-    sys.stdout.write(f"Registered CLIs: {len(clis)}\n")
-    for name in clis:
-        sys.stdout.write(f"  {name}\n")
+    if not clis:
+        sys.stdout.write("No CLIs registered. Use --mcp-install on a milo CLI.\n")
+        return
+
+    sys.stdout.write(f"Registered CLIs: {len(clis)}\n\n")
+
+    for name, info in clis.items():
+        ver = info.get("version", "")
+        desc = info.get("description", "")
+        label = f"  {name} {ver}".rstrip()
+        sys.stdout.write(f"{label}\n")
+        if desc:
+            sys.stdout.write(f"    {desc}\n")
+
+        # Probe child for stats and pipeline timeline
+        command = info.get("command", [])
+        if command:
+            try:
+                child = ChildProcess(name, command, request_timeout=5.0)
+                try:
+                    result = child.send_call("resources/read", {"uri": "milo://stats"})
+                    contents = result.get("contents", [])
+                    if contents:
+                        import json as _json
+
+                        stats = _json.loads(contents[0].get("text", "{}"))
+                        total = stats.get("total", 0)
+                        errors = stats.get("errors", 0)
+                        avg_ms = stats.get("avg_latency_ms", 0.0)
+                        sys.stdout.write(
+                            f"    requests: {total}  errors: {errors}  avg_latency: {avg_ms}ms\n"
+                        )
+                except Exception:
+                    sys.stdout.write("    status: unreachable\n")
+
+                try:
+                    result = child.send_call("resources/read", {"uri": "milo://pipeline/timeline"})
+                    contents = result.get("contents", [])
+                    if contents:
+                        import json as _json
+
+                        timeline = _json.loads(contents[0].get("text", "{}"))
+                        if timeline.get("pipeline"):
+                            pipe_name = timeline["pipeline"]
+                            pipe_status = timeline["status"]
+                            n_phases = len(timeline.get("phases", []))
+                            sys.stdout.write(
+                                f"    pipeline: {pipe_name} ({pipe_status}, {n_phases} phases)\n"
+                            )
+                except Exception:
+                    pass
+            finally:
+                child.kill()
+
+        sys.stdout.write("\n")
 
 
 def _run_gateway() -> None:

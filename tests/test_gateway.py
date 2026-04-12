@@ -12,6 +12,7 @@ from milo.gateway import (
     _discover_all,
     _GatewayHandler,
     _idle_reaper,
+    _print_status,
     _proxy_call,
     _proxy_prompt,
     _proxy_resource,
@@ -465,3 +466,49 @@ class TestErrorHandling:
         _proxy_prompt(children, routing, {"name": "ghub.review"})
 
         child.send_call.assert_called_once_with("prompts/get", {"name": "review", "arguments": {}})
+
+
+# ---------------------------------------------------------------------------
+# Gateway status output
+# ---------------------------------------------------------------------------
+
+
+class TestPrintStatus:
+    def test_empty_registry(self, capsys):
+        """No CLIs registered shows helpful message."""
+        with patch("milo.gateway.list_clis", return_value={}):
+            _print_status()
+        captured = capsys.readouterr()
+        assert "No CLIs registered" in captured.out
+
+    def test_shows_registered_clis(self, capsys):
+        """Registered CLIs are listed with name and version."""
+        clis = {
+            "taskman": {
+                "version": "1.0.0",
+                "description": "Task manager",
+                "command": [],
+            },
+            "deployer": {
+                "version": "2.1.0",
+                "description": "Deploy tool",
+                "command": [],
+            },
+        }
+        with patch("milo.gateway.list_clis", return_value=clis):
+            _print_status()
+        captured = capsys.readouterr()
+        assert "taskman" in captured.out
+        assert "1.0.0" in captured.out
+        assert "Task manager" in captured.out
+        assert "deployer" in captured.out
+        assert "2.1.0" in captured.out
+        assert "Registered CLIs: 2" in captured.out
+
+    def test_no_placeholder_text(self, capsys):
+        """The placeholder comment is gone — no 'placeholder' in output."""
+        clis = {"myapp": {"version": "0.1", "description": "Test", "command": []}}
+        with patch("milo.gateway.list_clis", return_value=clis):
+            _print_status()
+        captured = capsys.readouterr()
+        assert "placeholder" not in captured.out.lower()

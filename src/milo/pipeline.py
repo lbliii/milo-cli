@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import contextvars
 import inspect
+import io
+import sys
+import threading as _threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
 from milo._errors import ErrorCode, PipelineError
-from milo._types import Action, Call, Delay, Fork, Put
+from milo._types import Action, Call, Delay, Fork, Key, Put, Quit, SpecialKey
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -31,6 +35,15 @@ class PhasePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class PhaseLog:
+    """A single captured output line from a phase handler."""
+
+    line: str
+    stream: str = "stdout"  # "stdout" | "stderr"
+    timestamp: float = 0.0  # time.monotonic()
+
+
+@dataclass(frozen=True, slots=True)
 class Phase:
     """A named pipeline phase."""
 
@@ -41,6 +54,7 @@ class Phase:
     parallel: bool = False
     weight: int = 1
     policy: PhasePolicy = PhasePolicy()
+    max_logs: int = 200
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +67,7 @@ class PhaseStatus:
     elapsed: float = 0.0
     error: str = ""
     attempt: int = 1
+    logs: tuple[PhaseLog, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +81,22 @@ class PipelineState:
     elapsed: float = 0.0
     progress: float = 0.0
     status: str = "pending"  # pending, running, completed, failed
+
+
+@dataclass(frozen=True, slots=True)
+class PipelineViewState:
+    """UI state for the pipeline detail TUI (wraps PipelineState).
+
+    This is a view-layer wrapper — the pipeline reducer remains pure.
+    The TUI reducer wraps it and handles @@KEY actions for navigation.
+    """
+
+    pipeline: PipelineState
+    selected_phase: int = 0
+    expanded: bool = False
+    log_scroll: int = 0
+    auto_follow: bool = True
+    log_height: int = 10
 
 
 class CycleError(PipelineError):
@@ -84,6 +115,7 @@ PHASE_COMPLETE = "@@PHASE_COMPLETE"
 PHASE_FAILED = "@@PHASE_FAILED"
 PHASE_SKIPPED = "@@PHASE_SKIPPED"
 PHASE_RETRY = "@@PHASE_RETRY"
+PHASE_LOG = "@@PHASE_LOG"
 
 
 # ---------------------------------------------------------------------------
@@ -115,14 +147,15 @@ class Pipeline:
     contains a cycle.
     """
 
-    def __init__(self, name: str, *phases: Phase) -> None:
+    def __init__(self, name: str, *phases: Phase, capture_output: bool = False) -> None:
         self.name = name
         self.phases = list(phases)
+        self.capture_output = capture_output
         _validate_dependencies(self.phases)
 
     def __rshift__(self, phase: Phase) -> Pipeline:
         """Extend the pipeline: ``pipeline >> Phase(...)``."""
-        new = Pipeline(self.name, *self.phases, phase)
+        new = Pipeline(self.name, *self.phases, phase, capture_output=self.capture_output)
         return new
 
     def build_reducer(self) -> Callable:
@@ -131,6 +164,7 @@ class Pipeline:
         phase_names = tuple(p.name for p in self.phases)
         total_weight = sum(p.weight for p in self.phases)
         weight_map = {p.name: p.weight for p in self.phases}
+        max_logs_map = {p.name: p.max_logs for p in self.phases}
 
         def reducer(state: PipelineState | None, action: Action) -> PipelineState:
             if action.type == "@@INIT":
@@ -259,6 +293,21 @@ class Pipeline:
                     current_phase="",
                 )
 
+            if action.type == PHASE_LOG:
+                payload = action.payload
+                phase_name = payload["name"]
+                entry = PhaseLog(
+                    line=payload["line"],
+                    stream=payload.get("stream", "stdout"),
+                    timestamp=payload.get("timestamp", 0.0),
+                )
+                max_logs = max_logs_map.get(phase_name, 200)
+                new_phases = tuple(
+                    replace(p, logs=(*p.logs, entry)[-max_logs:]) if p.name == phase_name else p
+                    for p in state.phases
+                )
+                return replace(state, phases=new_phases)
+
             return state
 
         return reducer
@@ -268,10 +317,14 @@ class Pipeline:
 
         Phase handlers that accept a ``context`` parameter receive a dict
         mapping dependency names to their results.
+
+        When ``capture_output=True``, handler stdout/stderr is captured and
+        dispatched as ``@@PHASE_LOG`` actions.
         """
         phases = list(self.phases)
         dep_graph = {p.name: set(p.depends_on) for p in phases}
         phase_map = {p.name: p for p in phases}
+        capture = self.capture_output
 
         def saga():
             yield Put(Action(PIPELINE_START, time.monotonic()))
@@ -300,7 +353,9 @@ class Pipeline:
                         phase = phase_map[name]
                         ctx = _build_context(phase, results)
                         yield Fork(
-                            _make_phase_saga(name, phase.handler, phase.policy, ctx, results)
+                            _make_phase_saga(
+                                name, phase.handler, phase.policy, ctx, results, capture
+                            )
                         )
                     for name in parallel_ready:
                         remaining.discard(name)
@@ -309,7 +364,7 @@ class Pipeline:
                 for name in sequential_ready:
                     phase = phase_map[name]
                     ctx = _build_context(phase, results)
-                    failed = yield from _run_phase_inline(name, phase, ctx, results)
+                    failed = yield from _run_phase_inline(name, phase, ctx, results, capture)
                     if failed:
                         return
                     remaining.discard(name)
@@ -335,6 +390,181 @@ class Pipeline:
             remaining.difference_update(ready)
 
         return order
+
+
+# ---------------------------------------------------------------------------
+# Timeline serialization (for MCP resource)
+# ---------------------------------------------------------------------------
+
+# Module-level holder for the most recent PipelineState, written by a Store
+# listener and read by the milo://pipeline/timeline MCP resource.
+# Uses a plain variable + lock (not ContextVar) for cross-thread visibility.
+_active_pipeline_lock = _threading.Lock()
+_active_pipeline_state: PipelineState | None = None
+
+
+def set_active_pipeline(state: PipelineState | None) -> None:
+    """Publish a PipelineState for the milo://pipeline/timeline resource.
+
+    Call this from a Store listener to keep the resource up to date::
+
+        store.subscribe(lambda: set_active_pipeline(store.state))
+    """
+    global _active_pipeline_state
+    with _active_pipeline_lock:
+        _active_pipeline_state = state
+
+
+def get_active_pipeline() -> PipelineState | None:
+    """Return the most recently published PipelineState, or None."""
+    with _active_pipeline_lock:
+        return _active_pipeline_state
+
+
+def pipeline_to_timeline(state: PipelineState) -> dict[str, Any]:
+    """Serialize a PipelineState to a timeline dict for MCP.
+
+    Returns structured JSON matching the milo://pipeline/timeline schema::
+
+        {
+            "pipeline": "build",
+            "status": "completed",
+            "elapsed": 2.34,
+            "progress": 1.0,
+            "phases": [
+                {"name": "discover", "status": "completed", "elapsed": 0.52, "attempt": 1, "log_count": 42},
+                ...
+            ]
+        }
+    """
+    return {
+        "pipeline": state.name,
+        "status": state.status,
+        "elapsed": round(state.elapsed, 3),
+        "progress": round(state.progress, 3),
+        "phases": [
+            {
+                "name": p.name,
+                "status": p.status,
+                "elapsed": round(p.elapsed, 3),
+                "attempt": p.attempt,
+                "error": p.error or None,
+                "log_count": len(p.logs),
+            }
+            for p in state.phases
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Detail TUI reducer
+# ---------------------------------------------------------------------------
+
+
+def make_detail_reducer(
+    pipeline_reducer: Callable,
+) -> Callable[[PipelineViewState, Action], PipelineViewState | Quit]:
+    """Create a wrapping reducer for the interactive pipeline detail view.
+
+    Handles @@KEY actions for cursor navigation, expansion/collapse,
+    log scrolling, and auto-follow. Delegates all other actions to
+    the inner pipeline reducer.
+
+    Usage::
+
+        reducer = make_detail_reducer(pipeline.build_reducer())
+    """
+
+    def detail_reducer(state: PipelineViewState | None, action: Action) -> PipelineViewState | Quit:
+        if action.type == "@@INIT":
+            inner = pipeline_reducer(None, action)
+            return PipelineViewState(pipeline=inner)
+
+        if state is None:
+            return PipelineViewState(pipeline=PipelineState())
+
+        num_phases = len(state.pipeline.phases)
+        selected = min(state.selected_phase, max(0, num_phases - 1))
+        if selected != state.selected_phase:
+            state = replace(state, selected_phase=selected)
+
+        if action.type == "@@KEY":
+            key: Key = action.payload
+            if num_phases == 0:
+                # No phases — only quit is meaningful
+                if key.char == "q" or key.name == SpecialKey.ESCAPE:
+                    return Quit(state=state)
+                return state
+            if state.expanded:
+                # Detail mode — scroll logs, collapse, toggle follow
+                phase = state.pipeline.phases[state.selected_phase]
+                if key.name == SpecialKey.UP:
+                    return replace(
+                        state,
+                        log_scroll=max(0, state.log_scroll - 1),
+                        auto_follow=False,
+                    )
+                if key.name == SpecialKey.DOWN:
+                    max_scroll = max(0, len(phase.logs) - state.log_height)
+                    return replace(
+                        state,
+                        log_scroll=min(max_scroll, state.log_scroll + 1),
+                        auto_follow=False,
+                    )
+                if key.name in (SpecialKey.ENTER, SpecialKey.ESCAPE):
+                    return replace(state, expanded=False, log_scroll=0)
+                if key.name == SpecialKey.HOME:
+                    return replace(state, log_scroll=0, auto_follow=False)
+                if key.name == SpecialKey.END:
+                    max_scroll = max(0, len(phase.logs) - state.log_height)
+                    return replace(state, log_scroll=max_scroll, auto_follow=False)
+                if key.char == "f":
+                    new_follow = not state.auto_follow
+                    if new_follow:
+                        max_scroll = max(0, len(phase.logs) - state.log_height)
+                        return replace(state, auto_follow=True, log_scroll=max_scroll)
+                    return replace(state, auto_follow=False)
+                if key.char == " ":
+                    return replace(state, expanded=False, log_scroll=0)
+            else:
+                # Overview mode — move cursor, expand, quit
+                if key.name == SpecialKey.UP:
+                    return replace(
+                        state,
+                        selected_phase=max(0, state.selected_phase - 1),
+                    )
+                if key.name == SpecialKey.DOWN:
+                    return replace(
+                        state,
+                        selected_phase=min(num_phases - 1, state.selected_phase + 1),
+                    )
+                if key.name == SpecialKey.ENTER or key.char == " ":
+                    return replace(state, expanded=True, log_scroll=0, auto_follow=True)
+                if key.name == SpecialKey.ESCAPE:
+                    return Quit(state=state)
+
+            # q quits from either mode
+            if key.char == "q":
+                return Quit(state=state)
+
+            return state
+
+        # Delegate all other actions to the inner pipeline reducer
+        new_pipeline = pipeline_reducer(state.pipeline, action)
+        new_state = replace(state, pipeline=new_pipeline)
+
+        # Auto-follow: scroll to bottom when new logs arrive on selected phase
+        if state.auto_follow and action.type == PHASE_LOG:
+            payload = action.payload
+            if state.selected_phase < len(new_state.pipeline.phases):
+                selected = new_state.pipeline.phases[new_state.selected_phase]
+                if payload.get("name") == selected.name:
+                    max_scroll = max(0, len(selected.logs) - new_state.log_height)
+                    new_state = replace(new_state, log_scroll=max_scroll)
+
+        return new_state
+
+    return detail_reducer
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +619,118 @@ def _validate_dependencies(phases: list[Phase]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Output capture (opt-in via capture_output=True)
+# ---------------------------------------------------------------------------
+
+_phase_buffer: contextvars.ContextVar[list[tuple[str, str, float]] | None] = contextvars.ContextVar(
+    "_milo_phase_buffer", default=None
+)
+
+# Ref-counted proxy management — proxy stays installed while any phase captures.
+_proxy_lock = _threading.Lock()
+_proxy_refcount = 0
+_original_stdout: Any = None
+_original_stderr: Any = None
+
+
+class _CaptureProxy(io.TextIOBase):
+    """Proxy that routes writes to a per-phase buffer when capture is active.
+
+    When ``_phase_buffer`` contextvar holds a list, writes are buffered there.
+    Otherwise writes pass through to the original stream.  Thread-safe because
+    contextvars are per-thread.
+    """
+
+    def __init__(self, original: Any, stream_name: str = "stdout") -> None:
+        self._original = original
+        self._stream_name = stream_name
+
+    def write(self, s: str) -> int:
+        buf = _phase_buffer.get(None)
+        if buf is not None:
+            for line in s.splitlines(keepends=True):
+                stripped = line.rstrip("\n")
+                if stripped:
+                    buf.append((stripped, self._stream_name, time.monotonic()))
+        else:
+            self._original.write(s)
+        return len(s)
+
+    def flush(self) -> None:
+        self._original.flush()
+
+    @property
+    def encoding(self) -> str:
+        return getattr(self._original, "encoding", "utf-8")
+
+    def fileno(self) -> int:
+        return self._original.fileno()
+
+    def isatty(self) -> bool:
+        return self._original.isatty()
+
+    def readable(self) -> bool:
+        return False
+
+    def writable(self) -> bool:
+        return True
+
+
+def _acquire_proxy() -> None:
+    """Install capture proxies on sys.stdout/stderr (ref-counted)."""
+    global _proxy_refcount, _original_stdout, _original_stderr
+    with _proxy_lock:
+        _proxy_refcount += 1
+        if _proxy_refcount == 1:
+            _original_stdout = sys.stdout
+            _original_stderr = sys.stderr
+            sys.stdout = _CaptureProxy(_original_stdout, "stdout")
+            sys.stderr = _CaptureProxy(_original_stderr, "stderr")
+
+
+def _release_proxy() -> None:
+    """Remove capture proxies when last consumer is done (ref-counted)."""
+    global _proxy_refcount, _original_stdout, _original_stderr
+    with _proxy_lock:
+        _proxy_refcount -= 1
+        if _proxy_refcount == 0 and _original_stdout is not None:
+            sys.stdout = _original_stdout
+            sys.stderr = _original_stderr
+            _original_stdout = None
+            _original_stderr = None
+
+
+def _call_handler_captured(
+    handler: Callable, context: dict[str, Any]
+) -> tuple[Any, list[tuple[str, str, float]]]:
+    """Call a handler with stdout/stderr capture. Returns (result, log_entries).
+
+    On exception, the captured logs are attached to the exception as
+    ``__captured_logs__`` so the caller can flush them before emitting
+    PHASE_FAILED / PHASE_RETRY / PHASE_SKIPPED.
+    """
+    buf: list[tuple[str, str, float]] = []
+    token = _phase_buffer.set(buf)
+    _acquire_proxy()
+    try:
+        return _call_handler(handler, context), buf
+    except BaseException as exc:
+        exc.__captured_logs__ = list(buf)  # type: ignore[attr-defined]
+        raise
+    finally:
+        _phase_buffer.reset(token)
+        _release_proxy()
+
+
+def _flush_logs(name: str, logs: list[tuple[str, str, float]]) -> Any:
+    """Yield Put(PHASE_LOG) for each captured line."""
+    for line, stream, ts in logs:
+        yield Put(
+            Action(PHASE_LOG, {"name": name, "line": line, "stream": stream, "timestamp": ts})
+        )
+
+
+# ---------------------------------------------------------------------------
 # Phase execution helpers
 # ---------------------------------------------------------------------------
 
@@ -426,6 +768,7 @@ def _run_phase_inline(
     phase: Phase,
     context: dict[str, Any],
     results: dict[str, Any],
+    capture: bool = False,
 ) -> Any:
     """Run a sequential phase inline in the main saga. Returns True if pipeline should stop."""
     policy = phase.policy
@@ -434,11 +777,18 @@ def _run_phase_inline(
     for attempt in range(1, max_attempts + 1):
         yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
         try:
-            result = yield Call(lambda: _call_handler(phase.handler, context))
+            if capture:
+                result, logs = yield Call(lambda: _call_handler_captured(phase.handler, context))
+                yield from _flush_logs(name, logs)
+            else:
+                result = yield Call(lambda: _call_handler(phase.handler, context))
             yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
             results[name] = result
             return False  # success — don't stop
         except Exception as e:
+            # Flush any logs captured before the exception
+            if capture:
+                yield from _flush_logs(name, getattr(e, "__captured_logs__", []))
             if policy.on_fail == "retry" and attempt < max_attempts:
                 yield Put(
                     Action(
@@ -471,6 +821,7 @@ def _make_phase_saga(
     policy: PhasePolicy,
     context: dict[str, Any],
     results: dict[str, Any],
+    capture: bool = False,
 ) -> Callable:
     """Create a saga for a single phase (used by Fork for parallel phases)."""
 
@@ -480,11 +831,18 @@ def _make_phase_saga(
         for attempt in range(1, max_attempts + 1):
             yield Put(Action(PHASE_START, {"name": name, "attempt": attempt}))
             try:
-                result = yield Call(lambda: _call_handler(handler, context))
+                if capture:
+                    result, logs = yield Call(lambda: _call_handler_captured(handler, context))
+                    yield from _flush_logs(name, logs)
+                else:
+                    result = yield Call(lambda: _call_handler(handler, context))
                 yield Put(Action(PHASE_COMPLETE, {"name": name, "result": result}))
                 results[name] = result
                 return
             except Exception as e:
+                # Flush any logs captured before the exception
+                if capture:
+                    yield from _flush_logs(name, getattr(e, "__captured_logs__", []))
                 if policy.on_fail == "retry" and attempt < max_attempts:
                     yield Put(
                         Action(
