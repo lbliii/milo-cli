@@ -1,5 +1,6 @@
 ---
 title: Commands
+nav_title: Commands
 description: Lightweight Cmd thunks, Batch, Sequence, TickCmd, and ViewState for simple side effects.
 weight: 25
 draft: false

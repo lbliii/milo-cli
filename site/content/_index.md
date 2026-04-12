@@ -1,6 +1,6 @@
 ---
 title: Milo
-description: Template-driven CLI applications for free-threaded Python
+description: Build CLIs that humans and AI agents both use natively
 template: home.html
 weight: 100
 type: page
@@ -24,7 +24,7 @@ cta_buttons:
 show_recent_posts: false
 ---
 
-Milo is a framework for building interactive terminal applications in Python 3.14t. It uses the Elm Architecture — an immutable state tree managed by pure reducer functions, a view layer driven by [[ext:kida:|Kida]] templates, and generator-based sagas for side effects.
+Milo is a Python framework where every CLI is simultaneously a terminal app, a command-line tool, and an MCP server. Write one function with type annotations — Milo generates the argparse subcommand, the MCP tool schema, and the llms.txt entry automatically. Built on the Elm Architecture with [[ext:kida:|Kida]] templates and generator-based sagas, targeting Python 3.14t free-threading.
 
 ```python
 from milo import App

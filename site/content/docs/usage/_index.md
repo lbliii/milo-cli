@@ -37,6 +37,12 @@ flowchart TB
         Navigate[@@NAVIGATE]
     end
 
+    subgraph Orchestration
+        Pipeline[Pipeline]
+        Phases[Phases]
+        PhasePolicy[PhasePolicy]
+    end
+
     subgraph AI["AI Integration"]
         MCP[MCP Server]
         Gateway[Gateway]
@@ -54,6 +60,9 @@ flowchart TB
     Navigate --> Flow
     Middleware -->|wraps| Store
     Forms -->|form_reducer| Reducer
+    Pipeline --> Phases
+    Phases -->|saga| Sagas
+    PhasePolicy -->|retry/skip| Phases
     MCP -->|"tools/call"| Reducer
     Gateway -->|proxies| MCP
 ```

@@ -31,7 +31,10 @@ Milo dispatches these actions automatically during the application lifecycle. Yo
 | `@@PIPELINE_COMPLETE` | Pipeline finishes | `pipeline_name` | Dispatched when a `Pipeline` completes all phases. |
 | `@@PHASE_START` | Phase begins | `phase_name` | Dispatched when a pipeline phase starts. |
 | `@@PHASE_COMPLETE` | Phase finishes | `phase_name` | Dispatched when a pipeline phase completes successfully. |
-| `@@PHASE_FAILED` | Phase fails | `phase_name` | Dispatched when a pipeline phase fails. |
+| `@@PHASE_FAILED` | Phase fails | `{name, error}` | Dispatched when a pipeline phase fails. |
+| `@@PHASE_SKIPPED` | Phase skipped | `{name, error}` | Dispatched when a phase is skipped due to `PhasePolicy(on_fail="skip")`. |
+| `@@PHASE_RETRY` | Phase retrying | `{name, error, attempt}` | Dispatched before a phase retry attempt. |
+| `@@PHASE_LOG` | Phase output | `{name, line, stream, timestamp}` | Dispatched when `capture_output=True` and a phase writes to stdout/stderr. |
 
 :::{tip}
 All built-in action types are prefixed with `@@` to avoid collisions with your custom actions. You can access them programmatically via the `BUILTIN_ACTIONS` constant.

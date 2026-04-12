@@ -122,7 +122,7 @@ Requires Python 3.14+
 | **Observability** | Built-in request logging with latency stats (`milo://stats` resource) | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
 | **State Management** | Redux-style `Store` with dispatch, listeners, middleware, and saga scheduling | [State →](https://lbliii.github.io/milo-cli/docs/usage/state/) |
 | **Commands** | Lightweight `Cmd` thunks, `Batch`, `Sequence`, `TickCmd` for one-shot effects | [Commands →](https://lbliii.github.io/milo-cli/docs/usage/commands-effects/) |
-| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry` | [Sagas →](https://lbliii.github.io/milo-cli/docs/usage/sagas/) |
+| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry`, `Race`, `All`, `Take`, and more | [Sagas →](https://lbliii.github.io/milo-cli/docs/usage/sagas/) |
 | **ViewState** | Declarative terminal state (`cursor_visible`, `alt_screen`, `window_title`, `mouse_mode`) | [Commands →](https://lbliii.github.io/milo-cli/docs/usage/commands-effects/) |
 | **Flows** | Multi-screen state machines with `>>` operator and custom transitions | [Flows →](https://lbliii.github.io/milo-cli/docs/usage/flows/) |
 | **Forms** | Text, select, confirm, password fields with validation and TTY fallback | [Forms →](https://lbliii.github.io/milo-cli/docs/usage/forms/) |
@@ -131,6 +131,7 @@ Requires Python 3.14+
 | **Dev Server** | `milo dev` with filesystem polling and `@@HOT_RELOAD` dispatch | [Dev →](https://lbliii.github.io/milo-cli/docs/usage/dev/) |
 | **Session Recording** | JSONL action log with state hashes for debugging and regression testing | [Testing →](https://lbliii.github.io/milo-cli/docs/usage/testing/) |
 | **Snapshot Testing** | `assert_renders`, `assert_state`, `assert_saga` for deterministic test coverage | [Testing →](https://lbliii.github.io/milo-cli/docs/usage/testing/) |
+| **Pipeline** | Declarative multi-phase workflows with dependency graphs, retry policies, and output capture | [Pipeline →](https://lbliii.github.io/milo-cli/docs/usage/pipeline/) |
 | **Help Rendering** | `HelpRenderer` — drop-in `argparse.HelpFormatter` using Kida templates | [Help →](https://lbliii.github.io/milo-cli/docs/usage/help/) |
 | **Context** | Execution context with verbosity, output format, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo-cli/docs/usage/context/) |
 | **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo-cli/docs/usage/config/) |
@@ -315,7 +316,7 @@ def reducer(state, action):
     return state
 ```
 
-Saga effects: `Call(fn, args)`, `Put(action)`, `Select(selector)`, `Fork(saga)`, `Delay(seconds)`, `Retry(fn, ...)`.
+Saga effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry`, `Timeout`, `TryCall`, `Race`, `All`, `Take`, `Debounce`, `TakeEvery`, `TakeLatest`.
 
 For one-shot effects, use `Cmd` instead — no generator needed:
 

@@ -1,5 +1,6 @@
 ---
 title: Testing
+nav_title: Testing
 description: Snapshot testing, session recording, replay, and deterministic assertions.
 weight: 80
 draft: false

@@ -2,7 +2,7 @@ site:
   title: "Milo"
   baseurl: ""
   logo_text: "ᗣᗣ"
-  description: "Template-driven CLI applications for free-threaded Python"
+  description: "Build CLIs that humans and AI agents both use natively"
   language: "en"
 
 template_engine: kida

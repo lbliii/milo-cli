@@ -39,6 +39,14 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 | `Fork(saga)` | Launch a concurrent child saga. |
 | `Delay(seconds)` | Sleep for a duration. |
 | `Retry(fn, args, kwargs, max_attempts, backoff, base_delay, max_delay)` | Call with retry and backoff on failure. |
+| `Timeout(effect, seconds)` | Wrap a `Call` or `Retry` with a deadline. Raises `TimeoutError`. |
+| `TryCall(fn, args, kwargs)` | Call a function, return `(result, None)` or `(None, error)`. |
+| `Race(sagas)` | Run multiple sagas concurrently, return the first result. Losers cancelled. |
+| `All(sagas)` | Run multiple sagas concurrently, wait for all. Fail-fast on error. |
+| `Take(action_type, timeout)` | Pause until a matching action is dispatched. |
+| `Debounce(seconds, saga)` | Delay-then-fork with cancel-and-restart on re-yield. |
+| `TakeEvery(action_type, saga)` | Fork a handler for every matching action. |
+| `TakeLatest(action_type, saga)` | Fork a handler for the latest matching action, cancel previous. |
 
 ## Command types
 
