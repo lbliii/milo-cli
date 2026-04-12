@@ -398,9 +398,9 @@ class Pipeline:
 
 # Module-level holder for the most recent PipelineState, written by a Store
 # listener and read by the milo://pipeline/timeline MCP resource.
-_active_pipeline_state: contextvars.ContextVar[PipelineState | None] = contextvars.ContextVar(
-    "_milo_active_pipeline_state", default=None
-)
+# Uses a plain variable + lock (not ContextVar) for cross-thread visibility.
+_active_pipeline_lock = _threading.Lock()
+_active_pipeline_state: PipelineState | None = None
 
 
 def set_active_pipeline(state: PipelineState | None) -> None:
@@ -410,12 +410,15 @@ def set_active_pipeline(state: PipelineState | None) -> None:
 
         store.subscribe(lambda: set_active_pipeline(store.state))
     """
-    _active_pipeline_state.set(state)
+    global _active_pipeline_state
+    with _active_pipeline_lock:
+        _active_pipeline_state = state
 
 
 def get_active_pipeline() -> PipelineState | None:
     """Return the most recently published PipelineState, or None."""
-    return _active_pipeline_state.get(None)
+    with _active_pipeline_lock:
+        return _active_pipeline_state
 
 
 def pipeline_to_timeline(state: PipelineState) -> dict[str, Any]:
@@ -481,11 +484,20 @@ def make_detail_reducer(
             return PipelineViewState(pipeline=PipelineState())
 
         num_phases = len(state.pipeline.phases)
+        selected = min(state.selected_phase, max(0, num_phases - 1))
+        if selected != state.selected_phase:
+            state = replace(state, selected_phase=selected)
 
         if action.type == "@@KEY":
             key: Key = action.payload
+            if num_phases == 0:
+                # No phases — only quit is meaningful
+                if key.char == "q" or key.name == SpecialKey.ESCAPE:
+                    return Quit(state=state)
+                return state
             if state.expanded:
                 # Detail mode — scroll logs, collapse, toggle follow
+                phase = state.pipeline.phases[state.selected_phase]
                 if key.name == SpecialKey.UP:
                     return replace(
                         state,
@@ -493,8 +505,7 @@ def make_detail_reducer(
                         auto_follow=False,
                     )
                 if key.name == SpecialKey.DOWN:
-                    selected = state.pipeline.phases[state.selected_phase]
-                    max_scroll = max(0, len(selected.logs) - state.log_height)
+                    max_scroll = max(0, len(phase.logs) - state.log_height)
                     return replace(
                         state,
                         log_scroll=min(max_scroll, state.log_scroll + 1),
@@ -505,14 +516,12 @@ def make_detail_reducer(
                 if key.name == SpecialKey.HOME:
                     return replace(state, log_scroll=0, auto_follow=False)
                 if key.name == SpecialKey.END:
-                    selected = state.pipeline.phases[state.selected_phase]
-                    max_scroll = max(0, len(selected.logs) - state.log_height)
+                    max_scroll = max(0, len(phase.logs) - state.log_height)
                     return replace(state, log_scroll=max_scroll, auto_follow=False)
                 if key.char == "f":
                     new_follow = not state.auto_follow
                     if new_follow:
-                        selected = state.pipeline.phases[state.selected_phase]
-                        max_scroll = max(0, len(selected.logs) - state.log_height)
+                        max_scroll = max(0, len(phase.logs) - state.log_height)
                         return replace(state, auto_follow=True, log_scroll=max_scroll)
                     return replace(state, auto_follow=False)
                 if key.char == " ":
@@ -658,7 +667,7 @@ class _CaptureProxy(io.TextIOBase):
         return self._original.fileno()
 
     def isatty(self) -> bool:
-        return False
+        return self._original.isatty()
 
     def readable(self) -> bool:
         return False
@@ -694,12 +703,20 @@ def _release_proxy() -> None:
 def _call_handler_captured(
     handler: Callable, context: dict[str, Any]
 ) -> tuple[Any, list[tuple[str, str, float]]]:
-    """Call a handler with stdout/stderr capture. Returns (result, log_entries)."""
+    """Call a handler with stdout/stderr capture. Returns (result, log_entries).
+
+    On exception, the captured logs are attached to the exception as
+    ``__captured_logs__`` so the caller can flush them before emitting
+    PHASE_FAILED / PHASE_RETRY / PHASE_SKIPPED.
+    """
     buf: list[tuple[str, str, float]] = []
     token = _phase_buffer.set(buf)
     _acquire_proxy()
     try:
         return _call_handler(handler, context), buf
+    except BaseException as exc:
+        exc.__captured_logs__ = list(buf)  # type: ignore[attr-defined]
+        raise
     finally:
         _phase_buffer.reset(token)
         _release_proxy()
@@ -769,6 +786,9 @@ def _run_phase_inline(
             results[name] = result
             return False  # success — don't stop
         except Exception as e:
+            # Flush any logs captured before the exception
+            if capture:
+                yield from _flush_logs(name, getattr(e, "__captured_logs__", []))
             if policy.on_fail == "retry" and attempt < max_attempts:
                 yield Put(
                     Action(
@@ -820,6 +840,9 @@ def _make_phase_saga(
                 results[name] = result
                 return
             except Exception as e:
+                # Flush any logs captured before the exception
+                if capture:
+                    yield from _flush_logs(name, getattr(e, "__captured_logs__", []))
                 if policy.on_fail == "retry" and attempt < max_attempts:
                     yield Put(
                         Action(

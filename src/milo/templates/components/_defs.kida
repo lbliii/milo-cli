@@ -200,7 +200,7 @@
 {%- set title = phase.name ~ (" (FAILED)" if phase.status == "failed" else "") -%}
 {%- set title_str = " " ~ title ~ " " -%}
 {%- set inner_w = 50 -%}
-{%- set hdr_fill = [inner_w - (title_str | length), 1] | max -%}
+{%- set hdr_fill = [inner_w - (title_str | length) - 1, 0] | max -%}
 {{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * hdr_fill }}{{ b.tr }}
 {%- if phase.logs -%}
 {%- set visible_start = log_scroll -%}

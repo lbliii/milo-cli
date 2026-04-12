@@ -90,52 +90,50 @@ def _print_status() -> None:
     for name, info in clis.items():
         ver = info.get("version", "")
         desc = info.get("description", "")
-        label = f"  {name} {ver}".strip()
+        label = f"  {name} {ver}".rstrip()
         sys.stdout.write(f"{label}\n")
         if desc:
             sys.stdout.write(f"    {desc}\n")
 
-        # Attempt to probe child for stats
+        # Probe child for stats and pipeline timeline
         command = info.get("command", [])
         if command:
             try:
                 child = ChildProcess(name, command, request_timeout=5.0)
-                result = child.send_call("resources/read", {"uri": "milo://stats"})
-                contents = result.get("contents", [])
-                if contents:
-                    import json as _json
+                try:
+                    result = child.send_call("resources/read", {"uri": "milo://stats"})
+                    contents = result.get("contents", [])
+                    if contents:
+                        import json as _json
 
-                    stats = _json.loads(contents[0].get("text", "{}"))
-                    total = stats.get("total", 0)
-                    errors = stats.get("errors", 0)
-                    avg_ms = stats.get("avg_latency_ms", 0.0)
-                    sys.stdout.write(
-                        f"    requests: {total}  errors: {errors}  avg_latency: {avg_ms}ms\n"
-                    )
-                child.kill()
-            except Exception:
-                sys.stdout.write("    status: unreachable\n")
-
-        # Check for active pipeline timeline
-        if command:
-            try:
-                child = ChildProcess(name, command, request_timeout=5.0)
-                result = child.send_call("resources/read", {"uri": "milo://pipeline/timeline"})
-                contents = result.get("contents", [])
-                if contents:
-                    import json as _json
-
-                    timeline = _json.loads(contents[0].get("text", "{}"))
-                    if timeline.get("pipeline"):
-                        pipe_name = timeline["pipeline"]
-                        pipe_status = timeline["status"]
-                        n_phases = len(timeline.get("phases", []))
+                        stats = _json.loads(contents[0].get("text", "{}"))
+                        total = stats.get("total", 0)
+                        errors = stats.get("errors", 0)
+                        avg_ms = stats.get("avg_latency_ms", 0.0)
                         sys.stdout.write(
-                            f"    pipeline: {pipe_name} ({pipe_status}, {n_phases} phases)\n"
+                            f"    requests: {total}  errors: {errors}  avg_latency: {avg_ms}ms\n"
                         )
+                except Exception:
+                    sys.stdout.write("    status: unreachable\n")
+
+                try:
+                    result = child.send_call("resources/read", {"uri": "milo://pipeline/timeline"})
+                    contents = result.get("contents", [])
+                    if contents:
+                        import json as _json
+
+                        timeline = _json.loads(contents[0].get("text", "{}"))
+                        if timeline.get("pipeline"):
+                            pipe_name = timeline["pipeline"]
+                            pipe_status = timeline["status"]
+                            n_phases = len(timeline.get("phases", []))
+                            sys.stdout.write(
+                                f"    pipeline: {pipe_name} ({pipe_status}, {n_phases} phases)\n"
+                            )
+                except Exception:
+                    pass
+            finally:
                 child.kill()
-            except Exception:
-                pass
 
         sys.stdout.write("\n")
 

@@ -858,9 +858,9 @@ class TestOutputCapture:
         assert state.status == "failed"
         a = next(p for p in state.phases if p.name == "a")
         assert a.status == "failed"
-        # Logs from before the exception should be captured
-        # (they flush on success; on failure the buffer is lost in current design)
-        # This is a known limitation — logs are batch-flushed after Call returns
+        # Logs captured before the exception are flushed to state
+        assert len(a.logs) >= 1
+        assert a.logs[0].line == "before crash"
 
     def test_capture_parallel_isolation(self):
         """Parallel phases capture independently — no cross-contamination."""
@@ -889,8 +889,11 @@ class TestOutputCapture:
         saga_fn = pipeline.build_saga()
         store = Store(reducer, None)
         store.run_saga(saga_fn())
-        # Allow forked sagas to complete before shutting down the executor
-        time.sleep(0.5)
+        # Poll until pipeline completes instead of fixed sleep
+        for _ in range(100):
+            if store.state.status in ("completed", "failed"):
+                break
+            time.sleep(0.05)
         store._executor.shutdown(wait=True)
 
         a = next(p for p in store.state.phases if p.name == "a")
