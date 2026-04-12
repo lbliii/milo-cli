@@ -392,6 +392,135 @@ class TestLazyDefaults:
         assert "default" not in schema["properties"]["output"]
         assert "default" not in schema["properties"]["color"]
 
+    def test_bool_default_true_generates_no_flag(self):
+        """Boolean with default=True should produce --no-xxx flag."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy to target",
+        )
+        # Without --no-verbose, default is True
+        result = cli.run(["deploy", "--target", "prod"])
+        assert result == "deploy prod verbose=True"
+
+    def test_bool_default_true_can_be_disabled(self):
+        """--no-xxx flag should set a default=True boolean to False."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy to target",
+        )
+        result = cli.run(["deploy", "--target", "prod", "--no-verbose"])
+        assert result == "deploy prod verbose=False"
+
+    def test_bool_default_true_from_schema(self):
+        """Schema-only boolean default=True should also use --no-xxx."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy to target",
+            schema={
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string"},
+                    "verbose": {"type": "boolean", "default": True},
+                },
+                "required": ["target"],
+            },
+        )
+        result = cli.run(["deploy", "--target", "prod", "--no-verbose"])
+        assert result == "deploy prod verbose=False"
+
+    def test_schema_float_default(self):
+        """Float defaults should propagate from schema."""
+        cli = CLI(name="app")
+
+        @cli.command("scale")
+        def scale(factor: float = 1.5) -> float:
+            return factor
+
+        result = cli.run(["scale"])
+        assert result == 1.5
+
+    def test_enum_choices_from_schema(self):
+        """Schema enum values should become argparse choices."""
+        cli = CLI(name="app")
+
+        @cli.command("paint")
+        def paint(color: str = "red") -> str:
+            return color
+
+        # Override the schema to inject enum
+        cmd = cli._commands["paint"]
+        cmd.schema["properties"]["color"]["enum"] = ["red", "green", "blue"]
+
+        # Valid choice works
+        result = cli.run(["paint", "--color", "blue"])
+        assert result == "blue"
+
+    def test_enum_choices_rejects_invalid(self):
+        """Invalid enum values should be rejected by argparse."""
+        cli = CLI(name="app")
+
+        @cli.command("paint")
+        def paint(color: str = "red") -> str:
+            return color
+
+        cmd = cli._commands["paint"]
+        cmd.schema["properties"]["color"]["enum"] = ["red", "green", "blue"]
+
+        result = cli.invoke(["paint", "--color", "purple"])
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Group.lazy_command parity
+# ---------------------------------------------------------------------------
+
+
+class TestGroupLazyParity:
+    def test_group_lazy_command_examples(self):
+        """Group.lazy_command should accept examples kwarg."""
+        from milo.groups import Group
+
+        g = Group("ops", description="Operations")
+        cmd = g.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy",
+            examples=[{"args": "--target prod"}],
+        )
+        assert cmd.examples == ({"args": "--target prod"},)
+
+    def test_group_lazy_command_confirm(self):
+        """Group.lazy_command should accept confirm kwarg."""
+        from milo.groups import Group
+
+        g = Group("ops", description="Operations")
+        cmd = g.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy",
+            confirm="Are you sure?",
+        )
+        assert cmd.confirm == "Are you sure?"
+
+    def test_group_lazy_command_annotations(self):
+        """Group.lazy_command should accept annotations kwarg."""
+        from milo.groups import Group
+
+        g = Group("ops", description="Operations")
+        cmd = g.lazy_command(
+            "deploy",
+            "_lazy_handlers:deploy",
+            description="Deploy",
+            annotations={"destructiveHint": True},
+        )
+        assert cmd.annotations == {"destructiveHint": True}
+
 
 # ---------------------------------------------------------------------------
 # display_result suppression

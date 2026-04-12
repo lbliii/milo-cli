@@ -14,3 +14,8 @@ def greet(name: str, loud: bool = False) -> str:
 def add(a: int, b: int = 0) -> int:
     """Add two numbers."""
     return a + b
+
+
+def deploy(target: str, verbose: bool = True) -> str:
+    """Deploy to target."""
+    return f"deploy {target} verbose={verbose}"
