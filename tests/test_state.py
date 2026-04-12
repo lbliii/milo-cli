@@ -90,13 +90,9 @@ class TestStore:
 
         def dispatch_n(thread_id):
             for i in range(dispatches_per_thread):
-                store.dispatch(
-                    Action("update", payload={"count": i, "thread": thread_id})
-                )
+                store.dispatch(Action("update", payload={"count": i, "thread": thread_id}))
 
-        workers = [
-            threading.Thread(target=dispatch_n, args=(t,)) for t in range(threads)
-        ]
+        workers = [threading.Thread(target=dispatch_n, args=(t,)) for t in range(threads)]
         for w in workers:
             w.start()
         for w in workers:
