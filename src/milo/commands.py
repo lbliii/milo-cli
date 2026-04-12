@@ -945,7 +945,9 @@ class CLI:
                 kwargs[param_name] = getattr(args, param_name)
         return kwargs
 
-    def _get_resolved_command(self, command_name: str) -> tuple[CommandDef | LazyCommandDef, CommandDef]:
+    def _get_resolved_command(
+        self, command_name: str
+    ) -> tuple[CommandDef | LazyCommandDef, CommandDef]:
         """Resolve a command name to the registered definition and eager command."""
         found = self.get_command(command_name)
         if not found:
@@ -980,6 +982,7 @@ class CLI:
         *,
         method: str = "command",
         call_name: str | None = None,
+        raise_on_error: bool = False,
     ) -> Any:
         """Execute a command with context setup, hooks, middleware, and error handling."""
         from milo.context import set_context
@@ -1001,9 +1004,13 @@ class CLI:
         except SystemExit:
             raise
         except KeyboardInterrupt:
+            if raise_on_error:
+                raise
             sys.stderr.write("\nInterrupted.\n")
             sys.exit(130)
         except Exception as exc:
+            if raise_on_error:
+                raise
             from milo._errors import MiloError, format_error
 
             if isinstance(exc, MiloError):
@@ -1181,7 +1188,9 @@ class CLI:
         """
         _found, cmd = self._get_resolved_command(command_name)
         ctx = self._new_call_context()
-        result = self._execute_command(cmd, ctx, self._filter_call_kwargs(cmd, kwargs))
+        result = self._execute_command(
+            cmd, ctx, self._filter_call_kwargs(cmd, kwargs), raise_on_error=True
+        )
         return self._consume_result(result, emit_progress=False)
 
     def call_raw(self, command_name: str, **kwargs: Any) -> Any:
@@ -1199,6 +1208,7 @@ class CLI:
             self._filter_call_kwargs(cmd, kwargs),
             method="tools/call",
             call_name=command_name,
+            raise_on_error=True,
         )
 
     def suggest_command(self, name: str) -> str | None:
