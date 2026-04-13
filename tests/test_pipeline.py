@@ -77,6 +77,26 @@ class TestPipelineCreation:
                 assert p.on_fail == on_fail
                 assert p.retry_backoff == backoff
 
+    def test_pipeline_rejects_nonexistent_dependency(self):
+        from milo._errors import PipelineError
+
+        with pytest.raises(PipelineError, match="does not exist"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None),
+                Phase("b", handler=lambda: None, depends_on=("typo",)),
+            )
+
+    def test_pipeline_nonexistent_dep_lists_available(self):
+        from milo._errors import PipelineError
+
+        with pytest.raises(PipelineError, match="Available phases"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None),
+                Phase("b", handler=lambda: None, depends_on=("missing",)),
+            )
+
 
 # ---------------------------------------------------------------------------
 # Reducer
@@ -310,6 +330,33 @@ class TestExecutionOrder:
         )
         order = pipeline.execution_order()
         assert set(order) == {"a", "b"}
+
+    def test_fail_fast_pipeline_uses_all_for_parallel(self):
+        """fail_fast=True uses All instead of Fork for parallel phases."""
+        from milo._types import All
+
+        pipeline = Pipeline(
+            "build",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",), parallel=True),
+            Phase("c", handler=lambda: None, depends_on=("a",), parallel=True),
+            fail_fast=True,
+        )
+        saga = pipeline.build_saga()
+        gen = saga()
+
+        # PIPELINE_START
+        next(gen)
+        # PHASE_START a
+        gen.send(None)
+        # Call a
+        gen.send(None)
+        # PHASE_COMPLETE a
+        gen.send("ok")
+
+        # Next should be an All effect (not Fork) for the parallel phases
+        effect = gen.send(None)
+        assert isinstance(effect, All), f"Expected All, got {type(effect).__name__}"
 
 
 # ---------------------------------------------------------------------------

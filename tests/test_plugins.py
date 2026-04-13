@@ -120,6 +120,50 @@ class TestHookInvocation:
         with pytest.raises(Exception, match="oops"):
             hooks.invoke("broken")
 
+    def test_invoke_fail_fast_false_runs_all_listeners(self):
+        hooks = HookRegistry()
+        hooks.define("resilient")
+        called = []
+
+        def listener_a():
+            called.append("a")
+            raise ValueError("error a")
+
+        def listener_b():
+            called.append("b")
+            raise ValueError("error b")
+
+        hooks.register("resilient", listener_a)
+        hooks.register("resilient", listener_b)
+        with pytest.raises(Exception, match="2 listener error"):
+            hooks.invoke("resilient", fail_fast=False)
+        assert called == ["a", "b"]
+
+    def test_invoke_fail_fast_false_returns_results_on_success(self):
+        hooks = HookRegistry()
+        hooks.define("mixed")
+        hooks.register("mixed", lambda: "ok")
+        results = hooks.invoke("mixed", fail_fast=False)
+        assert results == ["ok"]
+
+    def test_invoke_fail_fast_true_stops_on_first_error(self):
+        hooks = HookRegistry()
+        hooks.define("strict")
+        called = []
+
+        def listener_a():
+            called.append("a")
+            raise ValueError("error a")
+
+        def listener_b():
+            called.append("b")
+
+        hooks.register("strict", listener_a)
+        hooks.register("strict", listener_b)
+        with pytest.raises(Exception, match="error a"):
+            hooks.invoke("strict", fail_fast=True)
+        assert called == ["a"]
+
 
 # ---------------------------------------------------------------------------
 # Freeze

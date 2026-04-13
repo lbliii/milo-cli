@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from milo._errors import ErrorCode, PipelineError
-from milo._types import Action, Call, Delay, Fork, Key, Put, Quit, SpecialKey
+from milo._types import Action, All, Call, Delay, Fork, Key, Put, Quit, SpecialKey
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -163,15 +163,25 @@ class Pipeline:
     contains a cycle.
     """
 
-    def __init__(self, name: str, *phases: Phase, capture_output: bool = False) -> None:
+    def __init__(
+        self,
+        name: str,
+        *phases: Phase,
+        capture_output: bool = False,
+        fail_fast: bool = False,
+    ) -> None:
         self.name = name
         self.phases = list(phases)
         self.capture_output = capture_output
+        self.fail_fast = fail_fast
         _validate_dependencies(self.phases)
 
     def __rshift__(self, phase: Phase) -> Pipeline:
         """Extend the pipeline: ``pipeline >> Phase(...)``."""
-        new = Pipeline(self.name, *self.phases, phase, capture_output=self.capture_output)
+        new = Pipeline(
+            self.name, *self.phases, phase,
+            capture_output=self.capture_output, fail_fast=self.fail_fast,
+        )
         return new
 
     def build_reducer(self) -> Callable:
@@ -341,6 +351,7 @@ class Pipeline:
         dep_graph = {p.name: set(p.depends_on) for p in phases}
         phase_map = {p.name: p for p in phases}
         capture = self.capture_output
+        use_fail_fast = self.fail_fast
 
         def saga():
             yield Put(Action(PIPELINE_START, time.monotonic()))
@@ -353,10 +364,21 @@ class Pipeline:
                 ready = [name for name in remaining if dep_graph[name].issubset(executed)]
 
                 if not ready:
+                    # Identify which dependencies are blocking
+                    blocked = next(iter(remaining))
+                    unmet = dep_graph[blocked] - executed
                     yield Put(
                         Action(
                             PHASE_FAILED,
-                            {"name": next(iter(remaining)), "error": "Unresolvable dependencies"},
+                            {
+                                "name": blocked,
+                                "error": (
+                                    f"Unresolvable dependencies: phase {blocked!r} "
+                                    f"is waiting on {sorted(unmet)} which "
+                                    f"{'has' if len(unmet) == 1 else 'have'} "
+                                    f"not completed"
+                                ),
+                            },
                         )
                     )
                     return
@@ -365,14 +387,21 @@ class Pipeline:
                 sequential_ready = [n for n in ready if not phase_map[n].parallel]
 
                 if parallel_ready:
+                    parallel_sagas = []
                     for name in parallel_ready:
                         phase = phase_map[name]
                         ctx = _build_context(phase, results)
-                        yield Fork(
+                        parallel_sagas.append(
                             _make_phase_saga(
                                 name, phase.handler, phase.policy, ctx, results, capture
                             )
                         )
+                    if use_fail_fast:
+                        # All cancels remaining sagas on first failure
+                        yield All(sagas=tuple(parallel_sagas))
+                    else:
+                        for s in parallel_sagas:
+                            yield Fork(s)
                     for name in parallel_ready:
                         remaining.discard(name)
                         executed.add(name)
@@ -592,6 +621,17 @@ def _validate_dependencies(phases: list[Phase]) -> None:
     """Validate the dependency graph upfront. Raises CycleError if a cycle exists."""
     names = {p.name for p in phases}
     dep_graph = {p.name: set(p.depends_on) for p in phases}
+
+    # Check for references to non-existent phases
+    for phase in phases:
+        missing = [dep for dep in phase.depends_on if dep not in names]
+        if missing:
+            raise PipelineError(
+                ErrorCode.PIP_DEPENDENCY,
+                f"Phase {phase.name!r} depends on {missing} which "
+                f"{'does' if len(missing) == 1 else 'do'} not exist. "
+                f"Available phases: {sorted(names)}",
+            )
 
     # DFS-based cycle detection
     _white, _gray, _black = 0, 1, 2
