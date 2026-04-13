@@ -130,7 +130,7 @@ class HookRegistry:
             raise PluginError(
                 ErrorCode.PLG_HOOK,
                 f"Hook '{hook_name}' had {len(errors)} listener error(s): {details}",
-            )
+            ) from errors[0][1]
         return results
 
     def freeze(self) -> None:

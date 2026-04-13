@@ -358,6 +358,33 @@ class TestExecutionOrder:
         effect = gen.send(None)
         assert isinstance(effect, All), f"Expected All, got {type(effect).__name__}"
 
+    def test_non_fail_fast_also_uses_all_for_parallel(self):
+        """fail_fast=False also uses All to wait for parallel phases."""
+        from milo._types import All
+
+        pipeline = Pipeline(
+            "build",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",), parallel=True),
+            Phase("c", handler=lambda: None, depends_on=("a",), parallel=True),
+            fail_fast=False,
+        )
+        saga = pipeline.build_saga()
+        gen = saga()
+
+        # PIPELINE_START
+        next(gen)
+        # PHASE_START a
+        gen.send(None)
+        # Call a
+        gen.send(None)
+        # PHASE_COMPLETE a
+        gen.send("ok")
+
+        # Both paths use All to wait before marking phases as executed
+        effect = gen.send(None)
+        assert isinstance(effect, All), f"Expected All, got {type(effect).__name__}"
+
 
 # ---------------------------------------------------------------------------
 # PhaseStatus and PipelineState

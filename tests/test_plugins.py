@@ -135,9 +135,12 @@ class TestHookInvocation:
 
         hooks.register("resilient", listener_a)
         hooks.register("resilient", listener_b)
-        with pytest.raises(Exception, match="2 listener error"):
+        with pytest.raises(Exception, match="2 listener error") as exc_info:
             hooks.invoke("resilient", fail_fast=False)
         assert called == ["a", "b"]
+        # Aggregate error is chained from the first listener error
+        assert exc_info.value.__cause__ is not None
+        assert "error a" in str(exc_info.value.__cause__)
 
     def test_invoke_fail_fast_false_returns_results_on_success(self):
         hooks = HookRegistry()

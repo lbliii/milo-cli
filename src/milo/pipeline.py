@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from milo._errors import ErrorCode, PipelineError
-from milo._types import Action, All, Call, Delay, Fork, Key, Put, Quit, SpecialKey
+from milo._types import Action, All, Call, Delay, Key, Put, Quit, SpecialKey
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -395,18 +395,27 @@ class Pipeline:
                         ctx = _build_context(phase, results)
                         parallel_sagas.append(
                             _make_phase_saga(
-                                name, phase.handler, phase.policy, ctx, results, capture
-                            )
+                                name,
+                                phase.handler,
+                                phase.policy,
+                                ctx,
+                                results,
+                                capture,
+                                fail_fast=use_fail_fast,
+                            )()  # call to produce generator — All expects generators
                         )
-                    if use_fail_fast:
-                        # All cancels remaining sagas on first failure
-                        yield All(sagas=tuple(parallel_sagas))
-                    else:
-                        for s in parallel_sagas:
-                            yield Fork(s)
+                    # Always use All to wait for parallel phases before
+                    # marking them as executed (avoids race where downstream
+                    # phases start before results are available).
+                    yield All(sagas=tuple(parallel_sagas))
                     for name in parallel_ready:
                         remaining.discard(name)
                         executed.add(name)
+                    # If fail_fast, stop pipeline when any parallel phase failed
+                    if use_fail_fast:
+                        failed_phases = [n for n in parallel_ready if n not in results]
+                        if failed_phases:
+                            return
 
                 for name in sequential_ready:
                     phase = phase_map[name]
@@ -888,8 +897,15 @@ def _make_phase_saga(
     context: dict[str, Any],
     results: dict[str, Any],
     capture: bool = False,
+    *,
+    fail_fast: bool = False,
 ) -> Callable:
-    """Create a saga for a single phase (used by Fork for parallel phases)."""
+    """Create a saga for a single phase (used by All for parallel phases).
+
+    When *fail_fast* is True and the phase fails with ``on_fail="stop"``
+    (the default), the saga re-raises after dispatching ``PHASE_FAILED``
+    so that ``All`` can cancel sibling sagas.
+    """
 
     def phase_saga():
         max_attempts = policy.max_retries + 1 if policy.on_fail == "retry" else 1
@@ -928,8 +944,15 @@ def _make_phase_saga(
                     return
                 else:
                     yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+                    if fail_fast:
+                        raise  # propagate so All cancels siblings
                     return
 
         yield Put(Action(PHASE_FAILED, {"name": name, "error": "retries exhausted"}))
+        if fail_fast:
+            raise PipelineError(
+                ErrorCode.PIP_PHASE,
+                f"Phase {name!r} failed after {max_attempts} attempt(s)",
+            )
 
     return phase_saga

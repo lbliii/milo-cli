@@ -7,6 +7,10 @@ from dataclasses import dataclass
 from typing import Any
 
 
+class _NoTemplateContentError(Exception):
+    """Raised when formatter has no captured groups for template rendering."""
+
+
 @dataclass(frozen=True, slots=True)
 class HelpState:
     """State for help rendering."""
@@ -93,7 +97,7 @@ class HelpRenderer(argparse.HelpFormatter):
         """Format help using kida template if available, else fall back to default."""
         try:
             return self._render_with_template()
-        except ValueError:
+        except _NoTemplateContentError:
             # Expected: argparse reuses formatter for non-help output
             # (--version, subparser prog) where no groups are captured.
             return super().format_help()
@@ -116,7 +120,7 @@ class HelpRenderer(argparse.HelpFormatter):
         are captured, so we fall back to the default argparse formatter.
         """
         if not self._captured_groups:
-            raise ValueError("no content for template")
+            raise _NoTemplateContentError("no content for template")
 
         from milo.templates import get_env
 
