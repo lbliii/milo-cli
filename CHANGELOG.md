@@ -2,6 +2,25 @@
 
 All notable changes to Milo are documented here.
 
+## 0.2.2 — 2026-04-13
+
+### Added
+
+- Added pipeline observability: `PhaseLog` dataclass with `@@PHASE_LOG` action and ring-buffer reducer for per-phase stdout/stderr capture (opt-in via `Pipeline(capture_output=True)`). New `phase_detail()` and `pipeline_detail()` kida macros for interactive TUI with cursor navigation, log scrolling, and auto-follow. `PipelineViewState` + `make_detail_reducer()` for Elm-style keyboard-driven expand/collapse interaction. `milo://pipeline/timeline` MCP resource exposes phase execution timeline as structured JSON. Gateway `--status` now shows real CLI metrics and pipeline state.
+
+### Changed
+
+- Bumped minimum kida-templates dependency to 0.5.0. This brings a correctness fix for variable bindings inside unrolled for-loops (affects form, select, pipeline, and component templates) and faster template compilation from cached `str.join` and filter folding.
+- Optimized dispatch lock hold time by replacing SHA256 with builtin hash and deferring recording append outside the lock. Fixed `get_env()` singleton cache that was never written, reducing repeated calls from 122μs to 125ns. Added bulk task accounting for Batch effects.
+- Refactored `CLI` command dispatch internals to share builtin-mode handling, command resolution, hook execution, middleware execution, generator consumption, and output writing across `run()`, `call()`, and `call_raw()` without changing the public API.
+
+### Fixed
+
+- Eliminate remaining sharp edges: warn on silent template/config fallbacks, validate PhasePolicy and pipeline dependencies eagerly, fix exit code on aborted confirmations (130 instead of 0), suppress `display_result=False` across all output formats, tighten Context injection type check, return `default` from `confirm()` in dry-run mode, add `fail_fast` option to hook invocation and parallel pipelines.
+- Fix 7 Python 2 `except A, B:` syntax errors, replace silent exception swallowing with warnings/logging, add atomic file writes for registry and version cache, guard unhandled template lookups, and add `raise_on_error` to `Config.validate()`.
+- Fix `call()` and `call_raw()` to re-raise exceptions instead of calling `sys.exit(1)`, restoring the pre-refactor behavior for programmatic invocations.
+- Fix sharp edges: syntax errors, silent failures, strict APIs, tests
+
 ## 0.2.1 — 2026-04-12
 
 ### Fixed

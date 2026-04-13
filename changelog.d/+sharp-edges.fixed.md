@@ -1,1 +1,0 @@
-Fix 7 Python 2 `except A, B:` syntax errors, replace silent exception swallowing with warnings/logging, add atomic file writes for registry and version cache, guard unhandled template lookups, and add `raise_on_error` to `Config.validate()`.
