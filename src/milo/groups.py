@@ -223,8 +223,7 @@ class Group:
         except Exception:
             # Fallback to plain text if template is missing or broken
             lines = [f"{prog} — {self.description}", ""]
-            for cmd in commands:
-                lines.append(f"  {cmd['name']:<20} {cmd.get('help', '')}")
+            lines.extend(f"  {cmd['name']:<20} {cmd.get('help', '')}" for cmd in commands)
             output = "\n".join(lines)
         sys.stdout.write(output + "\n")
         sys.stdout.flush()

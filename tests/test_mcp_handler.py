@@ -3,27 +3,21 @@
 from __future__ import annotations
 
 import json
-from typing import Any
-from unittest.mock import patch
-
-import pytest
 
 from milo.commands import CLI
 from milo.mcp import (
-    _CLIHandler,
     _builtin_resources,
     _call_tool,
+    _CLIHandler,
     _get_prompt,
     _list_prompts,
     _list_resources,
     _list_tools,
-    _output_schema,
     _read_resource,
     _stats_resource,
     _to_text,
     _tool_title,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

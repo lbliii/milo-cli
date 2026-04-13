@@ -1133,10 +1133,8 @@ class CLI:
         except Exception:
             # Fallback to plain text if template is missing or broken
             lines = [f"{self.name} — {self.description}", ""]
-            for cmd in commands:
-                lines.append(f"  {cmd['name']:<20} {cmd.get('help', '')}")
-            for opt in options:
-                lines.append(f"  {opt.get('flags', ''):<20} {opt.get('help', '')}")
+            lines.extend(f"  {cmd['name']:<20} {cmd.get('help', '')}" for cmd in commands)
+            lines.extend(f"  {opt.get('flags', ''):<20} {opt.get('help', '')}" for opt in options)
             output = "\n".join(lines)
         sys.stdout.write(output + "\n")
         sys.stdout.flush()

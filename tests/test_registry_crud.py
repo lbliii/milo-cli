@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 import warnings
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 import milo.registry as registry_mod
-from milo.registry import install, list_clis, registry_path, uninstall
+from milo.registry import install, list_clis, uninstall
 
 
 @pytest.fixture

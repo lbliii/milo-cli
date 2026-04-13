@@ -247,7 +247,7 @@ class App:
             raise AppError(
                 ErrorCode.APP_RENDER,
                 f"Template not found: {template!r}",
-                suggestion=f"Ensure the template file exists and the kida environment is configured correctly.",
+                suggestion="Ensure the template file exists and the kida environment is configured correctly.",
             ) from e
         return tmpl.render(state=state)
 

@@ -18,7 +18,6 @@ from milo._command_defs import (
     _make_command_def,
 )
 
-
 # ---------------------------------------------------------------------------
 # Frozen dataclass basics
 # ---------------------------------------------------------------------------
@@ -54,7 +53,7 @@ class TestCommandDef:
 
 class TestResourceDef:
     def test_frozen(self) -> None:
-        r = ResourceDef(uri="config://app", name="App Config", description="desc", handler=lambda: {})
+        r = ResourceDef(uri="config://app", name="App Config", description="desc", handler=dict)
         with pytest.raises(AttributeError):
             r.uri = "other"  # type: ignore[misc]
         assert r.mime_type == "text/plain"

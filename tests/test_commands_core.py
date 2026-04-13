@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from milo.commands import CLI
 from milo._command_defs import LazyCommandDef
-
+from milo.commands import CLI
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,7 +133,7 @@ class TestGroups:
 
     def test_dotted_path_nonexistent_command(self) -> None:
         cli = CLI(name="test", description="")
-        site = cli.group("site", description="Site commands")
+        cli.group("site", description="Site commands")
         assert cli.get_command("site.nonexistent") is None
 
     def test_walk_commands_includes_groups(self) -> None:
