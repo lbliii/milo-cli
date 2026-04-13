@@ -62,6 +62,21 @@ class TestPipelineCreation:
         # Original unchanged
         assert len(p1.phases) == 1
 
+    def test_phase_policy_validates_on_fail(self):
+        with pytest.raises(ValueError, match="on_fail must be one of"):
+            PhasePolicy(on_fail="stpo")
+
+    def test_phase_policy_validates_retry_backoff(self):
+        with pytest.raises(ValueError, match="retry_backoff must be one of"):
+            PhasePolicy(retry_backoff="linear")
+
+    def test_phase_policy_valid_values(self):
+        for on_fail in ("stop", "skip", "retry"):
+            for backoff in ("fixed", "exponential"):
+                p = PhasePolicy(on_fail=on_fail, retry_backoff=backoff)
+                assert p.on_fail == on_fail
+                assert p.retry_backoff == backoff
+
 
 # ---------------------------------------------------------------------------
 # Reducer
@@ -621,6 +636,15 @@ class TestPhaseContext:
 
         assert received_context == {"a": None}
         assert store.state.status == "completed"
+
+    def test_build_context_rejects_missing_dependency(self):
+        """_build_context raises PipelineError for misspelled dependency names."""
+        from milo._errors import PipelineError
+        from milo.pipeline import _build_context
+
+        phase = Phase("render", handler=lambda ctx: None, depends_on=("typo",))
+        with pytest.raises(PipelineError, match="typo"):
+            _build_context(phase, results={"parse": "ok"})
 
 
 # ---------------------------------------------------------------------------

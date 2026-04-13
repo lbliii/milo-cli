@@ -68,7 +68,8 @@ class TestHelpRenderer:
 
         # Patch the templates module so get_env raises inside _render_with_template
         with patch("milo.templates.get_env", side_effect=Exception("no kida")):
-            help_text = parser.format_help()
+            with pytest.warns(UserWarning, match="Help template rendering failed"):
+                help_text = parser.format_help()
         assert isinstance(help_text, str)
         assert len(help_text) > 0
 
@@ -182,6 +183,23 @@ class TestHelpRendererTemplateRendering:
         help_text = parser.format_help()
         assert isinstance(help_text, str)
         assert len(help_text) > 0
+
+    def test_template_error_emits_warning(self):
+        """Unexpected template errors emit a UserWarning before fallback."""
+        from unittest.mock import patch
+
+        parser = argparse.ArgumentParser(
+            prog="myapp",
+            description="Test",
+            formatter_class=HelpRenderer,
+        )
+        parser.add_argument("--name", help="Your name")
+
+        with patch.object(
+            HelpRenderer, "_render_with_template", side_effect=RuntimeError("boom")
+        ):
+            with pytest.warns(UserWarning, match="Help template rendering failed"):
+                parser.format_help()
 
     def test_full_cli_help_renders(self, capsys):
         """End-to-end: CLI.run() with no args prints styled help."""

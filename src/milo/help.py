@@ -93,7 +93,19 @@ class HelpRenderer(argparse.HelpFormatter):
         """Format help using kida template if available, else fall back to default."""
         try:
             return self._render_with_template()
-        except Exception:
+        except ValueError:
+            # Expected: argparse reuses formatter for non-help output
+            # (--version, subparser prog) where no groups are captured.
+            return super().format_help()
+        except Exception as exc:
+            import warnings
+
+            warnings.warn(
+                f"Help template rendering failed for {self._prog!r}: {exc}. "
+                f"Falling back to default formatter.",
+                UserWarning,
+                stacklevel=2,
+            )
             return super().format_help()
 
     def _render_with_template(self) -> str:

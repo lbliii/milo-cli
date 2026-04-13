@@ -115,6 +115,13 @@ class TestFormatOutput:
     def test_table_empty(self):
         assert format_output([], fmt="table") == "(empty)"
 
+    def test_template_fallback_warns(self):
+        from milo.output import _format_template
+
+        with pytest.warns(UserWarning, match="failed to load"):
+            result = _format_template({"key": "val"}, "nonexistent.kida")
+        assert "key" in result
+
 
 # ---------------------------------------------------------------------------
 # CLI / Commands tests

@@ -20,6 +20,10 @@ from milo._types import Action, Call, Delay, Fork, Key, Put, Quit, SpecialKey
 # ---------------------------------------------------------------------------
 
 
+_VALID_ON_FAIL = frozenset({"stop", "skip", "retry"})
+_VALID_BACKOFF = frozenset({"fixed", "exponential"})
+
+
 @dataclass(frozen=True, slots=True)
 class PhasePolicy:
     """Failure policy for a pipeline phase.
@@ -32,6 +36,18 @@ class PhasePolicy:
     max_retries: int = 0
     retry_delay: float = 1.0
     retry_backoff: str = "fixed"  # "fixed" | "exponential"
+
+    def __post_init__(self) -> None:
+        if self.on_fail not in _VALID_ON_FAIL:
+            raise ValueError(
+                f"PhasePolicy.on_fail must be one of {sorted(_VALID_ON_FAIL)}, "
+                f"got {self.on_fail!r}"
+            )
+        if self.retry_backoff not in _VALID_BACKOFF:
+            raise ValueError(
+                f"PhasePolicy.retry_backoff must be one of {sorted(_VALID_BACKOFF)}, "
+                f"got {self.retry_backoff!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -746,7 +762,15 @@ def _handler_wants_context(handler: Callable) -> bool:
 
 def _build_context(phase: Phase, results: dict[str, Any]) -> dict[str, Any]:
     """Build the context dict for a phase from its dependency results."""
-    return {dep: results.get(dep) for dep in phase.depends_on}
+    missing = [dep for dep in phase.depends_on if dep not in results]
+    if missing:
+        raise PipelineError(
+            ErrorCode.PIP_PHASE,
+            f"Phase {phase.name!r} depends on {missing} but "
+            f"{'that phase does' if len(missing) == 1 else 'those phases do'} "
+            f"not exist in results. Check depends_on for typos.",
+        )
+    return {dep: results[dep] for dep in phase.depends_on}
 
 
 def _call_handler(handler: Callable, context: dict[str, Any]) -> Any:
