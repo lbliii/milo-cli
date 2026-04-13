@@ -241,7 +241,14 @@ class App:
             from milo.templates import get_env
 
             env = get_env()
-        tmpl = env.get_template(template)
+        try:
+            tmpl = env.get_template(template)
+        except Exception as e:
+            raise AppError(
+                ErrorCode.APP_RENDER,
+                f"Template not found: {template!r}",
+                suggestion=f"Ensure the template file exists and the kida environment is configured correctly.",
+            ) from e
         return tmpl.render(state=state)
 
     def run(self) -> Any:
@@ -405,7 +412,14 @@ class App:
 
     def _render_exit(self, state: Any, env: Any) -> None:
         """Render the exit template once to stdout."""
-        template = env.get_template(self._exit_template)
+        try:
+            template = env.get_template(self._exit_template)
+        except Exception as e:
+            raise AppError(
+                ErrorCode.APP_RENDER,
+                f"Exit template not found: {self._exit_template!r}",
+                suggestion="Ensure the exit template file exists and the kida environment is configured correctly.",
+            ) from e
         render_state = state
         if isinstance(state, FlowState):
             # For flows, pass all screen states so exit template can reference any data

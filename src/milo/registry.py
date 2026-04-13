@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,15 +37,25 @@ def _load() -> dict[str, Any]:
     try:
         return json.loads(_REGISTRY_FILE.read_text())
     except json.JSONDecodeError:
+        warnings.warn(
+            f"Registry file corrupted at {_REGISTRY_FILE}, resetting",
+            stacklevel=2,
+        )
         return {"version": 1, "clis": {}}
-    except OSError:
+    except OSError as e:
+        warnings.warn(
+            f"Failed to read registry file {_REGISTRY_FILE}: {e}",
+            stacklevel=2,
+        )
         return {"version": 1, "clis": {}}
 
 
 def _save(data: dict[str, Any]) -> None:
-    """Save the registry file."""
+    """Save the registry file (atomic write via temp file + rename)."""
     _REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-    _REGISTRY_FILE.write_text(json.dumps(data, indent=2) + "\n")
+    tmp_path = _REGISTRY_FILE.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(data, indent=2) + "\n")
+    os.replace(tmp_path, _REGISTRY_FILE)
 
 
 def install(

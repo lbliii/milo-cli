@@ -85,7 +85,7 @@ def save_recording(
             if "action_payload" in record_data:
                 try:
                     json.dumps(record_data["action_payload"])
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     record_data["action_payload"] = repr(record_data["action_payload"])
             f.write(json.dumps(record_data) + "\n")
 

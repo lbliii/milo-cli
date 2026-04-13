@@ -97,7 +97,7 @@ class Context:
             sys.stderr.write(message + suffix)
             sys.stderr.flush()
             answer = input().strip().lower()
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             sys.stderr.write("\n")
             return default
 
@@ -170,7 +170,16 @@ class Context:
         if template.startswith("string:"):
             tmpl = env.from_string(template[7:], name="inline")
         else:
-            tmpl = env.get_template(template)
+            try:
+                tmpl = env.get_template(template)
+            except Exception as e:
+                from milo._errors import AppError, ErrorCode
+
+                raise AppError(
+                    ErrorCode.APP_RENDER,
+                    f"Template not found: {template!r}",
+                    suggestion="Ensure the template file exists and the kida environment is configured correctly.",
+                ) from e
 
         return tmpl.render(**kwargs)
 

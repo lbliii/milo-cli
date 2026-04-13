@@ -113,7 +113,20 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     # include_extras=True preserves Annotated metadata for constraint extraction
     try:
         hints = typing.get_type_hints(func, include_extras=True)
+    except NameError:
+        # Forward references that can't be resolved — fall back to signature annotations
+        warnings.warn(
+            f"Could not resolve type hints for {func.__qualname__}: unresolved forward reference. "
+            f"Schema will use parameter defaults only.",
+            stacklevel=2,
+        )
+        hints = {}
     except Exception:
+        warnings.warn(
+            f"Could not resolve type hints for {func.__qualname__}. "
+            f"Schema will use parameter defaults only.",
+            stacklevel=2,
+        )
         hints = {}
 
     # Extract parameter descriptions from docstring
@@ -167,7 +180,7 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         ):
             try:
                 json.dumps(param.default)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 pass  # non-serializable nested value — omit default
             else:
                 prop["default"] = param.default
@@ -369,7 +382,13 @@ def return_to_schema(func: Callable[..., Any]) -> dict[str, Any] | None:
     """
     try:
         hints = typing.get_type_hints(func)
+    except NameError:
+        hints = {}
     except Exception:
+        warnings.warn(
+            f"Could not resolve return type hints for {func.__qualname__}.",
+            stacklevel=2,
+        )
         hints = {}
 
     ret = hints.get("return", inspect.Parameter.empty)

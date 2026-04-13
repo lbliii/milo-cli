@@ -113,8 +113,8 @@ def _print_status() -> None:
                         sys.stdout.write(
                             f"    requests: {total}  errors: {errors}  avg_latency: {avg_ms}ms\n"
                         )
-                except Exception:
-                    sys.stdout.write("    status: unreachable\n")
+                except Exception as e:
+                    sys.stdout.write(f"    status: unreachable ({e})\n")
 
                 try:
                     result = child.send_call("resources/read", {"uri": "milo://pipeline/timeline"})
@@ -130,8 +130,8 @@ def _print_status() -> None:
                             sys.stdout.write(
                                 f"    pipeline: {pipe_name} ({pipe_status}, {n_phases} phases)\n"
                             )
-                except Exception:
-                    pass
+                except Exception as e:
+                    _logger.debug("Failed to read pipeline timeline from %s: %s", name, e)
             finally:
                 child.kill()
 
