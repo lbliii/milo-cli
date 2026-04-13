@@ -862,17 +862,19 @@ class TestDryRunConfirmDefault:
 class TestContextInjectionTypeCheck:
     def test_milo_context_is_injected(self):
         """milo.context.Context is recognized as a context parameter."""
+        import inspect
+
         from milo._command_defs import _is_context_param
         from milo.context import Context
-        import inspect
 
         param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context)
         assert _is_context_param(param) is True
 
     def test_foreign_context_not_injected(self):
         """A class named Context from another module is NOT injected."""
-        from milo._command_defs import _is_context_param
         import inspect
+
+        from milo._command_defs import _is_context_param
 
         class Context:
             """A foreign class that happens to be named Context."""
