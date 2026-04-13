@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from milo._types import (
     Action,
     FieldSpec,
@@ -447,7 +449,7 @@ class TestFormTimeout:
         import sys
 
         if sys.platform == "win32" or not hasattr(signal, "SIGALRM"):
-            return  # SIGALRM not available on Windows
+            pytest.skip("SIGALRM not available on this platform")
 
         def slow_input(prompt: str = "") -> str:
             import time
@@ -456,7 +458,6 @@ class TestFormTimeout:
             return "never"
 
         specs = (FieldSpec(name="name", label="Name"),)
-        import pytest
 
         with pytest.raises(TimeoutError, match="timed out"):
             with patch("builtins.input", side_effect=slow_input):

@@ -222,27 +222,32 @@ def make_form_reducer(*specs: FieldSpec, navigate_on_submit: bool = False) -> Ca
 
 
 _NON_TTY_DEFAULT_TIMEOUT = 30
+_UNSET: Any = object()
 
 
 def form(
     *specs: FieldSpec,
     env: Any = None,
-    timeout: float | None = None,
+    timeout: float | None | Any = _UNSET,
 ) -> dict[str, Any]:
     """Run an interactive form, return field values.
 
     Falls back to input() if not a TTY.
 
     Args:
-        timeout: Maximum seconds to wait for input. ``None`` means no limit
-            for TTY sessions. Non-TTY sessions default to 30 s to prevent
-            CI pipelines from hanging indefinitely.
+        timeout: Maximum seconds to wait for input. Omit (or leave as default)
+            for no limit in TTY sessions; non-TTY sessions default to 30 s to
+            prevent CI pipelines from hanging indefinitely. Pass ``None``
+            explicitly to disable the non-TTY timeout.
 
     Raises:
         TimeoutError: If the timeout expires before the form is submitted.
     """
     if not is_tty():
-        effective_timeout = timeout if timeout is not None else _NON_TTY_DEFAULT_TIMEOUT
+        if timeout is _UNSET:
+            effective_timeout: float | None = _NON_TTY_DEFAULT_TIMEOUT
+        else:
+            effective_timeout = timeout
         return _form_fallback(specs, timeout=effective_timeout)
 
     from milo.app import App
@@ -276,18 +281,24 @@ def _form_fallback(
     Raises :class:`TimeoutError` if *timeout* seconds elapse before all
     fields are collected.
     """
+    import math
     import signal
 
+    prev_handler = None
+    prev_alarm = 0
     deadline_active = False
 
     def _timeout_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
         raise TimeoutError(
-            f"Form input timed out after {timeout}s. Set timeout=None or provide input via stdin."
+            f"Form input timed out after {timeout}s. "
+            "Pass timeout=None explicitly to disable the non-TTY timeout."
         )
 
     if timeout is not None and timeout > 0 and hasattr(signal, "SIGALRM"):
+        prev_handler = signal.getsignal(signal.SIGALRM)
+        prev_alarm = signal.alarm(0)
         signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(int(max(1, timeout)))
+        signal.alarm(math.ceil(timeout))
         deadline_active = True
 
     try:
@@ -313,3 +324,7 @@ def _form_fallback(
     finally:
         if deadline_active:
             signal.alarm(0)
+            if prev_handler is not None:
+                signal.signal(signal.SIGALRM, prev_handler)
+            if prev_alarm > 0:
+                signal.alarm(prev_alarm)
