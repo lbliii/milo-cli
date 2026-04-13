@@ -368,6 +368,83 @@ class TestConfigValidation:
         assert errors == []
 
 
+class TestConfigBoolCoercion:
+    """Validate that string bools are coerced to actual Python bools."""
+
+    def test_string_true_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "true"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is True
+        assert isinstance(config.get("debug"), bool)
+
+    def test_string_false_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "false"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is False
+        assert isinstance(config.get("debug"), bool)
+
+    def test_string_yes_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "yes"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is True
+
+    def test_string_no_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "no"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is False
+
+    def test_string_1_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "1"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is True
+
+    def test_string_0_coerced_to_bool(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "0"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("debug") is False
+
+    def test_invalid_bool_string_errors(self):
+        spec = ConfigSpec(defaults={"debug": False})
+        config = Config.from_dict({"debug": "maybe"})
+        errors = config.validate(spec)
+        assert len(errors) == 1
+
+    def test_string_int_coerced(self):
+        spec = ConfigSpec(defaults={"workers": 4})
+        config = Config.from_dict({"workers": "8"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("workers") == 8
+        assert isinstance(config.get("workers"), int)
+
+    def test_string_float_coerced(self):
+        spec = ConfigSpec(defaults={"threshold": 0.5})
+        config = Config.from_dict({"threshold": "0.75"})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("threshold") == 0.75
+        assert isinstance(config.get("threshold"), float)
+
+    def test_nested_bool_coercion(self):
+        spec = ConfigSpec(defaults={"build": {"minify": False}})
+        config = Config.from_dict({"build": {"minify": "true"}})
+        errors = config.validate(spec)
+        assert errors == []
+        assert config.get("build.minify") is True
+
+
 class TestConfigInit:
     def test_init_toml(self, tmp_path):
         from milo.config import Config, ConfigSpec

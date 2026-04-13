@@ -221,16 +221,34 @@ def make_form_reducer(*specs: FieldSpec, navigate_on_submit: bool = False) -> Ca
     return reducer
 
 
+_NON_TTY_DEFAULT_TIMEOUT = 30
+_UNSET: Any = object()
+
+
 def form(
     *specs: FieldSpec,
     env: Any = None,
+    timeout: float | None | Any = _UNSET,
 ) -> dict[str, Any]:
     """Run an interactive form, return field values.
 
     Falls back to input() if not a TTY.
+
+    Args:
+        timeout: Maximum seconds to wait for input. Omit (or leave as default)
+            for no limit in TTY sessions; non-TTY sessions default to 30 s to
+            prevent CI pipelines from hanging indefinitely. Pass ``None``
+            explicitly to disable the non-TTY timeout.
+
+    Raises:
+        TimeoutError: If the timeout expires before the form is submitted.
     """
     if not is_tty():
-        return _form_fallback(specs)
+        if timeout is _UNSET:
+            effective_timeout: float | None = _NON_TTY_DEFAULT_TIMEOUT
+        else:
+            effective_timeout = timeout
+        return _form_fallback(specs, timeout=effective_timeout)
 
     from milo.app import App
 
@@ -255,24 +273,58 @@ def form(
     return {spec.name: field.value for spec, field in zip(specs, final.fields, strict=False)}
 
 
-def _form_fallback(specs: tuple[FieldSpec, ...] | tuple) -> dict[str, Any]:
-    """Non-TTY fallback using input()."""
-    values: dict[str, Any] = {}
-    for spec in specs:
-        match spec.field_type:
-            case FieldType.CONFIRM:
-                raw = input(f"{spec.label} (y/n): ").strip().lower()
-                values[spec.name] = raw in ("y", "yes")
-            case FieldType.SELECT:
-                sys.stderr.write(f"{spec.label}:\n")
-                for i, choice in enumerate(spec.choices):
-                    sys.stderr.write(f"  {i + 1}. {choice}\n")
-                raw = input("Choice: ").strip()
-                try:
-                    idx = int(raw) - 1
-                    values[spec.name] = spec.choices[idx]
-                except ValueError, IndexError:
-                    values[spec.name] = spec.choices[0] if spec.choices else ""
-            case _:
-                values[spec.name] = input(f"{spec.label}: ").strip()
-    return values
+def _form_fallback(
+    specs: tuple[FieldSpec, ...] | tuple, *, timeout: float | None = None
+) -> dict[str, Any]:
+    """Non-TTY fallback using input().
+
+    Raises :class:`TimeoutError` if *timeout* seconds elapse before all
+    fields are collected.
+    """
+    import math
+    import signal
+
+    prev_handler = None
+    prev_alarm = 0
+    deadline_active = False
+
+    def _timeout_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
+        raise TimeoutError(
+            f"Form input timed out after {timeout}s. "
+            "Pass timeout=None explicitly to disable the non-TTY timeout."
+        )
+
+    if timeout is not None and timeout > 0 and hasattr(signal, "SIGALRM"):
+        prev_handler = signal.getsignal(signal.SIGALRM)
+        prev_alarm = signal.alarm(0)
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(math.ceil(timeout))
+        deadline_active = True
+
+    try:
+        values: dict[str, Any] = {}
+        for spec in specs:
+            match spec.field_type:
+                case FieldType.CONFIRM:
+                    raw = input(f"{spec.label} (y/n): ").strip().lower()
+                    values[spec.name] = raw in ("y", "yes")
+                case FieldType.SELECT:
+                    sys.stderr.write(f"{spec.label}:\n")
+                    for i, choice in enumerate(spec.choices):
+                        sys.stderr.write(f"  {i + 1}. {choice}\n")
+                    raw = input("Choice: ").strip()
+                    try:
+                        idx = int(raw) - 1
+                        values[spec.name] = spec.choices[idx]
+                    except ValueError, IndexError:
+                        values[spec.name] = spec.choices[0] if spec.choices else ""
+                case _:
+                    values[spec.name] = input(f"{spec.label}: ").strip()
+        return values
+    finally:
+        if deadline_active:
+            signal.alarm(0)
+            if prev_handler is not None:
+                signal.signal(signal.SIGALRM, prev_handler)
+            if prev_alarm > 0:
+                signal.alarm(prev_alarm)

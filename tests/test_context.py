@@ -504,3 +504,35 @@ class TestContextRender:
         ctx = Context()
         result = ctx.render('string:{{ "hi" | style("primary") }}')
         assert "hi" in result
+
+
+# ---------------------------------------------------------------------------
+# Dry-run guard
+# ---------------------------------------------------------------------------
+
+
+class TestDryRunGuard:
+    def test_write_file_writes_when_not_dry_run(self, tmp_path):
+        ctx = Context(dry_run=False)
+        path = str(tmp_path / "out.txt")
+        assert ctx.write_file(path, "hello") is True
+        assert (tmp_path / "out.txt").read_text() == "hello"
+
+    def test_write_file_skips_when_dry_run(self, tmp_path):
+        ctx = Context(dry_run=True)
+        path = str(tmp_path / "out.txt")
+        assert ctx.write_file(path, "hello") is False
+        assert not (tmp_path / "out.txt").exists()
+
+    def test_run_command_executes_when_not_dry_run(self):
+        import subprocess
+
+        ctx = Context(dry_run=False)
+        result = ctx.run_command(["echo", "hi"], capture_output=True, text=True)
+        assert isinstance(result, subprocess.CompletedProcess)
+        assert result.stdout.strip() == "hi"
+
+    def test_run_command_skips_when_dry_run(self):
+        ctx = Context(dry_run=True)
+        result = ctx.run_command(["rm", "-rf", "/"])
+        assert result is None

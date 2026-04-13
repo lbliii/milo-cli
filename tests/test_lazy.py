@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from milo.commands import CLI, CommandDef, LazyCommandDef
+from milo.commands import CLI, CommandDef, LazyCommandDef, LazyImportError
 
 # ---------------------------------------------------------------------------
 # LazyCommandDef basics
@@ -92,7 +92,7 @@ class TestLazyCommandDef:
             "no_colon_here",
             description="Bad path",
         )
-        with pytest.raises(ValueError, match=r"expected 'module\.path:attribute'"):
+        with pytest.raises(LazyImportError, match=r"expected 'module\.path:attribute'"):
             cmd.resolve()
 
     def test_invalid_module(self):
@@ -101,8 +101,13 @@ class TestLazyCommandDef:
             "nonexistent.module:func",
             description="Bad module",
         )
-        with pytest.raises(ModuleNotFoundError):
+        with pytest.raises(LazyImportError, match=r"nonexistent\.module"):
             cmd.resolve()
+        # Original cause is preserved
+        cmd._resolved = None  # reset cache
+        with pytest.raises(LazyImportError) as exc_info:
+            cmd.resolve()
+        assert isinstance(exc_info.value.cause, ModuleNotFoundError)
 
     def test_invalid_attribute(self):
         cmd = LazyCommandDef(
@@ -110,8 +115,12 @@ class TestLazyCommandDef:
             "_lazy_handlers:nonexistent",
             description="Bad attr",
         )
-        with pytest.raises(AttributeError):
+        with pytest.raises(LazyImportError, match="nonexistent"):
             cmd.resolve()
+        cmd._resolved = None
+        with pytest.raises(LazyImportError) as exc_info:
+            cmd.resolve()
+        assert isinstance(exc_info.value.cause, AttributeError)
 
     def test_thread_safety(self):
         cmd = LazyCommandDef(
@@ -580,6 +589,62 @@ class TestDisplayResult:
 # ---------------------------------------------------------------------------
 # MCP with lazy commands
 # ---------------------------------------------------------------------------
+
+
+class TestLazyImportFailureGraceful:
+    """Broken lazy commands degrade gracefully instead of crashing."""
+
+    def test_help_still_works_with_broken_lazy(self):
+        """--help should list the command even if its import fails."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "broken",
+            "nonexistent.module:func",
+            description="This is broken",
+        )
+        # build_parser should warn but not crash
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            cli.build_parser()
+            assert any("broken" in str(warn.message) for warn in w)
+
+    def test_dispatch_shows_error_for_broken_lazy(self):
+        """Running a broken lazy command should print an error, not a traceback."""
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "broken",
+            "nonexistent.module:func",
+            description="This is broken",
+            schema={"type": "object", "properties": {}},
+        )
+        result = cli.invoke(["broken"])
+        assert (
+            result.exit_code != 0
+            or "error" in result.stderr.lower()
+            or "failed to import" in result.stderr.lower()
+        )
+
+    def test_mcp_list_skips_broken_lazy(self):
+        """MCP tools/list should skip commands that fail to import."""
+        from milo.mcp import _list_tools
+
+        cli = CLI(name="app")
+
+        @cli.command("good", description="Works fine")
+        def good() -> str:
+            return "ok"
+
+        cli.lazy_command(
+            "broken",
+            "nonexistent.module:func",
+            description="This is broken",
+        )
+        tools = _list_tools(cli)
+        tool_names = [t["name"] for t in tools]
+        assert "good" in tool_names
+        assert "broken" not in tool_names
 
 
 class TestMCPLazy:

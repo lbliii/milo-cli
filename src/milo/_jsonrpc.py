@@ -15,11 +15,16 @@ def _write_result(req_id: Any, result: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
-def _write_error(req_id: Any, code: int, message: str) -> None:
+def _write_error(
+    req_id: Any, code: int, message: str, *, data: dict[str, Any] | None = None
+) -> None:
+    error_obj: dict[str, Any] = {"code": code, "message": message}
+    if data is not None:
+        error_obj["data"] = data
     response = {
         "jsonrpc": "2.0",
         "id": req_id,
-        "error": {"code": code, "message": message},
+        "error": error_obj,
     }
     sys.stdout.write(json.dumps(response) + "\n")
     sys.stdout.flush()

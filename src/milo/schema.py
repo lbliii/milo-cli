@@ -96,7 +96,7 @@ _TYPE_MAP: dict[type, str] = {
 
 
 @functools.lru_cache(maxsize=256)
-def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
+def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dict[str, Any]:
     """Generate MCP-compatible JSON Schema from function type annotations.
 
     Parameters with defaults are optional (not in required).
@@ -107,6 +107,9 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
     Parameter descriptions are extracted from the function's docstring
     (Google, NumPy, or Sphinx style) and included as ``"description"``
     fields in the schema properties.
+
+    When *strict* is True, unrecognized type annotations raise
+    :class:`TypeError` instead of silently falling back to ``"string"``.
     """
     sig = inspect.signature(func)
     # Resolve string annotations (from __future__ import annotations)
@@ -166,7 +169,7 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
             else:
                 annotation = unwrapped
 
-        prop = _type_to_schema(annotation, _defs=defs)
+        prop = _type_to_schema(annotation, _defs=defs, _strict=strict)
 
         # Add description from docstring if available
         if name in param_docs:
@@ -199,18 +202,22 @@ def _type_to_schema(
     annotation: Any,
     _seen: set[int] | None = None,
     _defs: dict[str, dict[str, Any]] | None = None,
+    *,
+    _strict: bool = False,
 ) -> dict[str, Any]:
     """Convert Python type annotation to JSON Schema fragment.
 
     *_defs* accumulates ``$defs`` entries for recursive dataclasses so
     they can be emitted as ``{"$ref": "#/$defs/ClassName"}``.
+
+    When *_strict* is True, unrecognized types raise TypeError.
     """
     # Annotated[T, constraints...] — unwrap and apply constraints
     origin = get_origin(annotation)
     if origin is typing.Annotated:
         args = get_args(annotation)
         base_type = args[0]
-        schema = _type_to_schema(base_type, _seen, _defs)
+        schema = _type_to_schema(base_type, _seen, _defs, _strict=_strict)
         is_array = schema.get("type") == "array"
         for meta in args[1:]:
             key = _CONSTRAINT_MAP.get(type(meta))
@@ -262,7 +269,7 @@ def _type_to_schema(
         hints = typing.get_type_hints(annotation)
         for f in dataclasses.fields(annotation):
             field_type = hints.get(f.name, str)
-            props[f.name] = _type_to_schema(field_type, _seen, _defs)
+            props[f.name] = _type_to_schema(field_type, _seen, _defs, _strict=_strict)
             if f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
                 req.append(f.name)
         result: dict[str, Any] = {"type": "object", "properties": props}
@@ -286,7 +293,7 @@ def _type_to_schema(
         hints = typing.get_type_hints(annotation)
         props = {}
         for fname, ftype in hints.items():
-            props[fname] = _type_to_schema(ftype, _seen, _defs)
+            props[fname] = _type_to_schema(ftype, _seen, _defs, _strict=_strict)
         result: dict[str, Any] = {"type": "object", "properties": props}
         # TypedDict required keys
         req_keys = getattr(annotation, "__required_keys__", set())
@@ -301,15 +308,18 @@ def _type_to_schema(
         if len(non_none) > 1:
             if _seen is None:
                 _seen = set()
-            return {"anyOf": [_type_to_schema(a, _seen, _defs) for a in non_none]}
+            return {"anyOf": [_type_to_schema(a, _seen, _defs, _strict=_strict) for a in non_none]}
         if len(non_none) == 1:
-            return _type_to_schema(non_none[0], _seen, _defs)
+            return _type_to_schema(non_none[0], _seen, _defs, _strict=_strict)
 
     # list[T] with recursive item schema
     if origin is list:
         args = get_args(annotation)
         if args:
-            return {"type": "array", "items": _type_to_schema(args[0], _seen, _defs)}
+            return {
+                "type": "array",
+                "items": _type_to_schema(args[0], _seen, _defs, _strict=_strict),
+            }
         return {"type": "array"}
 
     # tuple[T, ...] → array with items
@@ -319,7 +329,10 @@ def _type_to_schema(
             # tuple[T, ...] (homogeneous) or tuple[T] (single-element)
             non_ellipsis = [a for a in args if a is not Ellipsis]
             if non_ellipsis:
-                return {"type": "array", "items": _type_to_schema(non_ellipsis[0], _seen, _defs)}
+                return {
+                    "type": "array",
+                    "items": _type_to_schema(non_ellipsis[0], _seen, _defs, _strict=_strict),
+                }
         return {"type": "array"}
 
     # set[T] / frozenset[T] → array with uniqueItems
@@ -327,7 +340,7 @@ def _type_to_schema(
         args = get_args(annotation)
         schema: dict[str, Any] = {"type": "array", "uniqueItems": True}
         if args:
-            schema["items"] = _type_to_schema(args[0], _seen, _defs)
+            schema["items"] = _type_to_schema(args[0], _seen, _defs, _strict=_strict)
         return schema
 
     # dict[str, V] with additionalProperties
@@ -336,12 +349,17 @@ def _type_to_schema(
         if args and len(args) == 2:
             return {
                 "type": "object",
-                "additionalProperties": _type_to_schema(args[1], _seen, _defs),
+                "additionalProperties": _type_to_schema(args[1], _seen, _defs, _strict=_strict),
             }
         return {"type": "object"}
 
-    # Unknown type — warn and fall back to string
+    # Unknown type
     type_name = getattr(annotation, "__name__", None) or str(annotation)
+    if _strict:
+        raise TypeError(
+            f"Unrecognized type {type_name!r} in strict schema mode. "
+            f"Add explicit schema support or use strict=False."
+        )
     warnings.warn(
         f'Unrecognized type {type_name!r} falling back to {{"type": "string"}}',
         UserWarning,

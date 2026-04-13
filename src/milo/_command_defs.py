@@ -132,7 +132,11 @@ class LazyCommandDef:
         return self.resolve().handler
 
     def resolve(self) -> CommandDef:
-        """Import the handler and cache as a full CommandDef. Thread-safe."""
+        """Import the handler and cache as a full CommandDef. Thread-safe.
+
+        Raises :class:`LazyImportError` if the module or attribute cannot
+        be imported, wrapping the original exception with a clear message.
+        """
         if self._resolved is not None:
             return self._resolved
 
@@ -144,10 +148,13 @@ class LazyCommandDef:
             module_path, _, attr_name = self.import_path.rpartition(":")
             if not module_path or not attr_name:
                 msg = f"Invalid import_path {self.import_path!r}: expected 'module.path:attribute'"
-                raise ValueError(msg)
+                raise LazyImportError(self.name, self.import_path, ValueError(msg))
 
-            module = importlib.import_module(module_path)
-            handler = getattr(module, attr_name)
+            try:
+                module = importlib.import_module(module_path)
+                handler = getattr(module, attr_name)
+            except Exception as exc:
+                raise LazyImportError(self.name, self.import_path, exc) from exc
 
             from milo.schema import function_to_schema
 
@@ -178,6 +185,20 @@ class InvokeResult:
     result: Any = None
     exception: Exception | None = None
     stderr: str = ""
+
+
+class LazyImportError(Exception):
+    """Raised when a lazy command's import fails.
+
+    Wraps the original exception with the command name and import path
+    so callers can provide actionable error messages.
+    """
+
+    def __init__(self, command_name: str, import_path: str, cause: Exception) -> None:
+        self.command_name = command_name
+        self.import_path = import_path
+        self.cause = cause
+        super().__init__(f"Command {command_name!r} failed to import from {import_path!r}: {cause}")
 
 
 def _make_command_def(

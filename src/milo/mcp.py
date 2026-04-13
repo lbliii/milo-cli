@@ -30,6 +30,7 @@ class _CLIHandler:
     def __init__(self, cli: CLI, cached_tools: list[dict[str, Any]] | None = None) -> None:
         self._cli = cli
         self._cached_tools = cached_tools
+        self._cached_version: int = cli._command_version
         self._logger = RequestLogger()
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -47,9 +48,12 @@ class _CLIHandler:
     def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
         start = time.monotonic()
-        tools = self._cached_tools if self._cached_tools is not None else _list_tools(self._cli)
+        # Invalidate cache when commands have been added or removed
+        if self._cached_tools is None or self._cached_version != self._cli._command_version:
+            self._cached_tools = _list_tools(self._cli)
+            self._cached_version = self._cli._command_version
         log_request(self._logger, "tools/list", "", start)
-        return {"tools": tools}
+        return {"tools": self._cached_tools}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
@@ -166,7 +170,51 @@ def run_mcp_server(cli: CLI) -> None:
             if result is not None:
                 _write_result(req_id, result)
         except Exception as e:
-            _write_error(req_id, -32603, str(e))
+            code, data = _classify_exception(e)
+            _write_error(req_id, code, str(e), data=data)
+
+
+def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
+    """Map an exception to a JSON-RPC error code and optional data payload.
+
+    Returns (code, data) where:
+    - MiloError with validation/config codes -> -32602 (Invalid params)
+    - MiloError with not-found codes -> -32601 (Method not found)
+    - All others -> -32603 (Internal error) with traceback in data
+    """
+    import traceback as tb_mod
+
+    from milo._errors import MiloError
+
+    if isinstance(exc, MiloError):
+        code_val = exc.code.value
+        # Validation-related error codes -> Invalid params
+        if code_val.startswith(("M-CFG-", "M-FRM-", "M-INP-")):
+            return -32602, {
+                "errorCode": code_val,
+                "type": type(exc).__name__,
+                "suggestion": exc.suggestion,
+            }
+        # Not-found codes -> Method not found
+        if code_val in ("M-CMD-001",):
+            return -32601, {
+                "errorCode": code_val,
+                "type": type(exc).__name__,
+                "suggestion": exc.suggestion,
+            }
+        # Other MiloErrors -> Internal with structured data
+        return -32603, {
+            "errorCode": code_val,
+            "type": type(exc).__name__,
+            "suggestion": exc.suggestion,
+            "traceback": "".join(tb_mod.format_exception(exc)),
+        }
+
+    # Unknown exceptions -> Internal error with traceback
+    return -32603, {
+        "type": type(exc).__name__,
+        "traceback": "".join(tb_mod.format_exception(exc)),
+    }
 
 
 def _builtin_resources() -> list[dict[str, Any]]:
@@ -216,15 +264,23 @@ def _list_tools(cli: CLI) -> list[dict[str, Any]]:
 
     Group commands use dot-notation names: ``site.build``, ``site.config.show``.
     Includes outputSchema when return type annotations are available.
+    Skips commands that fail to import with a warning.
     """
+    from milo._command_defs import LazyImportError
+
     tools = []
     for dotted_name, cmd in cli.walk_commands():
         if cmd.hidden:
             continue
+        try:
+            input_schema = cmd.schema
+        except LazyImportError as exc:
+            _stderr(f"warning: skipping tool {dotted_name!r}: {exc.cause}")
+            continue
         tool: dict[str, Any] = {
             "name": dotted_name,
             "description": cmd.description,
-            "inputSchema": cmd.schema,
+            "inputSchema": input_schema,
         }
 
         # title: human-readable display name from docstring or description
