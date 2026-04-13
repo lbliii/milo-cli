@@ -117,14 +117,14 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         # Forward references that can't be resolved — fall back to signature annotations
         warnings.warn(
             f"Could not resolve type hints for {func.__qualname__}: unresolved forward reference. "
-            f"Schema will use parameter defaults only.",
+            f"Schema will fall back to raw signature annotations.",
             stacklevel=2,
         )
         hints = {}
     except Exception:
         warnings.warn(
             f"Could not resolve type hints for {func.__qualname__}. "
-            f"Schema will use parameter defaults only.",
+            f"Schema will fall back to raw signature annotations.",
             stacklevel=2,
         )
         hints = {}
