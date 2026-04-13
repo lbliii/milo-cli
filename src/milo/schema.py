@@ -180,7 +180,7 @@ def function_to_schema(func: Callable[..., Any]) -> dict[str, Any]:
         ):
             try:
                 json.dumps(param.default)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 pass  # non-serializable nested value — omit default
             else:
                 prop["default"] = param.default

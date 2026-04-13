@@ -203,7 +203,7 @@ class Config:
                         int(actual_val)
                     elif expected_type is float:
                         float(actual_val)
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     errors.append(
                         f"{dotted}: expected {expected_type.__name__}, got {actual_val!r}"
                     )

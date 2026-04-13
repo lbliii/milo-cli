@@ -97,7 +97,7 @@ class Context:
             sys.stderr.write(message + suffix)
             sys.stderr.flush()
             answer = input().strip().lower()
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             sys.stderr.write("\n")
             return default
 
