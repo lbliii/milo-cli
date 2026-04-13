@@ -740,7 +740,7 @@ def _handler_wants_context(handler: Callable) -> bool:
     try:
         sig = inspect.signature(handler)
         return "context" in sig.parameters
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
 
 

@@ -137,9 +137,7 @@ class Config:
         """Convert to a Store-compatible state dict."""
         return self.as_dict()
 
-    def validate(
-        self, spec: ConfigSpec, *, raise_on_error: bool = False
-    ) -> list[str]:
+    def validate(self, spec: ConfigSpec, *, raise_on_error: bool = False) -> list[str]:
         """Validate config values against the spec's defaults for type consistency.
 
         Returns a list of error messages. An empty list means validation passed.
@@ -205,7 +203,7 @@ class Config:
                         int(actual_val)
                     elif expected_type is float:
                         float(actual_val)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     errors.append(
                         f"{dotted}: expected {expected_type.__name__}, got {actual_val!r}"
                     )
