@@ -867,7 +867,9 @@ class TestContextInjectionTypeCheck:
         from milo._command_defs import _is_context_param
         from milo.context import Context
 
-        param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context)
+        param = inspect.Parameter(
+            "ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context
+        )
         assert _is_context_param(param) is True
 
     def test_foreign_context_not_injected(self):
@@ -879,7 +881,9 @@ class TestContextInjectionTypeCheck:
         class Context:
             """A foreign class that happens to be named Context."""
 
-        param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context)
+        param = inspect.Parameter(
+            "ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context
+        )
         assert _is_context_param(param) is False
 
 

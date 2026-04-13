@@ -96,9 +96,7 @@ class HookRegistry:
                 )
             self._hooks[hook_name].append(fn)
 
-    def invoke(
-        self, hook_name: str, *, fail_fast: bool = True, **kwargs: Any
-    ) -> list[Any]:
+    def invoke(self, hook_name: str, *, fail_fast: bool = True, **kwargs: Any) -> list[Any]:
         """Invoke all listeners registered on a hook.
 
         Args:

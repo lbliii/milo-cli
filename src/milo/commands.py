@@ -813,10 +813,7 @@ class CLI:
         )
         result = self._consume_result(result)
         self._run_after_command_hooks(ctx, execution.command.name, result)
-        suppress = (
-            not execution.command.display_result
-            and not ctx.output_file
-        )
+        suppress = not execution.command.display_result and not ctx.output_file
         if not suppress:
             self._write_command_output(result, execution.fmt, ctx.output_file)
 

@@ -195,9 +195,7 @@ class TestHelpRendererTemplateRendering:
         )
         parser.add_argument("--name", help="Your name")
 
-        with patch.object(
-            HelpRenderer, "_render_with_template", side_effect=RuntimeError("boom")
-        ):
+        with patch.object(HelpRenderer, "_render_with_template", side_effect=RuntimeError("boom")):
             with pytest.warns(UserWarning, match="Help template rendering failed"):
                 parser.format_help()
 

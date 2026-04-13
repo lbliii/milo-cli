@@ -101,8 +101,7 @@ def _format_template(data: Any, template_name: str) -> str:
         import warnings
 
         warnings.warn(
-            f"Template {template_name!r} failed to load: {exc}. "
-            f"Falling back to plain format.",
+            f"Template {template_name!r} failed to load: {exc}. Falling back to plain format.",
             UserWarning,
             stacklevel=2,
         )

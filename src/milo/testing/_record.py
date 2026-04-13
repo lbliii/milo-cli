@@ -85,7 +85,7 @@ def save_recording(
             if "action_payload" in record_data:
                 try:
                     json.dumps(record_data["action_payload"])
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     record_data["action_payload"] = repr(record_data["action_payload"])
             f.write(json.dumps(record_data) + "\n")
 
@@ -105,9 +105,7 @@ def load_recording(path: str | Path) -> SessionRecording:
         raise ValueError(f"Empty or invalid recording file: {path}")
     lines = text.split("\n")
     if len(lines) < 2:
-        raise ValueError(
-            f"Recording file must have at least a header and footer: {path}"
-        )
+        raise ValueError(f"Recording file must have at least a header and footer: {path}")
 
     header = json.loads(lines[0])
     footer = json.loads(lines[-1])

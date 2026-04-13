@@ -40,8 +40,7 @@ class PhasePolicy:
     def __post_init__(self) -> None:
         if self.on_fail not in _VALID_ON_FAIL:
             raise ValueError(
-                f"PhasePolicy.on_fail must be one of {sorted(_VALID_ON_FAIL)}, "
-                f"got {self.on_fail!r}"
+                f"PhasePolicy.on_fail must be one of {sorted(_VALID_ON_FAIL)}, got {self.on_fail!r}"
             )
         if self.retry_backoff not in _VALID_BACKOFF:
             raise ValueError(
@@ -179,8 +178,11 @@ class Pipeline:
     def __rshift__(self, phase: Phase) -> Pipeline:
         """Extend the pipeline: ``pipeline >> Phase(...)``."""
         new = Pipeline(
-            self.name, *self.phases, phase,
-            capture_output=self.capture_output, fail_fast=self.fail_fast,
+            self.name,
+            *self.phases,
+            phase,
+            capture_output=self.capture_output,
+            fail_fast=self.fail_fast,
         )
         return new
 
@@ -796,7 +798,7 @@ def _handler_wants_context(handler: Callable) -> bool:
     try:
         sig = inspect.signature(handler)
         return "context" in sig.parameters
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return False
 
 
