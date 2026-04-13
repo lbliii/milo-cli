@@ -580,6 +580,7 @@ class TestStrictMode:
 
     def test_strict_allows_known_types(self) -> None:
         """strict=True should work fine for supported types."""
+
         def handler(name: str, count: int = 5, flag: bool = True) -> str:
             return ""
 

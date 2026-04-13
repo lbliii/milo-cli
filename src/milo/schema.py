@@ -96,9 +96,7 @@ _TYPE_MAP: dict[type, str] = {
 
 
 @functools.lru_cache(maxsize=256)
-def function_to_schema(
-    func: Callable[..., Any], *, strict: bool = False
-) -> dict[str, Any]:
+def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dict[str, Any]:
     """Generate MCP-compatible JSON Schema from function type annotations.
 
     Parameters with defaults are optional (not in required).
@@ -185,7 +183,7 @@ def function_to_schema(
         ):
             try:
                 json.dumps(param.default)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass  # non-serializable nested value — omit default
             else:
                 prop["default"] = param.default
@@ -318,7 +316,10 @@ def _type_to_schema(
     if origin is list:
         args = get_args(annotation)
         if args:
-            return {"type": "array", "items": _type_to_schema(args[0], _seen, _defs, _strict=_strict)}
+            return {
+                "type": "array",
+                "items": _type_to_schema(args[0], _seen, _defs, _strict=_strict),
+            }
         return {"type": "array"}
 
     # tuple[T, ...] → array with items
@@ -328,7 +329,10 @@ def _type_to_schema(
             # tuple[T, ...] (homogeneous) or tuple[T] (single-element)
             non_ellipsis = [a for a in args if a is not Ellipsis]
             if non_ellipsis:
-                return {"type": "array", "items": _type_to_schema(non_ellipsis[0], _seen, _defs, _strict=_strict)}
+                return {
+                    "type": "array",
+                    "items": _type_to_schema(non_ellipsis[0], _seen, _defs, _strict=_strict),
+                }
         return {"type": "array"}
 
     # set[T] / frozenset[T] → array with uniqueItems

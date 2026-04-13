@@ -84,7 +84,7 @@ def is_tty(fd: int | None = None) -> bool:
     if fd is None:
         try:
             fd = sys.stdin.fileno()
-        except (AttributeError, ValueError, OSError):
+        except AttributeError, ValueError, OSError:
             return False
     import os
 

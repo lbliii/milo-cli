@@ -450,7 +450,8 @@ class TestDevWarnings:
             cli.global_option("env", description="Environment")
             # No warnings about shadowing or late registration
             relevant = [
-                warn for warn in w
+                warn
+                for warn in w
                 if "shadows" in str(warn.message) or "after cli.run()" in str(warn.message)
             ]
             assert len(relevant) == 0

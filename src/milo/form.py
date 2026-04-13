@@ -282,8 +282,7 @@ def _form_fallback(
 
     def _timeout_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
         raise TimeoutError(
-            f"Form input timed out after {timeout}s. "
-            "Set timeout=None or provide input via stdin."
+            f"Form input timed out after {timeout}s. Set timeout=None or provide input via stdin."
         )
 
     if timeout is not None and timeout > 0 and hasattr(signal, "SIGALRM"):
@@ -306,7 +305,7 @@ def _form_fallback(
                     try:
                         idx = int(raw) - 1
                         values[spec.name] = spec.choices[idx]
-                    except (ValueError, IndexError):
+                    except ValueError, IndexError:
                         values[spec.name] = spec.choices[0] if spec.choices else ""
                 case _:
                     values[spec.name] = input(f"{spec.label}: ").strip()

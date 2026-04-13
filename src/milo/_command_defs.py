@@ -198,9 +198,7 @@ class LazyImportError(Exception):
         self.command_name = command_name
         self.import_path = import_path
         self.cause = cause
-        super().__init__(
-            f"Command {command_name!r} failed to import from {import_path!r}: {cause}"
-        )
+        super().__init__(f"Command {command_name!r} failed to import from {import_path!r}: {cause}")
 
 
 def _make_command_def(

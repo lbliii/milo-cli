@@ -971,7 +971,9 @@ class CLI:
             cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
         except LazyImportError as exc:
             sys.stderr.write(f"error: {exc}\n")
-            sys.stderr.write(f"  hint: Check that {exc.import_path!r} is installed and importable.\n")
+            sys.stderr.write(
+                f"  hint: Check that {exc.import_path!r} is installed and importable.\n"
+            )
             return None
         confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
         return CommandExecution(found=found, command=cmd, fmt=result.fmt, confirm_msg=confirm_msg)

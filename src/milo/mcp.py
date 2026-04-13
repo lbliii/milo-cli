@@ -49,10 +49,7 @@ class _CLIHandler:
         new_correlation_id()
         start = time.monotonic()
         # Invalidate cache when commands have been added or removed
-        if (
-            self._cached_tools is None
-            or self._cached_version != self._cli._command_version
-        ):
+        if self._cached_tools is None or self._cached_version != self._cli._command_version:
             self._cached_tools = _list_tools(self._cli)
             self._cached_version = self._cli._command_version
         log_request(self._logger, "tools/list", "", start)

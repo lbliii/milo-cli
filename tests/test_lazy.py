@@ -620,7 +620,11 @@ class TestLazyImportFailureGraceful:
             schema={"type": "object", "properties": {}},
         )
         result = cli.invoke(["broken"])
-        assert result.exit_code != 0 or "error" in result.stderr.lower() or "failed to import" in result.stderr.lower()
+        assert (
+            result.exit_code != 0
+            or "error" in result.stderr.lower()
+            or "failed to import" in result.stderr.lower()
+        )
 
     def test_mcp_list_skips_broken_lazy(self):
         """MCP tools/list should skip commands that fail to import."""
