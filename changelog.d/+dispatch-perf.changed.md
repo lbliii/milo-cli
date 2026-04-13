@@ -1,1 +1,0 @@
-Optimized dispatch lock hold time by replacing SHA256 with builtin hash and deferring recording append outside the lock. Fixed `get_env()` singleton cache that was never written, reducing repeated calls from 122μs to 125ns. Added bulk task accounting for Batch effects.

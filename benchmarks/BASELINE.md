@@ -1,4 +1,4 @@
-# Benchmark Baseline — v0.2.2-dev
+# Benchmark Baseline — v0.2.2
 
 **Date**: 2026-04-12
 **Platform**: macOS Darwin 25.3.0, Apple Silicon

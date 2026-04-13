@@ -1,1 +1,0 @@
-Bumped minimum kida-templates dependency to 0.5.0. This brings a correctness fix for variable bindings inside unrolled for-loops (affects form, select, pipeline, and component templates) and faster template compilation from cached `str.join` and filter folding.
