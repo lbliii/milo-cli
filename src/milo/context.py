@@ -83,11 +83,11 @@ class Context:
     def confirm(self, message: str, *, default: bool = False) -> bool:
         """Prompt for yes/no confirmation. Returns default in non-interactive mode.
 
-        In dry-run mode, always returns False.
+        In dry-run mode, returns *default* (does not prompt).
         """
         if self.dry_run:
             self.info(f"[dry-run] Would ask: {message}")
-            return False
+            return default
 
         if not sys.stdin.isatty():
             return default

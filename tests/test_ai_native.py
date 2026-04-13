@@ -827,10 +827,10 @@ class TestCLIConfirm:
         def delete() -> str:
             return "deleted"
 
-        # Non-interactive stdin -> confirm returns False -> aborted
+        # Non-interactive stdin -> confirm returns False -> exit 130
         if not sys.stdin.isatty():
-            result = cli.run(["delete"])
-            assert result is None
+            with pytest.raises(SystemExit, match="130"):
+                cli.run(["delete"])
             assert "Aborted" in capsys.readouterr().err
 
     def test_confirm_skipped_in_dry_run(self, capsys):
@@ -843,6 +843,58 @@ class TestCLIConfirm:
         # Dry-run skips confirmation gate, runs the command
         result = cli.run(["-n", "delete"])
         assert result == "deleted"
+
+
+class TestDryRunConfirmDefault:
+    def test_dry_run_confirm_returns_default_true(self):
+        from milo.context import Context
+
+        ctx = Context(dry_run=True)
+        assert ctx.confirm("Deploy?", default=True) is True
+
+    def test_dry_run_confirm_returns_default_false(self):
+        from milo.context import Context
+
+        ctx = Context(dry_run=True)
+        assert ctx.confirm("Deploy?", default=False) is False
+
+
+class TestContextInjectionTypeCheck:
+    def test_milo_context_is_injected(self):
+        """milo.context.Context is recognized as a context parameter."""
+        from milo._command_defs import _is_context_param
+        from milo.context import Context
+        import inspect
+
+        param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context)
+        assert _is_context_param(param) is True
+
+    def test_foreign_context_not_injected(self):
+        """A class named Context from another module is NOT injected."""
+        from milo._command_defs import _is_context_param
+        import inspect
+
+        class Context:
+            """A foreign class that happens to be named Context."""
+
+        param = inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context)
+        assert _is_context_param(param) is False
+
+
+class TestBoolFlagHelpText:
+    def test_no_flag_has_help_hint(self, capsys):
+        """Boolean flags with default=True show a disable hint in help."""
+        cli = CLI(name="app")
+
+        @cli.command("build", description="Build the project")
+        def build(minify: bool = True) -> str:
+            return "built"
+
+        with pytest.raises(SystemExit):
+            cli.run(["build", "--help"])
+        out = capsys.readouterr().out
+        assert "--no-minify" in out
+        assert "disable" in out.lower()
 
 
 class TestCLIDidYouMean:
