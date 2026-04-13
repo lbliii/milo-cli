@@ -13,11 +13,15 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from milo._errors import ErrorCode, PipelineError
-from milo._types import Action, Call, Delay, Fork, Key, Put, Quit, SpecialKey
+from milo._types import Action, All, Call, Delay, Key, Put, Quit, SpecialKey
 
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
+
+
+_VALID_ON_FAIL = frozenset({"stop", "skip", "retry"})
+_VALID_BACKOFF = frozenset({"fixed", "exponential"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +36,17 @@ class PhasePolicy:
     max_retries: int = 0
     retry_delay: float = 1.0
     retry_backoff: str = "fixed"  # "fixed" | "exponential"
+
+    def __post_init__(self) -> None:
+        if self.on_fail not in _VALID_ON_FAIL:
+            raise ValueError(
+                f"PhasePolicy.on_fail must be one of {sorted(_VALID_ON_FAIL)}, got {self.on_fail!r}"
+            )
+        if self.retry_backoff not in _VALID_BACKOFF:
+            raise ValueError(
+                f"PhasePolicy.retry_backoff must be one of {sorted(_VALID_BACKOFF)}, "
+                f"got {self.retry_backoff!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,15 +162,28 @@ class Pipeline:
     contains a cycle.
     """
 
-    def __init__(self, name: str, *phases: Phase, capture_output: bool = False) -> None:
+    def __init__(
+        self,
+        name: str,
+        *phases: Phase,
+        capture_output: bool = False,
+        fail_fast: bool = False,
+    ) -> None:
         self.name = name
         self.phases = list(phases)
         self.capture_output = capture_output
+        self.fail_fast = fail_fast
         _validate_dependencies(self.phases)
 
     def __rshift__(self, phase: Phase) -> Pipeline:
         """Extend the pipeline: ``pipeline >> Phase(...)``."""
-        new = Pipeline(self.name, *self.phases, phase, capture_output=self.capture_output)
+        new = Pipeline(
+            self.name,
+            *self.phases,
+            phase,
+            capture_output=self.capture_output,
+            fail_fast=self.fail_fast,
+        )
         return new
 
     def build_reducer(self) -> Callable:
@@ -325,6 +353,7 @@ class Pipeline:
         dep_graph = {p.name: set(p.depends_on) for p in phases}
         phase_map = {p.name: p for p in phases}
         capture = self.capture_output
+        use_fail_fast = self.fail_fast
 
         def saga():
             yield Put(Action(PIPELINE_START, time.monotonic()))
@@ -337,10 +366,21 @@ class Pipeline:
                 ready = [name for name in remaining if dep_graph[name].issubset(executed)]
 
                 if not ready:
+                    # Identify which dependencies are blocking
+                    blocked = next(iter(remaining))
+                    unmet = dep_graph[blocked] - executed
                     yield Put(
                         Action(
                             PHASE_FAILED,
-                            {"name": next(iter(remaining)), "error": "Unresolvable dependencies"},
+                            {
+                                "name": blocked,
+                                "error": (
+                                    f"Unresolvable dependencies: phase {blocked!r} "
+                                    f"is waiting on {sorted(unmet)} which "
+                                    f"{'has' if len(unmet) == 1 else 'have'} "
+                                    f"not completed"
+                                ),
+                            },
                         )
                     )
                     return
@@ -349,17 +389,33 @@ class Pipeline:
                 sequential_ready = [n for n in ready if not phase_map[n].parallel]
 
                 if parallel_ready:
+                    parallel_sagas = []
                     for name in parallel_ready:
                         phase = phase_map[name]
                         ctx = _build_context(phase, results)
-                        yield Fork(
+                        parallel_sagas.append(
                             _make_phase_saga(
-                                name, phase.handler, phase.policy, ctx, results, capture
-                            )
+                                name,
+                                phase.handler,
+                                phase.policy,
+                                ctx,
+                                results,
+                                capture,
+                                fail_fast=use_fail_fast,
+                            )()  # call to produce generator — All expects generators
                         )
+                    # Always use All to wait for parallel phases before
+                    # marking them as executed (avoids race where downstream
+                    # phases start before results are available).
+                    yield All(sagas=tuple(parallel_sagas))
                     for name in parallel_ready:
                         remaining.discard(name)
                         executed.add(name)
+                    # If fail_fast, stop pipeline when any parallel phase failed
+                    if use_fail_fast:
+                        failed_phases = [n for n in parallel_ready if n not in results]
+                        if failed_phases:
+                            return
 
                 for name in sequential_ready:
                     phase = phase_map[name]
@@ -577,6 +633,17 @@ def _validate_dependencies(phases: list[Phase]) -> None:
     names = {p.name for p in phases}
     dep_graph = {p.name: set(p.depends_on) for p in phases}
 
+    # Check for references to non-existent phases
+    for phase in phases:
+        missing = [dep for dep in phase.depends_on if dep not in names]
+        if missing:
+            raise PipelineError(
+                ErrorCode.PIP_DEPENDENCY,
+                f"Phase {phase.name!r} depends on {missing} which "
+                f"{'does' if len(missing) == 1 else 'do'} not exist. "
+                f"Available phases: {sorted(names)}",
+            )
+
     # DFS-based cycle detection
     _white, _gray, _black = 0, 1, 2
     color: dict[str, int] = dict.fromkeys(names, _white)
@@ -746,7 +813,15 @@ def _handler_wants_context(handler: Callable) -> bool:
 
 def _build_context(phase: Phase, results: dict[str, Any]) -> dict[str, Any]:
     """Build the context dict for a phase from its dependency results."""
-    return {dep: results.get(dep) for dep in phase.depends_on}
+    missing = [dep for dep in phase.depends_on if dep not in results]
+    if missing:
+        raise PipelineError(
+            ErrorCode.PIP_PHASE,
+            f"Phase {phase.name!r} depends on {missing} but "
+            f"{'that phase does' if len(missing) == 1 else 'those phases do'} "
+            f"not exist in results. Check depends_on for typos.",
+        )
+    return {dep: results[dep] for dep in phase.depends_on}
 
 
 def _call_handler(handler: Callable, context: dict[str, Any]) -> Any:
@@ -822,8 +897,15 @@ def _make_phase_saga(
     context: dict[str, Any],
     results: dict[str, Any],
     capture: bool = False,
+    *,
+    fail_fast: bool = False,
 ) -> Callable:
-    """Create a saga for a single phase (used by Fork for parallel phases)."""
+    """Create a saga for a single phase (used by All for parallel phases).
+
+    When *fail_fast* is True and the phase fails with ``on_fail="stop"``
+    (the default), the saga re-raises after dispatching ``PHASE_FAILED``
+    so that ``All`` can cancel sibling sagas.
+    """
 
     def phase_saga():
         max_attempts = policy.max_retries + 1 if policy.on_fail == "retry" else 1
@@ -862,8 +944,15 @@ def _make_phase_saga(
                     return
                 else:
                     yield Put(Action(PHASE_FAILED, {"name": name, "error": str(e)}))
+                    if fail_fast:
+                        raise  # propagate so All cancels siblings
                     return
 
         yield Put(Action(PHASE_FAILED, {"name": name, "error": "retries exhausted"}))
+        if fail_fast:
+            raise PipelineError(
+                ErrorCode.PIP_PHASE,
+                f"Phase {name!r} failed after {max_attempts} attempt(s)",
+            )
 
     return phase_saga

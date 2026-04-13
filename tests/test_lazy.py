@@ -540,8 +540,8 @@ class TestDisplayResult:
         assert result.output == ""
         assert result.result == {"status": "ok", "count": 42}
 
-    def test_display_result_false_allows_json(self):
-        """display_result=False still outputs with --format json."""
+    def test_display_result_false_suppresses_json(self):
+        """display_result=False suppresses output in all formats including JSON."""
         cli = CLI(name="app")
 
         @cli.command("info", display_result=False)
@@ -549,7 +549,8 @@ class TestDisplayResult:
             return {"status": "ok"}
 
         result = cli.invoke(["info", "--format", "json"])
-        assert '"status"' in result.output
+        assert result.output == ""
+        assert result.result == {"status": "ok"}
 
     def test_display_result_true_default(self):
         """By default, display_result=True and output is shown."""

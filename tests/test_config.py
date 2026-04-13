@@ -284,6 +284,11 @@ class TestConfigErrors:
         except ImportError:
             pytest.skip("pyyaml not installed")
 
+    def test_missing_overlay_warns(self, tmp_path):
+        spec = ConfigSpec(sources=(), overlays={"prod": "config/prod.toml"})
+        with pytest.warns(UserWarning, match="Config overlay file not found"):
+            Config.load(spec, root=tmp_path, overlay="prod")
+
 
 class TestConfigValidation:
     def test_valid_config(self):

@@ -96,8 +96,15 @@ class HookRegistry:
                 )
             self._hooks[hook_name].append(fn)
 
-    def invoke(self, hook_name: str, **kwargs: Any) -> list[Any]:
+    def invoke(self, hook_name: str, *, fail_fast: bool = True, **kwargs: Any) -> list[Any]:
         """Invoke all listeners registered on a hook.
+
+        Args:
+            hook_name: The hook to invoke.
+            fail_fast: If True (default), stop on the first listener error.
+                If False, run all listeners and raise an aggregate error
+                after all have been called.
+            **kwargs: Arguments passed to each listener.
 
         Returns a list of return values from each listener.
         Listeners are called in registration order.
@@ -106,14 +113,24 @@ class HookRegistry:
             listeners = list(self._hooks.get(hook_name, []))
 
         results = []
+        errors: list[tuple[str, Exception]] = []
         for fn in listeners:
+            fn_name = getattr(fn, "__name__", repr(fn))
             try:
                 results.append(fn(**kwargs))
             except Exception as e:
-                raise PluginError(
-                    ErrorCode.PLG_HOOK,
-                    f"Hook '{hook_name}' listener {getattr(fn, '__name__', repr(fn))!r} raised: {e}",
-                ) from e
+                if fail_fast:
+                    raise PluginError(
+                        ErrorCode.PLG_HOOK,
+                        f"Hook '{hook_name}' listener {fn_name!r} raised: {e}",
+                    ) from e
+                errors.append((fn_name, e))
+        if errors:
+            details = "; ".join(f"{name}: {err}" for name, err in errors)
+            raise PluginError(
+                ErrorCode.PLG_HOOK,
+                f"Hook '{hook_name}' had {len(errors)} listener error(s): {details}",
+            ) from errors[0][1]
         return results
 
     def freeze(self) -> None:

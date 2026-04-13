@@ -742,6 +742,9 @@ class CLI:
                     # default=True → --no-xxx flag to disable
                     flag = f"--no-{param_name.replace('_', '-')}"
                     kwargs["action"] = "store_false"
+                    desc = param_schema.get("description", "")
+                    hint = f"disable {param_name.replace('_', ' ')}"
+                    kwargs["help"] = f"{desc} ({hint})" if desc else hint
                     parser.add_argument(flag, dest=param_name, **kwargs)
                     continue
                 else:
@@ -801,7 +804,7 @@ class CLI:
 
         if execution.confirm_msg and not ctx.dry_run and not ctx.confirm(execution.confirm_msg):
             sys.stderr.write("Aborted.\n")
-            return None
+            sys.exit(130)
 
         result = self._execute_command(
             execution.command,
@@ -810,11 +813,7 @@ class CLI:
         )
         result = self._consume_result(result)
         self._run_after_command_hooks(ctx, execution.command.name, result)
-        suppress = (
-            not execution.command.display_result
-            and execution.fmt == "plain"
-            and not ctx.output_file
-        )
+        suppress = not execution.command.display_result and not ctx.output_file
         if not suppress:
             self._write_command_output(result, execution.fmt, ctx.output_file)
 

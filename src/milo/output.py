@@ -97,7 +97,14 @@ def _format_template(data: Any, template_name: str) -> str:
     env = get_env()
     try:
         tmpl = env.get_template(template_name)
-    except Exception:
+    except Exception as exc:
+        import warnings
+
+        warnings.warn(
+            f"Template {template_name!r} failed to load: {exc}. Falling back to plain format.",
+            UserWarning,
+            stacklevel=2,
+        )
         return _format_plain(data)
     return tmpl.render(state=data)
 

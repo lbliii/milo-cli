@@ -114,6 +114,20 @@ class TestRecording:
             assert loaded.records[1].action.type == "increment"
             assert loaded.metadata == {"version": "0.1.0"}
 
+    def test_load_empty_file_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "empty.jsonl"
+            path.write_text("")
+            with pytest.raises(ValueError, match="Empty or invalid recording file"):
+                load_recording(path)
+
+    def test_load_single_line_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "short.jsonl"
+            path.write_text('{"type": "header"}\n')
+            with pytest.raises(ValueError, match="at least a header and footer"):
+                load_recording(path)
+
 
 # ---------------------------------------------------------------------------
 # assert_renders tests

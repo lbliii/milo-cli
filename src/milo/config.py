@@ -103,6 +103,14 @@ class Config:
             if overlay_path.exists():
                 overlay_data = _load_file(str(overlay_path))
                 _deep_merge(data, overlay_data, origins, origin=f"overlay:{overlay}")
+            else:
+                import warnings
+
+                warnings.warn(
+                    f"Config overlay file not found: {overlay_path}",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         return cls(data, origins)
 

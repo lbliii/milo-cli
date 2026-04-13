@@ -100,7 +100,12 @@ def save_recording(
 def load_recording(path: str | Path) -> SessionRecording:
     """Load a session recording from JSONL."""
     path = Path(path)
-    lines = path.read_text().strip().split("\n")
+    text = path.read_text().strip()
+    if not text:
+        raise ValueError(f"Empty or invalid recording file: {path}")
+    lines = text.split("\n")
+    if len(lines) < 2:
+        raise ValueError(f"Recording file must have at least a header and footer: {path}")
 
     header = json.loads(lines[0])
     footer = json.loads(lines[-1])

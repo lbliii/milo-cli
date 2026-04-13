@@ -217,12 +217,14 @@ def _make_command_def(
 
 def _is_context_param(param: inspect.Parameter) -> bool:
     """Check if a parameter is a Context injection point."""
+    from milo.context import Context as _MiloContext
+
     annotation = param.annotation
     if annotation is inspect.Parameter.empty:
         return False
-    # Check for Context type or string annotation
+    # Check for exact type identity or subclass of milo.context.Context
     if isinstance(annotation, type):
-        return annotation.__name__ == "Context"
+        return issubclass(annotation, _MiloContext)
     if isinstance(annotation, str):
         return annotation in ("Context", "milo.context.Context")
     return False

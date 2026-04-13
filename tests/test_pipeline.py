@@ -62,6 +62,41 @@ class TestPipelineCreation:
         # Original unchanged
         assert len(p1.phases) == 1
 
+    def test_phase_policy_validates_on_fail(self):
+        with pytest.raises(ValueError, match="on_fail must be one of"):
+            PhasePolicy(on_fail="stpo")
+
+    def test_phase_policy_validates_retry_backoff(self):
+        with pytest.raises(ValueError, match="retry_backoff must be one of"):
+            PhasePolicy(retry_backoff="linear")
+
+    def test_phase_policy_valid_values(self):
+        for on_fail in ("stop", "skip", "retry"):
+            for backoff in ("fixed", "exponential"):
+                p = PhasePolicy(on_fail=on_fail, retry_backoff=backoff)
+                assert p.on_fail == on_fail
+                assert p.retry_backoff == backoff
+
+    def test_pipeline_rejects_nonexistent_dependency(self):
+        from milo._errors import PipelineError
+
+        with pytest.raises(PipelineError, match="does not exist"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None),
+                Phase("b", handler=lambda: None, depends_on=("typo",)),
+            )
+
+    def test_pipeline_nonexistent_dep_lists_available(self):
+        from milo._errors import PipelineError
+
+        with pytest.raises(PipelineError, match="Available phases"):
+            Pipeline(
+                "p",
+                Phase("a", handler=lambda: None),
+                Phase("b", handler=lambda: None, depends_on=("missing",)),
+            )
+
 
 # ---------------------------------------------------------------------------
 # Reducer
@@ -295,6 +330,60 @@ class TestExecutionOrder:
         )
         order = pipeline.execution_order()
         assert set(order) == {"a", "b"}
+
+    def test_fail_fast_pipeline_uses_all_for_parallel(self):
+        """fail_fast=True uses All instead of Fork for parallel phases."""
+        from milo._types import All
+
+        pipeline = Pipeline(
+            "build",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",), parallel=True),
+            Phase("c", handler=lambda: None, depends_on=("a",), parallel=True),
+            fail_fast=True,
+        )
+        saga = pipeline.build_saga()
+        gen = saga()
+
+        # PIPELINE_START
+        next(gen)
+        # PHASE_START a
+        gen.send(None)
+        # Call a
+        gen.send(None)
+        # PHASE_COMPLETE a
+        gen.send("ok")
+
+        # Next should be an All effect (not Fork) for the parallel phases
+        effect = gen.send(None)
+        assert isinstance(effect, All), f"Expected All, got {type(effect).__name__}"
+
+    def test_non_fail_fast_also_uses_all_for_parallel(self):
+        """fail_fast=False also uses All to wait for parallel phases."""
+        from milo._types import All
+
+        pipeline = Pipeline(
+            "build",
+            Phase("a", handler=lambda: None),
+            Phase("b", handler=lambda: None, depends_on=("a",), parallel=True),
+            Phase("c", handler=lambda: None, depends_on=("a",), parallel=True),
+            fail_fast=False,
+        )
+        saga = pipeline.build_saga()
+        gen = saga()
+
+        # PIPELINE_START
+        next(gen)
+        # PHASE_START a
+        gen.send(None)
+        # Call a
+        gen.send(None)
+        # PHASE_COMPLETE a
+        gen.send("ok")
+
+        # Both paths use All to wait before marking phases as executed
+        effect = gen.send(None)
+        assert isinstance(effect, All), f"Expected All, got {type(effect).__name__}"
 
 
 # ---------------------------------------------------------------------------
@@ -621,6 +710,15 @@ class TestPhaseContext:
 
         assert received_context == {"a": None}
         assert store.state.status == "completed"
+
+    def test_build_context_rejects_missing_dependency(self):
+        """_build_context raises PipelineError for misspelled dependency names."""
+        from milo._errors import PipelineError
+        from milo.pipeline import _build_context
+
+        phase = Phase("render", handler=lambda ctx: None, depends_on=("typo",))
+        with pytest.raises(PipelineError, match="typo"):
+            _build_context(phase, results={"parse": "ok"})
 
 
 # ---------------------------------------------------------------------------
