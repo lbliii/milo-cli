@@ -95,7 +95,10 @@ def _format_template(data: Any, template_name: str) -> str:
     from milo.templates import get_env
 
     env = get_env()
-    tmpl = env.get_template(template_name)
+    try:
+        tmpl = env.get_template(template_name)
+    except Exception:
+        return _format_plain(data)
     return tmpl.render(state=data)
 
 

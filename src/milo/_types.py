@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -326,6 +327,14 @@ class Take:
 
     action_type: str
     timeout: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.timeout is None:
+            warnings.warn(
+                f"Take({self.action_type!r}) has no timeout and may block forever. "
+                f"Consider setting timeout= to prevent silent hangs.",
+                stacklevel=2,
+            )
 
 
 @dataclass(frozen=True, slots=True)

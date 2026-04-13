@@ -137,16 +137,28 @@ class Config:
         """Convert to a Store-compatible state dict."""
         return self.as_dict()
 
-    def validate(self, spec: ConfigSpec) -> list[str]:
+    def validate(self, spec: ConfigSpec, *, raise_on_error: bool = False) -> list[str]:
         """Validate config values against the spec's defaults for type consistency.
 
         Returns a list of error messages. An empty list means validation passed.
         Type expectations are inferred from the default values in ``spec.defaults``.
+
+        When *raise_on_error* is True, raises :class:`ConfigError` if any
+        validation errors are found instead of returning the list.
         """
         errors: list[str] = []
         if not spec.defaults:
             return errors
         self._validate_types(spec.defaults, self._data, errors, prefix="")
+        if errors and raise_on_error:
+            from milo._errors import ConfigError, ErrorCode
+
+            raise ConfigError(
+                ErrorCode.CFG_VALIDATE,
+                f"Config validation failed with {len(errors)} error(s): {'; '.join(errors)}",
+                suggestion="Check config files and environment variables for type mismatches.",
+                context={"errors": errors},
+            )
         return errors
 
     @staticmethod

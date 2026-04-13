@@ -600,7 +600,7 @@ class Store:
                             )
                         )
                     except Exception:
-                        _logger.debug("Failed to dispatch @@SAGA_CANCELLED", exc_info=True)
+                        _logger.warning("Failed to dispatch @@SAGA_CANCELLED", exc_info=True)
                     return
 
                 # Debounce needs per-saga state, so it's dispatched separately
@@ -639,7 +639,7 @@ class Store:
                     )
                 )
             except Exception:
-                _logger.debug("Failed to dispatch @@SAGA_ERROR", exc_info=True)
+                _logger.warning("Failed to dispatch @@SAGA_ERROR", exc_info=True)
         finally:
             if pending_debounce:
                 old_timer, old_ctx = pending_debounce[0]

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
 from milo._compat import data_dir
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,28 +63,31 @@ def check_version(
                         message=f"Update available: {current_version} -> {latest}",
                     )
                 return None
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.warn(
+                f"Failed to read version cache {cache_file}: {e}",
+                stacklevel=2,
+            )
 
     # Fetch from PyPI
     try:
         latest = _fetch_latest_version(package_name)
-    except Exception:
+    except Exception as e:
+        _logger.debug("Version check failed for %s: %s", package_name, e)
         return None
 
-    # Cache the result
+    # Cache the result (atomic write via temp file + rename)
     try:
         cache.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(
-            json.dumps(
-                {
-                    "latest": latest,
-                    "checked_at": time.time(),
-                }
-            )
+        tmp_path = cache_file.with_suffix(".tmp")
+        content = json.dumps({"latest": latest, "checked_at": time.time()})
+        tmp_path.write_text(content)
+        os.replace(tmp_path, cache_file)
+    except Exception as e:
+        warnings.warn(
+            f"Failed to write version cache {cache_file}: {e}",
+            stacklevel=2,
         )
-    except Exception:
-        pass
 
     if latest and latest != current_version:
         return VersionInfo(
