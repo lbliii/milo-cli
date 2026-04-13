@@ -128,7 +128,7 @@ class Context:
         if self.dry_run:
             self.info(f"[dry-run] Would run: {' '.join(cmd)}")
             return None
-        return subprocess.run(cmd, **kwargs)  # noqa: S603
+        return subprocess.run(cmd, **kwargs)
 
     def progress(self, total: int = 0, *, label: str = "") -> CLIProgress:
         """Create an inline progress indicator for CLI commands.

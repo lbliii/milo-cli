@@ -280,7 +280,7 @@ def _form_fallback(
 
     deadline_active = False
 
-    def _timeout_handler(signum: int, frame: Any) -> None:
+    def _timeout_handler(signum: int, frame: Any) -> None:  # noqa: ARG001
         raise TimeoutError(
             f"Form input timed out after {timeout}s. "
             "Set timeout=None or provide input via stdin."

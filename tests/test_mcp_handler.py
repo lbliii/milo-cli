@@ -374,7 +374,7 @@ class TestMCPStructuredErrors:
         from milo.mcp import _classify_exception
 
         exc = MiloError(ErrorCode.CMD_NOT_FOUND, "unknown command")
-        code, data = _classify_exception(exc)
+        code, _data = _classify_exception(exc)
         assert code == -32601
 
     def test_classify_generic_exception(self) -> None:

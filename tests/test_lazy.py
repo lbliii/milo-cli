@@ -101,14 +101,13 @@ class TestLazyCommandDef:
             "nonexistent.module:func",
             description="Bad module",
         )
-        with pytest.raises(LazyImportError, match="nonexistent.module"):
+        with pytest.raises(LazyImportError, match=r"nonexistent\.module"):
             cmd.resolve()
         # Original cause is preserved
-        try:
-            cmd._resolved = None  # reset cache
+        cmd._resolved = None  # reset cache
+        with pytest.raises(LazyImportError) as exc_info:
             cmd.resolve()
-        except LazyImportError as exc:
-            assert isinstance(exc.cause, ModuleNotFoundError)
+        assert isinstance(exc_info.value.cause, ModuleNotFoundError)
 
     def test_invalid_attribute(self):
         cmd = LazyCommandDef(
@@ -118,11 +117,10 @@ class TestLazyCommandDef:
         )
         with pytest.raises(LazyImportError, match="nonexistent"):
             cmd.resolve()
-        try:
-            cmd._resolved = None
+        cmd._resolved = None
+        with pytest.raises(LazyImportError) as exc_info:
             cmd.resolve()
-        except LazyImportError as exc:
-            assert isinstance(exc.cause, AttributeError)
+        assert isinstance(exc_info.value.cause, AttributeError)
 
     def test_thread_safety(self):
         cmd = LazyCommandDef(
@@ -609,7 +607,7 @@ class TestLazyImportFailureGraceful:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            parser = cli.build_parser()
+            cli.build_parser()
             assert any("broken" in str(warn.message) for warn in w)
 
     def test_dispatch_shows_error_for_broken_lazy(self):
