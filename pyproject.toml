@@ -187,3 +187,6 @@ dev = [
     # Changelog
     "towncrier>=24.0",
 ]
+docs = [
+    "bengal>=0.2.6",
+]
