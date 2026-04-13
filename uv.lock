@@ -478,7 +478,7 @@ wheels = [
 
 [[package]]
 name = "milo-cli"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "kida-templates" },
@@ -508,6 +508,9 @@ dev = [
     { name = "towncrier" },
     { name = "ty" },
 ]
+docs = [
+    { name = "bengal" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -531,6 +534,7 @@ dev = [
     { name = "towncrier", specifier = ">=24.0" },
     { name = "ty", specifier = ">=0.0.11" },
 ]
+docs = [{ name = "bengal", specifier = ">=0.2.6" }]
 
 [[package]]
 name = "multidict"
