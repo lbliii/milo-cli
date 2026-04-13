@@ -322,3 +322,79 @@ class TestCLIHandler:
         handler = _CLIHandler(cli, cached_tools=cached)
         result = handler.list_tools({})
         assert result["tools"] == cached
+
+    def test_cache_invalidated_on_new_command(self) -> None:
+        """tools/list should include commands registered after server init."""
+        cli = _make_cli()
+        handler = _CLIHandler(cli)
+        first = handler.list_tools({})
+        first_names = {t["name"] for t in first["tools"]}
+        assert "late" not in first_names
+
+        # Register a new command after handler was created
+        @cli.command("late", description="Registered late")
+        def late() -> str:
+            return "late"
+
+        second = handler.list_tools({})
+        second_names = {t["name"] for t in second["tools"]}
+        assert "late" in second_names
+
+    def test_cache_not_regenerated_when_unchanged(self) -> None:
+        """tools/list should reuse cache if no commands were added."""
+        cli = _make_cli()
+        handler = _CLIHandler(cli)
+        first = handler.list_tools({})
+        second = handler.list_tools({})
+        # Same list object (not regenerated)
+        assert first["tools"] is second["tools"]
+
+
+# ---------------------------------------------------------------------------
+# Structured MCP errors
+# ---------------------------------------------------------------------------
+
+
+class TestMCPStructuredErrors:
+    def test_classify_milo_validation_error(self) -> None:
+        """MiloError with config code should map to -32602."""
+        from milo._errors import ConfigError, ErrorCode
+        from milo.mcp import _classify_exception
+
+        exc = ConfigError(ErrorCode.CFG_VALIDATE, "bad config", suggestion="fix it")
+        code, data = _classify_exception(exc)
+        assert code == -32602
+        assert data["errorCode"] == "M-CFG-003"
+        assert data["type"] == "ConfigError"
+        assert data["suggestion"] == "fix it"
+
+    def test_classify_milo_not_found_error(self) -> None:
+        """MiloError with CMD_NOT_FOUND should map to -32601."""
+        from milo._errors import ErrorCode, MiloError
+        from milo.mcp import _classify_exception
+
+        exc = MiloError(ErrorCode.CMD_NOT_FOUND, "unknown command")
+        code, data = _classify_exception(exc)
+        assert code == -32601
+
+    def test_classify_generic_exception(self) -> None:
+        """Non-MiloError should map to -32603 with traceback."""
+        from milo.mcp import _classify_exception
+
+        exc = RuntimeError("boom")
+        code, data = _classify_exception(exc)
+        assert code == -32603
+        assert data["type"] == "RuntimeError"
+        assert "traceback" in data
+        assert "boom" in data["traceback"]
+
+    def test_classify_milo_internal_error(self) -> None:
+        """MiloError with non-validation code should include traceback."""
+        from milo._errors import ErrorCode, PipelineError
+        from milo.mcp import _classify_exception
+
+        exc = PipelineError(ErrorCode.PIP_TIMEOUT, "timed out")
+        code, data = _classify_exception(exc)
+        assert code == -32603
+        assert data["errorCode"] == "M-PIP-002"
+        assert "traceback" in data

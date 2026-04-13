@@ -17,6 +17,7 @@ from milo._command_defs import (
     GlobalOption,
     InvokeResult,
     LazyCommandDef,
+    LazyImportError,
     PromptDef,
     ResourceDef,
     _is_context_param,
@@ -37,6 +38,7 @@ __all__ = [
     "GlobalOption",
     "InvokeResult",
     "LazyCommandDef",
+    "LazyImportError",
     "PromptDef",
     "ResourceDef",
 ]
@@ -168,6 +170,10 @@ class CLI:
         self._middleware: MiddlewareStack | None = None
         self._before_command: list[Callable] = []
         self._after_command: list[Callable] = []
+        self._command_version: int = 0
+        """Incremented when commands are added or removed; used by MCP cache."""
+        self._run_called: bool = False
+        """Set to True after run() is called; used for dev warnings."""
 
     def global_option(
         self,
@@ -186,6 +192,16 @@ class CLI:
             cli.global_option("environment", short="-e", default="local",
                               description="Config environment")
         """
+        # Warn if global option name shadows a command
+        if name in self._commands or name.replace("_", "-") in self._commands:
+            import warnings
+
+            warnings.warn(
+                f"Global option {name!r} shadows a command with the same name. "
+                f"This may cause unexpected behavior.",
+                UserWarning,
+                stacklevel=2,
+            )
         self._global_options.append(
             GlobalOption(
                 name=name,
@@ -255,6 +271,15 @@ class CLI:
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            if self._run_called:
+                import warnings
+
+                warnings.warn(
+                    f"Command {name!r} registered after cli.run() was called. "
+                    f"It won't be available in this invocation.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             cmd = _make_command_def(
                 name,
                 func,
@@ -270,6 +295,7 @@ class CLI:
             self._commands[name] = cmd
             for alias in aliases:
                 self._alias_map[alias] = name
+            self._command_version += 1
 
             return func
 
@@ -315,6 +341,7 @@ class CLI:
         self._commands[name] = cmd
         for alias in aliases:
             self._alias_map[alias] = name
+        self._command_version += 1
         return cmd
 
     def resource(
@@ -633,6 +660,12 @@ class CLI:
             metavar="FILE",
             help="Write output to FILE instead of stdout",
         )
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            default=False,
+            help="Overwrite output file if it exists",
+        )
 
         # User-defined global options
         for opt in self._global_options:
@@ -676,7 +709,18 @@ class CLI:
                 aliases=list(cmd.aliases),
                 formatter_class=fmt_class,
             )
-            self._add_arguments_from_schema(sub, cmd.schema, cmd)
+            try:
+                schema = cmd.schema
+            except LazyImportError as exc:
+                import warnings
+
+                warnings.warn(
+                    f"Command {cmd.name!r} failed to load: {exc.cause}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                schema = {"type": "object", "properties": {}}
+            self._add_arguments_from_schema(sub, schema, cmd)
             sub.add_argument(
                 "--format",
                 choices=["plain", "json", "table"],
@@ -787,6 +831,7 @@ class CLI:
 
     def run(self, argv: list[str] | None = None) -> Any:
         """Parse args and dispatch to the appropriate command."""
+        self._run_called = True
         parser = self.build_parser()
         self._parser = parser
         args = parser.parse_args(argv)
@@ -815,7 +860,8 @@ class CLI:
         self._run_after_command_hooks(ctx, execution.command.name, result)
         suppress = not execution.command.display_result and not ctx.output_file
         if not suppress:
-            self._write_command_output(result, execution.fmt, ctx.output_file)
+            force = getattr(args, "force", False)
+            self._write_command_output(result, execution.fmt, ctx.output_file, force=force)
 
         return result
 
@@ -921,7 +967,12 @@ class CLI:
             return None
 
         found = result.command
-        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        try:
+            cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        except LazyImportError as exc:
+            sys.stderr.write(f"error: {exc}\n")
+            sys.stderr.write(f"  hint: Check that {exc.import_path!r} is installed and importable.\n")
+            return None
         confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
         return CommandExecution(found=found, command=cmd, fmt=result.fmt, confirm_msg=confirm_msg)
 
@@ -947,7 +998,10 @@ class CLI:
     def _get_resolved_command(
         self, command_name: str
     ) -> tuple[CommandDef | LazyCommandDef, CommandDef]:
-        """Resolve a command name to the registered definition and eager command."""
+        """Resolve a command name to the registered definition and eager command.
+
+        Raises :class:`LazyImportError` if a lazy command fails to import.
+        """
         found = self.get_command(command_name)
         if not found:
             suggestion = self.suggest_command(command_name)
@@ -1056,9 +1110,21 @@ class CLI:
                 sys.stderr.write(f"  {p.status}\n")
         return final_value
 
-    def _write_command_output(self, result: Any, fmt: str, output_file: str) -> None:
-        """Write command output to stdout or a file."""
+    def _write_command_output(
+        self, result: Any, fmt: str, output_file: str, *, force: bool = False
+    ) -> None:
+        """Write command output to stdout or a file.
+
+        When *output_file* already exists and *force* is False, prints an
+        error and exits instead of silently overwriting.
+        """
         if output_file:
+            if not force and os.path.exists(output_file):
+                sys.stderr.write(
+                    f"error: output file {output_file!r} already exists. "
+                    f"Use --force to overwrite.\n"
+                )
+                sys.exit(1)
             formatted = format_output(result, fmt=fmt)
             with open(output_file, "w") as f:
                 f.write(formatted + "\n")

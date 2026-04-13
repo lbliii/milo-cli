@@ -97,13 +97,38 @@ class Context:
             sys.stderr.write(message + suffix)
             sys.stderr.flush()
             answer = input().strip().lower()
-        except EOFError, KeyboardInterrupt:
+        except (EOFError, KeyboardInterrupt):
             sys.stderr.write("\n")
             return default
 
         if not answer:
             return default
         return answer in ("y", "yes")
+
+    def write_file(self, path: str, content: str, *, encoding: str = "utf-8") -> bool:
+        """Write *content* to *path*, respecting ``--dry-run``.
+
+        Returns True if the file was written, False if skipped due to dry-run.
+        """
+        if self.dry_run:
+            self.info(f"[dry-run] Would write {path}")
+            return False
+        with open(path, "w", encoding=encoding) as f:
+            f.write(content)
+        return True
+
+    def run_command(self, cmd: list[str], **kwargs: Any) -> Any:
+        """Run a subprocess, respecting ``--dry-run``.
+
+        In dry-run mode, logs the command and returns None without executing.
+        Otherwise, delegates to :func:`subprocess.run` with the given kwargs.
+        """
+        import subprocess
+
+        if self.dry_run:
+            self.info(f"[dry-run] Would run: {' '.join(cmd)}")
+            return None
+        return subprocess.run(cmd, **kwargs)  # noqa: S603
 
     def progress(self, total: int = 0, *, label: str = "") -> CLIProgress:
         """Create an inline progress indicator for CLI commands.

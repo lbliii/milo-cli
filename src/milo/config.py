@@ -205,13 +205,18 @@ class Config:
             if isinstance(actual_val, str) and expected_type is not str:
                 try:
                     if expected_type is bool:
-                        if actual_val.lower() not in ("true", "false", "1", "0", "yes", "no"):
+                        lowered = actual_val.lower()
+                        if lowered in ("true", "1", "yes"):
+                            actual[key] = True
+                        elif lowered in ("false", "0", "no"):
+                            actual[key] = False
+                        else:
                             errors.append(f"{dotted}: expected bool, got {actual_val!r}")
                     elif expected_type is int:
-                        int(actual_val)
+                        actual[key] = int(actual_val)
                     elif expected_type is float:
-                        float(actual_val)
-                except ValueError, TypeError:
+                        actual[key] = float(actual_val)
+                except (ValueError, TypeError):
                     errors.append(
                         f"{dotted}: expected {expected_type.__name__}, got {actual_val!r}"
                     )

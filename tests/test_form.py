@@ -436,3 +436,60 @@ class TestFormFallback:
             with patch("builtins.input", return_value="Bob"):
                 result = form(*specs)
         assert result == {"name": "Bob"}
+
+
+class TestFormTimeout:
+    """Tests for form timeout behavior."""
+
+    def test_timeout_raises_on_slow_input(self):
+        """Form should raise TimeoutError when timeout expires."""
+        import signal
+        import sys
+
+        if sys.platform == "win32" or not hasattr(signal, "SIGALRM"):
+            return  # SIGALRM not available on Windows
+
+        def slow_input(prompt: str = "") -> str:
+            import time
+
+            time.sleep(5)
+            return "never"
+
+        specs = (FieldSpec(name="name", label="Name"),)
+        import pytest
+
+        with pytest.raises(TimeoutError, match="timed out"):
+            with patch("builtins.input", side_effect=slow_input):
+                _form_fallback(specs, timeout=1)
+
+    def test_timeout_none_no_alarm(self):
+        """No timeout should not set an alarm."""
+        specs = (FieldSpec(name="name", label="Name"),)
+        with patch("builtins.input", return_value="Bob"):
+            result = _form_fallback(specs, timeout=None)
+        assert result == {"name": "Bob"}
+
+    def test_non_tty_auto_timeout(self):
+        """Non-TTY form() should use default timeout."""
+        from milo.form import _NON_TTY_DEFAULT_TIMEOUT, form
+
+        with patch("milo.form.is_tty", return_value=False):
+            with patch("milo.form._form_fallback") as mock_fb:
+                mock_fb.return_value = {"name": "test"}
+                specs = (FieldSpec(name="name", label="Name"),)
+                form(*specs)
+                mock_fb.assert_called_once()
+                _, kwargs = mock_fb.call_args
+                assert kwargs["timeout"] == _NON_TTY_DEFAULT_TIMEOUT
+
+    def test_explicit_timeout_overrides_default(self):
+        """Explicit timeout should override the non-TTY default."""
+        from milo.form import form
+
+        with patch("milo.form.is_tty", return_value=False):
+            with patch("milo.form._form_fallback") as mock_fb:
+                mock_fb.return_value = {"name": "test"}
+                specs = (FieldSpec(name="name", label="Name"),)
+                form(*specs, timeout=5.0)
+                _, kwargs = mock_fb.call_args
+                assert kwargs["timeout"] == 5.0

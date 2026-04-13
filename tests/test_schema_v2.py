@@ -544,3 +544,57 @@ class TestSchemaRef:
         assert right_schema["type"] == "object"
         left_ref = right_schema["properties"]["left"]
         assert left_ref == {"$ref": "#/$defs/Left"}
+
+
+# ---------------------------------------------------------------------------
+# Strict mode
+# ---------------------------------------------------------------------------
+
+
+class TestStrictMode:
+    def test_strict_raises_on_unknown_type(self) -> None:
+        """strict=True should raise TypeError for unrecognized types."""
+        from pathlib import Path
+
+        import pytest
+
+        def handler(output: Path) -> str:
+            return ""
+
+        with pytest.raises(TypeError, match="Unrecognized type"):
+            function_to_schema(handler, strict=True)
+
+    def test_non_strict_warns_on_unknown_type(self) -> None:
+        """strict=False should warn and fall back to string."""
+        import warnings
+        from pathlib import Path
+
+        def handler(output: Path) -> str:
+            return ""
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            schema = function_to_schema(handler, strict=False)
+            assert any("Unrecognized type" in str(warning.message) for warning in w)
+        assert schema["properties"]["output"]["type"] == "string"
+
+    def test_strict_allows_known_types(self) -> None:
+        """strict=True should work fine for supported types."""
+        def handler(name: str, count: int = 5, flag: bool = True) -> str:
+            return ""
+
+        schema = function_to_schema(handler, strict=True)
+        assert schema["properties"]["name"]["type"] == "string"
+        assert schema["properties"]["count"]["type"] == "integer"
+        assert schema["properties"]["flag"]["type"] == "boolean"
+
+    def test_default_is_not_strict(self) -> None:
+        """Default behavior should be non-strict (backward compatible)."""
+        from pathlib import Path
+
+        def handler(output: Path) -> str:
+            return ""
+
+        # Should not raise
+        schema = function_to_schema(handler)
+        assert schema["properties"]["output"]["type"] == "string"

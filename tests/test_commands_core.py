@@ -356,3 +356,101 @@ class TestMount:
         assert "c" in groups
         cmd = parent.get_command("c.hello")
         assert cmd is not None
+
+
+# ---------------------------------------------------------------------------
+# No-clobber output file
+# ---------------------------------------------------------------------------
+
+
+class TestOutputNoClobber:
+    def test_output_file_created(self, tmp_path):
+        """--output-file writes to a new file."""
+        cli = _make_cli()
+        out = tmp_path / "out.txt"
+        cli.run(["-o", str(out), "greet", "--name", "test"])
+        assert out.exists()
+        assert "Hello test" in out.read_text()
+
+    def test_output_file_rejects_existing(self, tmp_path):
+        """--output-file refuses to overwrite without --force."""
+        cli = _make_cli()
+        out = tmp_path / "out.txt"
+        out.write_text("original")
+        result = cli.invoke(["-o", str(out), "greet", "--name", "test"])
+        assert result.exit_code != 0
+        assert "already exists" in result.stderr
+        # File unchanged
+        assert out.read_text() == "original"
+
+    def test_output_file_force_overwrites(self, tmp_path):
+        """--output-file --force overwrites existing file."""
+        cli = _make_cli()
+        out = tmp_path / "out.txt"
+        out.write_text("original")
+        cli.run(["-o", str(out), "--force", "greet", "--name", "new"])
+        assert "Hello new" in out.read_text()
+
+
+# ---------------------------------------------------------------------------
+# Developer experience warnings
+# ---------------------------------------------------------------------------
+
+
+class TestDevWarnings:
+    def test_warn_command_after_run(self):
+        """Registering a command after run() should warn."""
+        import warnings
+
+        cli = CLI(name="app")
+
+        @cli.command("first", description="First")
+        def first() -> str:
+            return "first"
+
+        cli.run(["first"])
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+
+            @cli.command("late", description="Late")
+            def late() -> str:
+                return "late"
+
+            assert any("after cli.run()" in str(warn.message) for warn in w)
+
+    def test_warn_global_option_shadows_command(self):
+        """Global option with same name as a command should warn."""
+        import warnings
+
+        cli = CLI(name="app")
+
+        @cli.command("env", description="Show env")
+        def env() -> str:
+            return "env"
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            cli.global_option("env", description="Environment")
+            assert any("shadows" in str(warn.message) for warn in w)
+
+    def test_no_warn_for_normal_registration(self):
+        """Normal registration should not warn."""
+        import warnings
+
+        cli = CLI(name="app")
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+
+            @cli.command("greet", description="Greet")
+            def greet() -> str:
+                return "hi"
+
+            cli.global_option("env", description="Environment")
+            # No warnings about shadowing or late registration
+            relevant = [
+                warn for warn in w
+                if "shadows" in str(warn.message) or "after cli.run()" in str(warn.message)
+            ]
+            assert len(relevant) == 0

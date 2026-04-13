@@ -12,6 +12,7 @@ from milo._command_defs import (
     GlobalOption,
     InvokeResult,
     LazyCommandDef,
+    LazyImportError,
     PromptDef,
     ResourceDef,
     _is_context_param,
@@ -117,7 +118,7 @@ class TestLazyCommandDef:
             import_path="json.dumps",  # missing colon
             description="",
         )
-        with pytest.raises(ValueError, match="Invalid import_path"):
+        with pytest.raises(LazyImportError, match="Invalid import_path"):
             lazy.resolve()
 
     def test_resolve_invalid_module(self) -> None:
@@ -126,8 +127,9 @@ class TestLazyCommandDef:
             import_path="nonexistent.module:func",
             description="",
         )
-        with pytest.raises(ModuleNotFoundError):
+        with pytest.raises(LazyImportError) as exc_info:
             lazy.resolve()
+        assert isinstance(exc_info.value.cause, ModuleNotFoundError)
 
     def test_resolve_invalid_attr(self) -> None:
         lazy = LazyCommandDef(
@@ -135,8 +137,9 @@ class TestLazyCommandDef:
             import_path="json:nonexistent_function",
             description="",
         )
-        with pytest.raises(AttributeError):
+        with pytest.raises(LazyImportError) as exc_info:
             lazy.resolve()
+        assert isinstance(exc_info.value.cause, AttributeError)
 
     def test_resolve_cached(self) -> None:
         lazy = LazyCommandDef(
