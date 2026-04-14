@@ -12,7 +12,7 @@ from milo.reducers import quit_on, with_confirm, with_cursor
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ListState:
     items: tuple[str, ...] = ("a", "b", "c")
     cursor: int = 0
@@ -196,7 +196,7 @@ class TestWithCursor:
         assert result.cursor == 0
 
     def test_custom_cursor_field(self):
-        @dataclass(frozen=True)
+        @dataclass(frozen=True, slots=True)
         class CustomState:
             entries: tuple[str, ...] = ("a", "b", "c")
             pos: int = 0

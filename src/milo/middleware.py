@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # Type aliases
-MiddlewareFn = Callable[..., Any]
-NextFn = Callable[["MCPCall"], Any]
+type MiddlewareFn = Callable[..., Any]
+type NextFn = Callable[[MCPCall], Any]
 
 
 @dataclass(frozen=True, slots=True)
