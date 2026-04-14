@@ -357,13 +357,13 @@ class App:
             # Each cleanup step is individually guarded so a failure in one
             # does not prevent the rest from running.
             if tick_thread is not None:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(Exception):  # silent: teardown must not propagate
                     stop_tick.set()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 renderer.stop()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 stop_resize()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 store.shutdown()
 
         final_state = store.state

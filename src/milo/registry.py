@@ -166,7 +166,7 @@ def _health_check_entry(name: str, info: dict[str, Any]) -> HealthResult:
                         stale=stale,
                     )
             except json.JSONDecodeError:
-                continue
+                continue  # silent: skip malformed lines; falls through to unreachable
 
         return HealthResult(
             name=name,

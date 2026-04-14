@@ -126,7 +126,7 @@ def _poll_resize(
             try:
                 cur = os.get_terminal_size()
             except OSError:
-                continue
+                continue  # silent: terminal may be detached
             if cur != prev:
                 prev = cur
                 callback(cur.columns, cur.lines)
