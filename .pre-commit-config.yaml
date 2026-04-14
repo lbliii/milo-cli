@@ -30,6 +30,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: silent-exceptions
+        name: silent exception lint
+        entry: uv run python scripts/lint_silent_exceptions.py
+        language: system
+        types: [python]
+        pass_filenames: false
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

@@ -289,7 +289,7 @@ def _load_file(filepath: str) -> dict[str, Any]:
             )
             raise ImportError(msg) from e
         with open(path) as f:
-            return yaml.safe_load(f) or {}
+            return yaml.safe_load(f) or {}  # empty YAML returns None; default to {}
 
     if suffix == ".json":
         import json

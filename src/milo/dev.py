@@ -72,7 +72,7 @@ class _PollingWatcher(_FileWatcher):
                 try:
                     mtime = p.stat().st_mtime
                 except OSError:
-                    continue
+                    continue  # silent: file may vanish between is_file and stat
                 if p in self._mtimes:
                     if mtime > self._mtimes[p]:
                         changed.append(p)

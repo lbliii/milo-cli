@@ -160,7 +160,7 @@ def run_mcp_server(cli: CLI) -> None:
             request = json.loads(line)
         except json.JSONDecodeError:
             _write_error(None, -32700, "Parse error")
-            continue
+            continue  # silent: error already sent via JSON-RPC
 
         req_id = request.get("id")
         method = request.get("method", "")
