@@ -1,6 +1,6 @@
 """Parallel downloader — Fork-per-URL saga concurrency.
 
-Demonstrates: Fork, Call, Put, Select, Delay, ReducerResult, Quit,
+Demonstrates: Fork, Call, Put, Select, Delay, Timeout, ReducerResult, Quit,
 tick-based spinner animation, and parallel saga execution.
 
     uv run python examples/downloader/app.py
@@ -11,7 +11,6 @@ from __future__ import annotations
 import time
 import urllib.request
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 from milo import (
     Action,
@@ -25,8 +24,8 @@ from milo import (
     ReducerResult,
     Select,
     SpecialKey,
+    Timeout,
 )
-from milo.templates import get_env
 
 # ---------------------------------------------------------------------------
 # URLs to fetch
@@ -89,12 +88,12 @@ def fetch_url(url: str) -> dict:
 
 
 def fetch_one_saga(url: str):
-    """Saga: fetch a single URL, dispatch success or error."""
+    """Saga: fetch a single URL with a 10-second deadline, dispatch success or error."""
 
     def _saga():
         yield Put(Action("URL_FETCHING", payload=url))
         try:
-            result = yield Call(fetch_url, (url,))
+            result = yield Timeout(Call(fetch_url, (url,)), seconds=10)
             yield Put(Action("URL_DONE", payload=result))
         except Exception as e:
             yield Put(Action("URL_ERROR", payload={"url": url, "error": str(e)}))
@@ -211,17 +210,12 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    app = App(
+    app = App.from_dir(
+        __file__,
         template="downloader.kida",
         reducer=reducer,
         initial_state=State(urls=tuple(UrlState(url=u) for u in URLS)),
         tick_rate=0.1,
-        env=env,
         exit_template="exit.kida",
     )
     app.run()
