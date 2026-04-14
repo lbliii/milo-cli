@@ -1,7 +1,7 @@
 """Buildpipe — pipeline orchestration with phases, dependencies, and progress.
 
-Demonstrates: Pipeline, Phase, build_reducer, build_saga, execution_order,
->> operator, and interactive TUI visualization via App + Store + saga.
+Demonstrates: Pipeline, Phase, PhasePolicy, build_reducer, build_saga,
+execution_order, >> operator, and interactive TUI visualization via App + Store + saga.
 
     uv run python examples/buildpipe/app.py build
     uv run python examples/buildpipe/app.py run        # interactive TUI
@@ -19,6 +19,7 @@ from milo import (
     App,
     Key,
     Phase,
+    PhasePolicy,
     Pipeline,
     PipelineState,
     Quit,
@@ -75,13 +76,26 @@ pipeline = Pipeline(
     "site-build",
     Phase("discover", handler=discover, description="Scan content directory"),
     Phase("parse", handler=parse, depends_on=("discover",), description="Parse markdown"),
-    Phase("render", handler=render, depends_on=("parse",), parallel=True, description="Render HTML"),
+    Phase(
+        "render",
+        handler=render,
+        depends_on=("parse",),
+        parallel=True,
+        description="Render HTML",
+        policy=PhasePolicy(on_fail="retry", max_retries=2, retry_delay=0.5, retry_backoff="exponential"),
+    ),
     Phase("assets", handler=copy_assets, depends_on=("parse",), parallel=True, description="Copy assets"),
     Phase("write", handler=write_output, depends_on=("render", "assets"), description="Write files"),
 )
 
-# Extend with >> operator
-pipeline = pipeline >> Phase("health", handler=check_links, depends_on=("write",), description="Check links")
+# Extend with >> operator — link checking is non-critical, so skip on failure
+pipeline = pipeline >> Phase(
+    "health",
+    handler=check_links,
+    depends_on=("write",),
+    description="Check links",
+    policy=PhasePolicy(on_fail="skip"),
+)
 
 
 # ---------------------------------------------------------------------------

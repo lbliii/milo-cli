@@ -1,6 +1,6 @@
 """URL fetcher — sagas for async side effects.
 
-Demonstrates: sagas (Call, Put, Select), ReducerResult, Quit, tick-based loading.
+Demonstrates: sagas (Call, Put, Select, Retry), ReducerResult, Quit, tick-based loading.
 
     uv run python examples/fetcher/app.py
 """
@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import urllib.request
 from dataclasses import dataclass, replace
-from pathlib import Path
 
-from milo import Action, App, Call, Key, Put, Quit, ReducerResult, SpecialKey
-from milo.templates import get_env
+from milo import Action, App, Key, Put, Quit, ReducerResult, Retry, SpecialKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +34,11 @@ def fetch_url(url: str) -> dict:
 
 
 def fetch_saga():
-    """Saga: read URL from state, fetch it, dispatch result."""
+    """Saga: read URL from state, fetch it, dispatch result.
+
+    Uses Retry to automatically retry on transient network errors
+    with exponential backoff (up to 3 attempts).
+    """
     from milo import Select
 
     state = yield Select()
@@ -45,7 +47,13 @@ def fetch_saga():
         yield Put(Action("FETCH_ERROR", payload="No URL entered"))
         return
     try:
-        result = yield Call(fetch_url, (url,))
+        result = yield Retry(
+            fetch_url,
+            args=(url,),
+            max_attempts=3,
+            backoff="exponential",
+            base_delay=0.5,
+        )
         yield Put(Action("FETCH_SUCCESS", payload=result))
     except Exception as e:
         yield Put(Action("FETCH_ERROR", payload=str(e)))
@@ -86,17 +94,12 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
 
 
 if __name__ == "__main__":
-    from kida import FileSystemLoader
-
-    templates = Path(__file__).parent / "templates"
-    env = get_env(loader=FileSystemLoader(str(templates)))
-
-    app = App(
+    app = App.from_dir(
+        __file__,
         template="fetcher.kida",
         reducer=reducer,
         initial_state=State(url="https://example.com"),
         tick_rate=0.15,
-        env=env,
         exit_template="exit.kida",
     )
     app.run()

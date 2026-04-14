@@ -1,7 +1,7 @@
 """Setup wizard — multi-screen flow with forms.
 
 Demonstrates: FlowScreen, Flow (>> operator), make_form_reducer,
-quit_on combinator, App.from_dir with flows.
+FieldSpec.validator, quit_on combinator, App.from_dir with flows.
 
     uv run python examples/wizard/app.py
 """
@@ -48,8 +48,25 @@ def welcome_reducer(state: WelcomeState | None, action: Action) -> WelcomeState 
 
 # -- Screen 2: Config (form) -------------------------------------------------
 
+
+def _validate_project_name(value: str) -> tuple[bool, str]:
+    """Project names must be non-empty, lowercase, and use hyphens only."""
+    if not value.strip():
+        return False, "Project name is required"
+    if value != value.lower():
+        return False, "Must be lowercase"
+    if not all(c.isalnum() or c == "-" for c in value):
+        return False, "Only letters, numbers, and hyphens allowed"
+    return True, ""
+
+
 config_reducer = make_form_reducer(
-    FieldSpec(name="name", label="Project name", placeholder="my-app"),
+    FieldSpec(
+        name="name",
+        label="Project name",
+        placeholder="my-app",
+        validator=_validate_project_name,
+    ),
     FieldSpec(
         name="language",
         label="Language",

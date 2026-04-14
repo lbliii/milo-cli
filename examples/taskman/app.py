@@ -1,7 +1,7 @@
 """Taskman — AI-native CLI example using milo's CLI class.
 
-Demonstrates: @command decorator, typed parameters, aliases, tags,
-hidden commands, --format json|table|plain, --llms-txt, --mcp.
+Demonstrates: @command decorator, @resource decorator, typed parameters, aliases,
+tags, hidden commands, --format json|table|plain, --llms-txt, --mcp.
 
     uv run python examples/taskman/app.py list
     uv run python examples/taskman/app.py add --title "Buy milk" --priority high
@@ -131,6 +131,23 @@ def clear() -> dict:
 def debug() -> dict:
     """Internal: dump the raw JSON store for debugging."""
     return {"file": str(_STORE_FILE), "tasks": _load_tasks()}
+
+
+# ---------------------------------------------------------------------------
+# MCP resources — expose task data to AI agents
+# ---------------------------------------------------------------------------
+
+
+@cli.resource("tasks://all", description="All tasks as JSON")
+def all_tasks() -> list[dict]:
+    """Return every task in the store."""
+    return _load_tasks()
+
+
+@cli.resource("tasks://pending", description="Pending (incomplete) tasks")
+def pending_tasks() -> list[dict]:
+    """Return only tasks that are not yet done."""
+    return [t for t in _load_tasks() if not t["done"]]
 
 
 if __name__ == "__main__":
