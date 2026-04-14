@@ -126,30 +126,31 @@ def _handle_text_key(field: FieldState, key: Key) -> FieldState:
     value = str(field.value)
     cursor = field.cursor
 
-    if key.name == SpecialKey.BACKSPACE:
-        if cursor > 0:
-            value = value[: cursor - 1] + value[cursor:]
-            cursor -= 1
-        else:
+    match key:
+        case Key(name=SpecialKey.BACKSPACE):
+            if cursor > 0:
+                value = value[: cursor - 1] + value[cursor:]
+                cursor -= 1
+            else:
+                return field
+        case Key(name=SpecialKey.DELETE):
+            if cursor < len(value):
+                value = value[:cursor] + value[cursor + 1 :]
+            else:
+                return field
+        case Key(name=SpecialKey.LEFT):
+            cursor = max(0, cursor - 1)
+        case Key(name=SpecialKey.RIGHT):
+            cursor = min(len(value), cursor + 1)
+        case Key(name=SpecialKey.HOME):
+            cursor = 0
+        case Key(name=SpecialKey.END):
+            cursor = len(value)
+        case Key(char=c) if c and c.isprintable() and not key.ctrl and not key.alt:
+            value = value[:cursor] + c + value[cursor:]
+            cursor += 1
+        case _:
             return field
-    elif key.name == SpecialKey.DELETE:
-        if cursor < len(value):
-            value = value[:cursor] + value[cursor + 1 :]
-        else:
-            return field
-    elif key.name == SpecialKey.LEFT:
-        cursor = max(0, cursor - 1)
-    elif key.name == SpecialKey.RIGHT:
-        cursor = min(len(value), cursor + 1)
-    elif key.name == SpecialKey.HOME:
-        cursor = 0
-    elif key.name == SpecialKey.END:
-        cursor = len(value)
-    elif key.char and key.char.isprintable() and not key.ctrl and not key.alt:
-        value = value[:cursor] + key.char + value[cursor:]
-        cursor += 1
-    else:
-        return field
 
     return replace(field, value=value, cursor=cursor, error="")
 
@@ -171,13 +172,15 @@ def _handle_select_key(field: FieldState, key: Key, spec: FieldSpec) -> FieldSta
 
 def _handle_confirm_key(field: FieldState, key: Key) -> FieldState:
     """Handle keypress for confirm fields."""
-    if key.char in ("y", "Y"):
-        return replace(field, value=True)
-    elif key.char in ("n", "N"):
-        return replace(field, value=False)
-    elif key.name in (SpecialKey.LEFT, SpecialKey.RIGHT):
-        return replace(field, value=not field.value)
-    return field
+    match key:
+        case Key(char="y" | "Y"):
+            return replace(field, value=True)
+        case Key(char="n" | "N"):
+            return replace(field, value=False)
+        case Key(name=SpecialKey.LEFT | SpecialKey.RIGHT):
+            return replace(field, value=not field.value)
+        case _:
+            return field
 
 
 def _replace_field(

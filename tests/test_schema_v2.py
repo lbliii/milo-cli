@@ -77,14 +77,14 @@ class TestLiteral:
 # --- Test dataclass ---
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Address:
     street: str
     city: str
     zip_code: str = ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Person:
     name: str
     age: int
@@ -193,7 +193,7 @@ class TestDictAdditionalProperties:
 # --- Test cycle detection ---
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class TreeNode:
     value: str
     children: list[TreeNode] = field(default_factory=list)
@@ -500,18 +500,18 @@ class TestFallbackWarning:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Node:
     value: str
     children: list[Node] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Left:
     right: Right | None = None
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Right:
     left: Left | None = None
 

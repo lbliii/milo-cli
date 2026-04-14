@@ -12,7 +12,7 @@ from milo._types import RenderTarget
 from milo.app import App, render_html, run
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SimpleState:
     value: int = 0
     submitted: bool = False
@@ -436,7 +436,7 @@ class TestRenderHtml:
         tmpl_env = Environment()
         tmpl = tmpl_env.from_string("Hello {{ state.name }}")
 
-        @dataclass
+        @dataclass(frozen=True, slots=True)
         class State:
             name: str = "World"
 
