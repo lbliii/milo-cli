@@ -64,13 +64,13 @@ Milo is a Python framework where every CLI is simultaneously a terminal app, a c
 
 ## Installation
 
+**Requires Python 3.14+.** If you don't have it: `uv python install 3.14`.
+
 ```bash
 pip install milo-cli
 ```
 
 The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The `milo` console command is installed with the package.
-
-Requires Python 3.14+
 
 ---
 
@@ -141,6 +141,52 @@ Requires Python 3.14+
 | **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo-cli/docs/usage/config/) |
 | **Shell Completions** | Generate bash/zsh/fish completions from CLI definitions | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
 | **Doctor Diagnostics** | `run_doctor()` validates environment, dependencies, and config health | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
+
+---
+
+## Examples Index
+
+Pick the example closest to your use case, copy its `app.py`, and adapt. Every directory below contains a runnable `app.py` plus a focused README.
+
+**CLIs (typed function → CLI + MCP + llms.txt)**
+
+| What you want to build | Example | Key APIs |
+|---|---|---|
+| The simplest possible CLI | [examples/greet](examples/greet) | `CLI`, `@cli.command` |
+| Dual-mode CLI ↔ MCP server (flagship) | [examples/deploy](examples/deploy) | `Annotated`, `MinLen`, `Context`, `Progress`, `--mcp` |
+| Context injection, logging, progress, confirms | [examples/ctxdemo](examples/ctxdemo) | `Context`, `ctx.info`, `ctx.progress`, `ctx.confirm` |
+| Nested command groups (`app repo list`) | [examples/groups](examples/groups) | `cli.group()`, `walk_commands` |
+| Fast startup via deferred imports | [examples/lazyapp](examples/lazyapp) | `cli.lazy_command()` |
+| Production CLI with hooks, completions, doctor | [examples/devtool](examples/devtool) | `run_doctor`, `before_run`/`after_run`, did-you-mean, completions |
+| AI-native CLI surfacing tools + resources | [examples/taskman](examples/taskman) | `@command`, `@resource`, `--format`, `--llms-txt`, `--mcp` |
+
+**Configuration, plugins, pipelines**
+
+| What you want to build | Example | Key APIs |
+|---|---|---|
+| TOML config with profiles + overlays | [examples/configapp](examples/configapp) | `Config`, `ConfigSpec`, `Config.load`, `Config.validate` |
+| Plugin system with hooks + listeners | [examples/pluggable](examples/pluggable) | `HookRegistry`, `define`, `on`, `invoke` |
+| Multi-phase pipeline with deps + retries | [examples/buildpipe](examples/buildpipe) | `Pipeline`, `Phase`, `PhasePolicy`, `>>` |
+
+**Interactive TUIs (`App` + reducer)**
+
+| What you want to build | Example | Key APIs |
+|---|---|---|
+| The simplest TUI | [examples/counter](examples/counter) | `App.from_dir`, reducer combinators |
+| Modal input with derived filtering | [examples/todo](examples/todo) | tuple state, `quit_on`, derived views |
+| Tick-driven animation | [examples/stopwatch](examples/stopwatch) | `tick_rate`, `@@TICK`, `quit_on` |
+| Scrollable viewport with saga I/O | [examples/filepicker](examples/filepicker) | viewport, sagas, frozen tuples |
+| Multi-screen flow with forms | [examples/wizard](examples/wizard) | `Flow`, `FlowScreen`, `make_form_reducer`, `FieldSpec` |
+
+**Async work (sagas + Cmd pattern)**
+
+| What you want to build | Example | Key APIs |
+|---|---|---|
+| Sagas for async side effects | [examples/fetcher](examples/fetcher) | `Call`, `Put`, `Select`, `Retry` |
+| Parallel concurrent work | [examples/downloader](examples/downloader) | `Fork`, `Call`, `Delay`, `Timeout` |
+| Bubbletea-style Cmd thunks | [examples/spinner](examples/spinner) | `Cmd`, `Batch`, `TickCmd`, `ViewState` |
+
+> Don't see your use case? Run `milo new <name>` to scaffold a fresh CLI with tests, then `milo verify app.py` to confirm it works.
 
 ---
 

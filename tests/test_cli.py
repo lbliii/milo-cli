@@ -37,6 +37,29 @@ class TestCli:
             main(["replay"])
 
 
+class TestPythonPreflight:
+    """main() exits 2 with an actionable message on pre-3.14 Pythons."""
+
+    def test_rejects_old_python_with_exit_code_2(self, monkeypatch, capsys):
+        # Can't construct sys.version_info directly — substitute a plain
+        # namedtuple that exposes the same attributes we access.
+        from collections import namedtuple
+
+        VInfo = namedtuple("VInfo", "major minor micro releaselevel serial")
+        monkeypatch.setattr(sys, "version_info", VInfo(3, 12, 7, "final", 0))
+        with pytest.raises(SystemExit) as exc:
+            main([])
+        assert exc.value.code == 2
+        err = capsys.readouterr().err
+        assert "Python 3.14+" in err
+        assert "3.12.7" in err
+        assert "uv python install 3.14" in err
+
+    def test_allows_current_python(self):
+        # Sanity: with the real interpreter (>=3.14 in this project), no exit.
+        main([])
+
+
 class TestLoadApp:
     def test_missing_colon_exits(self, capsys):
         with pytest.raises(SystemExit) as exc_info:

@@ -95,8 +95,12 @@ _TYPE_MAP: dict[type, str] = {
 }
 
 
-@functools.lru_cache(maxsize=256)
-def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dict[str, Any]:
+def function_to_schema(
+    func: Callable[..., Any],
+    *,
+    strict: bool = False,
+    warn_missing_docs: bool = False,
+) -> dict[str, Any]:
     """Generate MCP-compatible JSON Schema from function type annotations.
 
     Parameters with defaults are optional (not in required).
@@ -116,7 +120,30 @@ def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dic
 
     When *strict* is True, unrecognized type annotations raise
     :class:`TypeError` instead of silently falling back to ``"string"``.
+
+    When *warn_missing_docs* is True, every schema parameter without a
+    description (no ``Args:`` entry and no ``Annotated[..., Description(...)]``)
+    emits a :class:`UserWarning`. Default ``False`` so production schema
+    generation stays silent; ``milo verify`` opts in.
     """
+    schema, undocumented = _function_to_schema_cached(func, strict=strict)
+    if warn_missing_docs:
+        for name in undocumented:
+            warnings.warn(
+                f"Parameter {name!r} has no description; "
+                f"add an 'Args:' entry to the docstring or "
+                f"Annotated[..., Description(...)] to the type",
+                UserWarning,
+                stacklevel=2,
+            )
+    return schema
+
+
+@functools.lru_cache(maxsize=256)
+def _function_to_schema_cached(
+    func: Callable[..., Any], *, strict: bool = False
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Compute (schema, undocumented_param_names). Cached; warnings live in the wrapper."""
     sig = inspect.signature(func)
     # Resolve string annotations (from __future__ import annotations)
     # include_extras=True preserves Annotated metadata for constraint extraction
@@ -144,6 +171,7 @@ def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dic
     properties: dict[str, Any] = {}
     required: list[str] = []
     defs: dict[str, dict[str, Any]] = {}
+    undocumented: list[str] = []
 
     for name, param in sig.parameters.items():
         annotation = hints.get(name, param.annotation)
@@ -181,6 +209,12 @@ def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dic
         if name in param_docs:
             prop["description"] = param_docs[name]
 
+        # Track params that ended up with no description from any source
+        # (no Args entry and no Annotated[..., Description(...)]). The wrapper
+        # turns this into UserWarnings when warn_missing_docs=True.
+        if "description" not in prop:
+            undocumented.append(name)
+
         properties[name] = prop
 
         has_default = param.default is not inspect.Parameter.empty
@@ -201,7 +235,7 @@ def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dic
         result["required"] = required
     if defs:
         result["$defs"] = defs
-    return result
+    return result, tuple(undocumented)
 
 
 def _type_to_schema(

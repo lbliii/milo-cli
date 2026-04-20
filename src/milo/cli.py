@@ -46,6 +46,35 @@ def _cmd_dev(args: argparse.Namespace) -> None:
     server.run()
 
 
+def _cmd_verify(args: argparse.Namespace) -> None:
+    """Run diagnostic checks against an agent-built milo CLI."""
+    from milo.verify import verify
+
+    report = verify(args.target, timeout=args.timeout)
+    sys.stdout.write(report.format() + "\n")
+    sys.exit(report.exit_code)
+
+
+def _cmd_new(args: argparse.Namespace) -> None:
+    """Scaffold a new milo CLI project."""
+    from milo._scaffold import ScaffoldError, scaffold
+
+    try:
+        project_dir = scaffold(args.name, Path(args.dir))
+    except ScaffoldError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        sys.exit(1)
+
+    sys.stdout.write(
+        f"Created {project_dir}\n"
+        f"\n"
+        f"Next steps:\n"
+        f"  cd {project_dir}\n"
+        f"  uv run python app.py greet --name Alice\n"
+        f"  uv run pytest tests/\n"
+    )
+
+
 def _cmd_replay(args: argparse.Namespace) -> None:
     """Replay a recorded session."""
     from milo.testing._record import load_recording
@@ -81,8 +110,31 @@ def _cmd_replay(args: argparse.Namespace) -> None:
         sys.stdout.write(f"Replay complete. Final state: {final!r}\n")
 
 
+_MIN_PYTHON = (3, 14)
+
+
+def _preflight_python_version() -> None:
+    """Exit with an actionable message when running under an unsupported Python.
+
+    Runs before any milo module import that relies on 3.14+ features, so the
+    user sees a fix-it message instead of a `SyntaxError` or `ImportError`.
+    """
+    if sys.version_info < _MIN_PYTHON:
+        have = (
+            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        )
+        want = f"{_MIN_PYTHON[0]}.{_MIN_PYTHON[1]}"
+        sys.stderr.write(
+            f"milo requires Python {want}+ (you have {have}).\n"
+            f"Install with: uv python install {want}\n"
+        )
+        sys.exit(2)
+
+
 def main(argv: list[str] | None = None) -> None:
     """Main CLI entry point."""
+    _preflight_python_version()
+
     parser = argparse.ArgumentParser(
         prog="milo",
         description="Template-driven CLI applications for free-threaded Python",
@@ -91,6 +143,25 @@ def main(argv: list[str] | None = None) -> None:
 
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
+
+    # milo new
+    new_parser = subparsers.add_parser("new", help="Scaffold a new milo CLI project")
+    new_parser.add_argument("name", help="Project name (lowercase, underscores)")
+    new_parser.add_argument(
+        "--dir", "-d", default=".", help="Parent directory for the project (default: cwd)"
+    )
+
+    # milo verify
+    verify_parser = subparsers.add_parser(
+        "verify", help="Self-diagnose a milo CLI (schema, dispatch, MCP)"
+    )
+    verify_parser.add_argument("target", help="Path to app.py or 'module:attr' reference")
+    verify_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=5.0,
+        help="Seconds to wait for the subprocess MCP handshake (default: 5.0)",
+    )
 
     # milo dev
     dev_parser = subparsers.add_parser("dev", help="Run app with hot-reload")
@@ -124,7 +195,11 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
 
-    if args.command == "dev":
+    if args.command == "new":
+        _cmd_new(args)
+    elif args.command == "verify":
+        _cmd_verify(args)
+    elif args.command == "dev":
         _cmd_dev(args)
     elif args.command == "replay":
         _cmd_replay(args)

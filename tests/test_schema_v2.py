@@ -329,6 +329,78 @@ class TestSchemaHelpText:
         assert result["count"] == "How many times."
 
 
+class TestWarnMissingDocs:
+    """`function_to_schema(..., warn_missing_docs=True)` surfaces undocumented params."""
+
+    def test_default_is_silent(self):
+        def f(name: str, count: int) -> str:
+            """Bare docstring."""
+            return ""
+
+        with warnings.catch_warnings(record=True) as ws:
+            warnings.simplefilter("always")
+            function_to_schema(f)
+        assert len(ws) == 0
+
+    def test_warn_missing_docs_emits_one_warning_per_undocumented_param(self):
+        def f(name: str, count: int) -> str:
+            """Bare docstring."""
+            return ""
+
+        with warnings.catch_warnings(record=True) as ws:
+            warnings.simplefilter("always")
+            function_to_schema(f, warn_missing_docs=True)
+        msgs = [str(w.message) for w in ws if issubclass(w.category, UserWarning)]
+        assert any("'name'" in m for m in msgs)
+        assert any("'count'" in m for m in msgs)
+        assert len(msgs) == 2
+
+    def test_warn_missing_docs_silent_when_all_documented(self):
+        def f(name: str, count: int) -> str:
+            """Greet.
+
+            Args:
+                name: Who to greet.
+                count: How many times.
+            """
+            return ""
+
+        with warnings.catch_warnings(record=True) as ws:
+            warnings.simplefilter("always")
+            function_to_schema(f, warn_missing_docs=True)
+        msgs = [str(w.message) for w in ws if issubclass(w.category, UserWarning)]
+        assert msgs == []
+
+    def test_description_constraint_suppresses_warning(self):
+        """Annotated[..., Description("...")] counts as documentation."""
+
+        def f(name: Annotated[str, Description("via constraint")]) -> str:
+            """Bare docstring."""
+            return ""
+
+        with warnings.catch_warnings(record=True) as ws:
+            warnings.simplefilter("always")
+            function_to_schema(f, warn_missing_docs=True)
+        msgs = [str(w.message) for w in ws if issubclass(w.category, UserWarning)]
+        assert msgs == []
+
+    def test_warning_fires_on_repeated_calls(self):
+        """The cache must not swallow the warning on second invocation."""
+
+        def f(name: str) -> str:
+            return ""
+
+        for _ in range(2):
+            with warnings.catch_warnings(record=True) as ws:
+                warnings.simplefilter("always")
+                function_to_schema(f, warn_missing_docs=True)
+            assert any(
+                "'name'" in str(w.message)
+                for w in ws
+                if issubclass(w.category, UserWarning)
+            )
+
+
 # ---------------------------------------------------------------------------
 # Annotated constraint tests
 # ---------------------------------------------------------------------------

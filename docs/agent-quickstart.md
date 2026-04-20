@@ -12,6 +12,18 @@ If something in this doc no longer works, that's the bug — open an issue.
 - `uv` installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
 - This repo cloned or `milo-cli` installed (`uv add milo-cli`).
 
+## Step 0 — Scaffold (optional; skip if writing manually)
+
+```bash
+uv run milo new my_cli
+cd my_cli
+```
+
+Produces `app.py`, `tests/test_app.py`, `conftest.py`, and a `README.md` — the
+same shape this doc walks through. Scaffold names must be lowercase with
+underscores (`my_cli`, not `My-CLI`). If the directory exists, the command
+refuses to overwrite; pick another name or delete the old one.
+
 ## Step 1 — Write the function
 
 ```python
@@ -112,6 +124,31 @@ You should see `my_cli` listed with `greet` as a tool. Call it:
 
 Expected result: Claude calls the tool, the tool returns `"Hello, Bob!"`,
 Claude echoes it back.
+
+## Step 6 — Self-diagnose with `milo verify`
+
+Before registering with Claude (or any time you break something), run:
+
+```bash
+uv run milo verify my_cli/app.py
+```
+
+All six checks should pass:
+
+```
+✓ imports: loaded app.py
+✓ cli_located: found CLI instance (name='my_cli')
+✓ commands_registered: 1 command(s) registered
+✓ schemas_generate: 1 schema(s) generated; all params documented
+✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
+✓ mcp_transport: subprocess handshake succeeded; 1 tool(s) over JSON-RPC
+```
+
+A `⚠ schemas_generate` row listing `parameter 'X' has no description` means a
+typed parameter is missing an `Args:` entry (or `Annotated[..., Description(...)]`).
+A `✗` row is a failure — read the details and fix before continuing.
+
+`milo verify` exits 0 on warnings, nonzero on failures. Wire it into CI.
 
 ## When things go wrong
 
