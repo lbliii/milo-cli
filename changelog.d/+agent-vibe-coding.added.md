@@ -1,0 +1,1 @@
+Agent-first improvements: structured MCP validation errors with argument/constraint context, `form_schema()` introspection helper, `llms.txt` required/optional/default markers, `docs/agent-quickstart.md`, `docs/testing.md`, and `examples/greet/` test template.
