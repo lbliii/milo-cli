@@ -68,17 +68,29 @@ class MiloError(Exception):
         suggestion: str = "",
         context: dict[str, Any] | None = None,
         docs_url: str = "",
+        argument: str | None = None,
+        constraint: dict[str, Any] | None = None,
     ) -> None:
         self.code = code
         self.message = message
         self.suggestion = suggestion
         self.context = context or {}
         self.docs_url = docs_url
-        super().__init__(f"[{code.value}] {message}")
+        self.argument = argument
+        self.constraint = constraint
+        prefix = f"[{code.value}]"
+        if argument:
+            prefix += f" `{argument}`:"
+        super().__init__(f"{prefix} {message}")
 
     def format_compact(self) -> str:
         """Format error for terminal display, consistent with kida's format_compact()."""
-        parts = [f"{self.code.value}: {self.message}"]
+        header = f"{self.code.value}: {self.message}"
+        if self.argument:
+            header = f"{self.code.value} `{self.argument}`: {self.message}"
+        parts = [header]
+        if self.constraint:
+            parts.append(f"  constraint: {self.constraint}")
         if self.suggestion:
             parts.append(f"  hint: {self.suggestion}")
         if self.docs_url:

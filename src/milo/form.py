@@ -18,6 +18,13 @@ from milo._types import (
 )
 from milo.input._platform import is_tty
 
+__all__ = [
+    "form",
+    "form_reducer",
+    "form_schema",
+    "make_form_reducer",
+]
+
 
 def _make_initial_fields(specs: tuple[FieldSpec, ...]) -> tuple[FieldState, ...]:
     """Create initial field states from specs."""
@@ -274,6 +281,59 @@ def form(
     )
     final: FormState = app.run()
     return {spec.name: field.value for spec, field in zip(specs, final.fields, strict=False)}
+
+
+_FIELD_TYPE_TO_JSON: dict[FieldType, str] = {
+    FieldType.TEXT: "string",
+    FieldType.PASSWORD: "string",
+    FieldType.SELECT: "string",
+    FieldType.CONFIRM: "boolean",
+}
+
+
+def form_schema(*specs: FieldSpec) -> dict[str, Any]:
+    """Return a JSON Schema describing an interactive form.
+
+    Mirrors :func:`milo.schema.function_to_schema` output shape so agents
+    can introspect form structure without running the TUI. A field is
+    ``required`` when its :class:`FieldSpec` carries no ``default``.
+
+    Args:
+        *specs: The same :class:`FieldSpec` values passed to :func:`form`.
+
+    Returns:
+        A dict with keys ``type`` (``"object"``), ``properties``, and
+        ``required`` (omitted when empty). SELECT fields include
+        ``enum`` from their choices. Non-empty ``label`` and
+        ``placeholder`` become ``title`` and ``description``.
+    """
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+
+    for spec in specs:
+        prop: dict[str, Any] = {
+            "type": _FIELD_TYPE_TO_JSON.get(spec.field_type, "string"),
+        }
+        if spec.label:
+            prop["title"] = spec.label
+        if spec.placeholder:
+            prop["description"] = spec.placeholder
+        if spec.field_type is FieldType.SELECT and spec.choices:
+            prop["enum"] = list(spec.choices)
+        if spec.field_type is FieldType.PASSWORD:
+            prop["writeOnly"] = True
+
+        if spec.default is None:
+            required.append(spec.name)
+        else:
+            prop["default"] = spec.default
+
+        properties[spec.name] = prop
+
+    result: dict[str, Any] = {"type": "object", "properties": properties}
+    if required:
+        result["required"] = required
+    return result
 
 
 def _form_fallback(

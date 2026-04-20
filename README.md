@@ -76,6 +76,10 @@ Requires Python 3.14+
 
 ## Quick Start
 
+> **Coding agents**: jump to [`docs/agent-quickstart.md`](./docs/agent-quickstart.md)
+> for a 5-minute walkthrough from `@cli.command` to a verified Claude MCP tool call.
+> See also [`docs/testing.md`](./docs/testing.md) for the test template.
+
 ### AI-Native CLI
 
 | Function | Description |

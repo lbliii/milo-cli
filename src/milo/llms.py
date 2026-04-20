@@ -152,9 +152,13 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
         for name, schema in props.items():
             param_type = schema.get("type", "string")
             if name in required:
-                params.append(f"`--{name}` ({param_type}, required)")
+                params.append(f"`--{name}` ({param_type}, **required**)")
+            elif "default" in schema:
+                default = schema["default"]
+                default_repr = f'"{default}"' if isinstance(default, str) else repr(default)
+                params.append(f"`--{name}` ({param_type}, optional, default: {default_repr})")
             else:
-                params.append(f"`--{name}` ({param_type})")
+                params.append(f"`--{name}` ({param_type}, optional)")
         parts.append("\n  Parameters: " + ", ".join(params))
 
     # Examples
