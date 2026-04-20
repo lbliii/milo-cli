@@ -40,7 +40,13 @@ Issues = "https://github.com/lbliii/milo-cli/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-milo = ["templates/*.kida", "templates/components/*.kida", "py.typed"]
+milo = [
+    "templates/*.kida",
+    "templates/components/*.kida",
+    "_scaffold/default/*",
+    "_scaffold/default/**/*",
+    "py.typed",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -125,6 +131,7 @@ ignore = [
 "__init__.py" = ["F401"]
 "tests/**/*.py" = ["S101", "S108", "S110", "S604", "SIM117", "N806", "ARG", "T201"]
 "examples/**/*.py" = ["S101", "S108", "S110", "S604", "SIM117", "N806", "ARG", "T201", "E402"]
+"src/milo/_scaffold/default/**/*.py" = ["S101", "I001", "F401", "ARG", "T201", "E402"]
 "src/milo/_child.py" = ["S101"]          # asserts for type narrowing on subprocess pipes
 "src/milo/testing/*.py" = ["S101", "ARG"] # test helpers use assert and may have unused args
 "src/milo/version_check.py" = ["S110", "S310"] # best-effort cache reads + known PyPI URL

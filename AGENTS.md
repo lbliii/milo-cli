@@ -34,6 +34,7 @@ When you change something in milo-cli, the blast radius is:
 - **Terminal rendering bugs** → Alternate screen buffer not restored, cursor left off, raw mode leaked. Harm: the user's terminal is broken after our CLI exits. Happens silently unless you actually run the app to completion.
 - **Pipeline orchestration bugs** → Phase retries, dependency cycles, output capture. These power real deployment tooling for downstream consumers. Harm: a phase appears to succeed but didn't; or a deploy hangs forever.
 - **Startup-cost regressions** → The lazy-import contract is load-bearing. A stray top-level import in `__init__.py` adds latency to every CLI invocation in every downstream project.
+- **Scaffold or `milo verify` regressions** → `milo new` and `milo verify` are the front door and self-diagnosis tool agents use to bootstrap and debug. A broken scaffold produces CLIs that fail their own tests; a broken verify tells agents a correctly-built CLI is wrong, or a broken one is fine. Harm: agent onboarding stalls or agents ship bad CLIs with a green check. Same severity class as schema-generation bugs — both corrupt the agent-facing contract.
 
 milo-cli is 0.2.x / alpha but has real consumers (Pounce, DORI evaluating). Calibrate accordingly — the API can still move, but not carelessly.
 
