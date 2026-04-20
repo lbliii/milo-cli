@@ -19,6 +19,7 @@ failures, not warnings.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
 import json
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
     from milo.commands import CLI
 
 _MCP_PROTOCOL_VERSION = "2025-06-18"
+_ICONS = {"ok": "✓", "warn": "⚠", "fail": "✗", "skip": "∙"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,14 +77,12 @@ class VerifyReport:
 
     def format(self) -> str:
         """Render the report for terminal output."""
-        _ICONS = {"ok": "✓", "warn": "⚠", "fail": "✗", "skip": "∙"}
         lines = [f"milo verify {self.target}", ""]
         for c in self.checks:
             icon = _ICONS.get(c.status, "?")
             lines.append(f"  {icon} {c.name}: {c.message}")
             if c.details:
-                for detail in c.details.splitlines():
-                    lines.append(f"      {detail}")
+                lines.extend(f"      {detail}" for detail in c.details.splitlines())
         lines.append("")
         summary = (
             f"{self.passed} passed, {self.warnings} warning(s), "
@@ -208,9 +208,7 @@ def _load_target(target: str) -> tuple[ModuleType | None, Path | None, VerifyChe
                     message=f"import failed: {type(e).__name__}: {e}",
                 ),
             )
-        return module, path, VerifyCheck(
-            name="imports", status="ok", message=f"loaded {path.name}"
-        )
+        return module, path, VerifyCheck(name="imports", status="ok", message=f"loaded {path.name}")
 
     if ":" in target:
         module_path, _, _ = target.partition(":")
@@ -229,8 +227,10 @@ def _load_target(target: str) -> tuple[ModuleType | None, Path | None, VerifyChe
                     message=f"import failed: {type(e).__name__}: {e}",
                 ),
             )
-        return module, None, VerifyCheck(
-            name="imports", status="ok", message=f"loaded module {module_path!r}"
+        return (
+            module,
+            None,
+            VerifyCheck(name="imports", status="ok", message=f"loaded module {module_path!r}"),
         )
 
     return (
@@ -239,9 +239,7 @@ def _load_target(target: str) -> tuple[ModuleType | None, Path | None, VerifyChe
         VerifyCheck(
             name="imports",
             status="fail",
-            message=(
-                f"target {target!r} is neither a .py file path nor a module:attr reference"
-            ),
+            message=(f"target {target!r} is neither a .py file path nor a module:attr reference"),
         ),
     )
 
@@ -392,7 +390,7 @@ def _check_in_process_mcp(cli: CLI, expected_count: int) -> VerifyCheck:
 
 def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
     """Start `python <path> --mcp`, handshake, verify tools/list response."""
-    proc = subprocess.Popen(  # noqa: S603
+    proc = subprocess.Popen(
         [sys.executable, str(path), "--mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -420,7 +418,7 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
                 name="mcp_transport",
                 status="fail",
                 message=f"subprocess did not respond within {timeout}s",
-                details="Check that the file ends with `if __name__ == \"__main__\": cli.run()`.",
+                details='Check that the file ends with `if __name__ == "__main__": cli.run()`.',
             )
 
         responses: list[dict[str, Any]] = []
@@ -428,10 +426,8 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
             line = line.strip()
             if not line:
                 continue
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 responses.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
 
         if len(responses) < 2:
             return VerifyCheck(

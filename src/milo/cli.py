@@ -120,9 +120,7 @@ def _preflight_python_version() -> None:
     user sees a fix-it message instead of a `SyntaxError` or `ImportError`.
     """
     if sys.version_info < _MIN_PYTHON:
-        have = (
-            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-        )
+        have = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         want = f"{_MIN_PYTHON[0]}.{_MIN_PYTHON[1]}"
         sys.stderr.write(
             f"milo requires Python {want}+ (you have {have}).\n"

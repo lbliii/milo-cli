@@ -395,9 +395,7 @@ class TestWarnMissingDocs:
                 warnings.simplefilter("always")
                 function_to_schema(f, warn_missing_docs=True)
             assert any(
-                "'name'" in str(w.message)
-                for w in ws
-                if issubclass(w.category, UserWarning)
+                "'name'" in str(w.message) for w in ws if issubclass(w.category, UserWarning)
             )
 
 

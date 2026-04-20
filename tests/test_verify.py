@@ -212,9 +212,7 @@ def test_example_passes_verify(example_name):
     app_path = _EXAMPLES_DIR / example_name / "app.py"
     report = verify(str(app_path), timeout=10.0)
     if report.exit_code != 0:
-        pytest.fail(
-            f"Example {example_name!r} fails `milo verify`:\n\n{report.format()}"
-        )
+        pytest.fail(f"Example {example_name!r} fails `milo verify`:\n\n{report.format()}")
 
 
 class TestMiloVerifyCommand:
