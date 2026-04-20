@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from typing import TYPE_CHECKING, Any
@@ -181,6 +182,10 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
     - MiloError with validation/config codes -> -32602 (Invalid params)
     - MiloError with not-found codes -> -32601 (Method not found)
     - All others -> -32603 (Internal error) with traceback in data
+
+    When the MiloError carries ``argument`` or ``constraint`` context, those
+    fields are included in the data payload so callers can tell agents *which*
+    parameter failed and *what* constraint was violated.
     """
     import traceback as tb_mod
 
@@ -188,33 +193,57 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
 
     if isinstance(exc, MiloError):
         code_val = exc.code.value
+        data = _milo_error_data(exc)
         # Validation-related error codes -> Invalid params
         if code_val.startswith(("M-CFG-", "M-FRM-", "M-INP-")):
-            return -32602, {
-                "errorCode": code_val,
-                "type": type(exc).__name__,
-                "suggestion": exc.suggestion,
-            }
+            return -32602, data
         # Not-found codes -> Method not found
         if code_val in ("M-CMD-001",):
-            return -32601, {
-                "errorCode": code_val,
-                "type": type(exc).__name__,
-                "suggestion": exc.suggestion,
-            }
-        # Other MiloErrors -> Internal with structured data
-        return -32603, {
-            "errorCode": code_val,
-            "type": type(exc).__name__,
-            "suggestion": exc.suggestion,
-            "traceback": "".join(tb_mod.format_exception(exc)),
-        }
+            return -32601, data
+        # Other MiloErrors -> Internal with structured data (plus traceback)
+        data["traceback"] = "".join(tb_mod.format_exception(exc))
+        return -32603, data
 
     # Unknown exceptions -> Internal error with traceback
     return -32603, {
         "type": type(exc).__name__,
         "traceback": "".join(tb_mod.format_exception(exc)),
     }
+
+
+def _milo_error_data(exc: Any) -> dict[str, Any]:
+    """Build the structured data payload for a MiloError."""
+    data: dict[str, Any] = {
+        "errorCode": exc.code.value,
+        "type": type(exc).__name__,
+        "suggestion": exc.suggestion,
+    }
+    if getattr(exc, "argument", None):
+        data["argument"] = exc.argument
+    if getattr(exc, "constraint", None):
+        data["constraint"] = exc.constraint
+        example = _constraint_example(exc.constraint)
+        if example is not None:
+            data["example"] = example
+    return data
+
+
+def _constraint_example(constraint: dict[str, Any]) -> Any:
+    """Derive an example value from a JSON-Schema-style constraint dict.
+
+    Never uses user input. Returns ``None`` when no safe example applies.
+    """
+    if constraint.get("enum"):
+        return constraint["enum"][0]
+    if "minLength" in constraint:
+        return "x" * max(1, int(constraint["minLength"]))
+    if "minimum" in constraint:
+        return constraint["minimum"]
+    if "exclusiveMinimum" in constraint:
+        return constraint["exclusiveMinimum"] + 1
+    if "pattern" in constraint:
+        return None  # cannot safely synthesize
+    return None
 
 
 def _builtin_resources() -> list[dict[str, Any]]:
@@ -376,10 +405,7 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
             result = final_value
 
     except Exception as e:
-        return {
-            "content": [{"type": "text", "text": f"Error: {e}"}],
-            "isError": True,
-        }
+        return _tool_error_response(e, tool_name, cli)
 
     text = _to_text(result)
 
@@ -392,6 +418,63 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
         response["structuredContent"] = result
 
     return response
+
+
+_MISSING_ARG_RE = re.compile(r"missing \d+ required (?:positional|keyword) argument(?:s)?: (.+)")
+_UNEXPECTED_ARG_RE = re.compile(r"got an unexpected keyword argument '([^']+)'")
+
+
+def _tool_error_response(exc: Exception, tool_name: str, cli: CLI) -> dict[str, Any]:
+    """Build the ``tools/call`` error response with structured context.
+
+    MiloError subclasses contribute their ``argument``, ``constraint``,
+    ``suggestion``, and ``errorCode`` fields. Plain :class:`TypeError`
+    messages about missing or unexpected keyword arguments are parsed so
+    agents see which argument was wrong, and the ``schema`` field points
+    them at the tool's declared parameter schema for repair.
+    """
+    from milo._errors import MiloError
+
+    error_data: dict[str, Any] = {"tool": tool_name}
+
+    if isinstance(exc, MiloError):
+        error_data.update(_milo_error_data(exc))
+    elif isinstance(exc, TypeError):
+        match_missing = _MISSING_ARG_RE.search(str(exc))
+        match_unexpected = _UNEXPECTED_ARG_RE.search(str(exc))
+        if match_missing:
+            raw = match_missing.group(1)
+            names = [n.strip().strip("'\"") for n in raw.replace(" and ", ",").split(",") if n]
+            error_data["argument"] = names[0] if len(names) == 1 else names
+            error_data["reason"] = "missing_required_argument"
+            error_data["suggestion"] = f"Provide {raw}."
+        elif match_unexpected:
+            error_data["argument"] = match_unexpected.group(1)
+            error_data["reason"] = "unexpected_argument"
+            error_data["suggestion"] = (
+                f"Remove '{match_unexpected.group(1)}' — it is not a parameter of this tool."
+            )
+        error_data["type"] = "TypeError"
+
+    schema = _tool_schema(cli, tool_name)
+    if schema is not None:
+        error_data["schema"] = schema
+
+    return {
+        "content": [{"type": "text", "text": f"Error: {exc}"}],
+        "isError": True,
+        "errorData": error_data,
+    }
+
+
+def _tool_schema(cli: CLI, tool_name: str) -> dict[str, Any] | None:
+    """Return the input schema for a named tool, if known."""
+    try:
+        _, cmd = cli._get_resolved_command(tool_name)
+    except Exception:
+        return None
+    schema = getattr(cmd, "schema", None)
+    return schema if isinstance(schema, dict) else None
 
 
 def _list_resources(cli: CLI) -> list[dict[str, Any]]:

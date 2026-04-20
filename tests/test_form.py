@@ -22,6 +22,7 @@ from milo.form import (
     _handle_text_key,
     _make_initial_fields,
     form_reducer,
+    form_schema,
     make_form_reducer,
 )
 
@@ -494,3 +495,61 @@ class TestFormTimeout:
                 form(*specs, timeout=5.0)
                 _, kwargs = mock_fb.call_args
                 assert kwargs["timeout"] == 5.0
+
+
+class TestFormSchema:
+    def test_text_field_required(self):
+        schema = form_schema(FieldSpec(name="env", label="Environment"))
+        assert schema["type"] == "object"
+        assert schema["properties"]["env"]["type"] == "string"
+        assert schema["properties"]["env"]["title"] == "Environment"
+        assert schema["required"] == ["env"]
+
+    def test_text_field_with_default_not_required(self):
+        schema = form_schema(FieldSpec(name="version", label="Version", default="latest"))
+        assert schema["properties"]["version"]["default"] == "latest"
+        assert "required" not in schema
+
+    def test_confirm_field_is_boolean(self):
+        schema = form_schema(FieldSpec(name="yes", label="Confirm?", field_type=FieldType.CONFIRM))
+        assert schema["properties"]["yes"]["type"] == "boolean"
+
+    def test_select_field_has_enum(self):
+        schema = form_schema(
+            FieldSpec(
+                name="region",
+                label="Region",
+                field_type=FieldType.SELECT,
+                choices=("us-east", "us-west"),
+                default="us-east",
+            ),
+        )
+        assert schema["properties"]["region"]["enum"] == ["us-east", "us-west"]
+        assert schema["properties"]["region"]["default"] == "us-east"
+
+    def test_password_field_marked_write_only(self):
+        schema = form_schema(FieldSpec(name="pw", label="Password", field_type=FieldType.PASSWORD))
+        assert schema["properties"]["pw"]["type"] == "string"
+        assert schema["properties"]["pw"]["writeOnly"] is True
+
+    def test_placeholder_becomes_description(self):
+        schema = form_schema(FieldSpec(name="n", label="Name", placeholder="e.g. alice"))
+        assert schema["properties"]["n"]["description"] == "e.g. alice"
+
+    def test_multiple_fields_ordered(self):
+        schema = form_schema(
+            FieldSpec(name="a", label="A"),
+            FieldSpec(name="b", label="B", default="x"),
+            FieldSpec(name="c", label="C"),
+        )
+        assert list(schema["properties"].keys()) == ["a", "b", "c"]
+        assert schema["required"] == ["a", "c"]
+
+    def test_empty_specs_returns_empty_properties(self):
+        schema = form_schema()
+        assert schema == {"type": "object", "properties": {}}
+
+    def test_exported_from_package(self):
+        import milo
+
+        assert milo.form_schema is form_schema

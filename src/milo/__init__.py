@@ -68,6 +68,7 @@ def __getattr__(name: str):
         # Form
         "form": "form",
         "form_reducer": "form",
+        "form_schema": "form",
         "make_form_reducer": "form",
         # Help
         "HelpRenderer": "help",
@@ -256,6 +257,7 @@ __all__ = [
     "compact_cmds",
     "form",
     "form_reducer",
+    "form_schema",
     "format_doctor_report",
     "format_error",
     "format_output",

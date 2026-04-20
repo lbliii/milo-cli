@@ -108,6 +108,12 @@ def function_to_schema(func: Callable[..., Any], *, strict: bool = False) -> dic
     (Google, NumPy, or Sphinx style) and included as ``"description"``
     fields in the schema properties.
 
+    ``Context``-typed parameters (and any parameter named ``ctx``) are
+    intentionally omitted from the returned schema. The CLI dispatcher
+    injects them at call time, so they are invisible to MCP clients and
+    should not appear in ``tools/list`` descriptors. See
+    :func:`_is_context_type` for the exact detection rules.
+
     When *strict* is True, unrecognized type annotations raise
     :class:`TypeError` instead of silently falling back to ``"string"``.
     """
