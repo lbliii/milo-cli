@@ -37,6 +37,46 @@ class TestCli:
             main(["replay"])
 
 
+class TestComponentsCommand:
+    """`milo components` lists bundled defs and supports --json/--path."""
+
+    def test_lists_bundled_defs(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["components"])
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert "components/_defs.kida" in out
+        for name in ("section", "status_line", "kv_pair", "pipeline_progress", "header"):
+            assert name in out
+
+    def test_json_output_is_valid_and_includes_metadata(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["components", "--json"])
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert isinstance(data, list)
+        assert data, "expected at least one component"
+        names = {row["name"] for row in data if "name" in row}
+        assert {"section", "pipeline_progress"}.issubset(names)
+        first = next(r for r in data if r.get("name") == "pipeline_progress")
+        assert first["params"][0]["name"] == "state"
+        assert first["params"][0]["required"] is True
+
+    def test_extra_path_dedupes_by_template_def_name(self, capsys, tmp_path):
+        user_dir = tmp_path / "templates"
+        user_dir.mkdir()
+        (user_dir / "myapp.kida").write_text("{% def banner(title) %}== {{ title }}{% enddef %}")
+        with pytest.raises(SystemExit) as exc_info:
+            main(["components", "--path", str(user_dir)])
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert "myapp.kida" in out
+        assert "banner" in out
+        # bundled defs still listed exactly once
+        assert out.count("section(") == 1
+
+
 class TestPythonPreflight:
     """main() exits 2 with an actionable message on pre-3.14 Pythons."""
 

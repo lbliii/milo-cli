@@ -270,7 +270,9 @@ def _discover_all(
     if not valid_children:
         return GatewayState([], {}, [], {}, [], {})
 
-    max_workers = min(8, len(valid_children))
+    from kida import WorkloadType, get_optimal_workers
+
+    max_workers = get_optimal_workers(len(valid_children), workload_type=WorkloadType.IO_BOUND)
     results: dict[str, tuple[str, list, list, list]] = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

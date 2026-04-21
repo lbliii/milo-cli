@@ -383,6 +383,13 @@ class Store:
     Thread-safety: reads are lock-free (frozen state).
     Dispatch serializes through a lock.
     Sagas run on a ThreadPoolExecutor.
+
+    ``max_workers`` defaults to ``None``, which auto-sizes via
+    ``kida.get_optimal_workers`` under the IO_BOUND profile — returning the
+    OS-aware pool size (capped at 8). Sagas execute side-effect code (Call,
+    Take, Retry) which is I/O-shaped, not CPU-bound rendering. Pass an
+    explicit integer to override when you know the workload (e.g.
+    ``max_workers=N`` for benchmarks that fire N concurrent blocking sagas).
     """
 
     def __init__(
@@ -392,7 +399,7 @@ class Store:
         middleware: tuple[Callable, ...] = (),
         *,
         record: bool | str | Path = False,
-        max_workers: int = 4,
+        max_workers: int | None = None,
         on_pool_pressure: Callable[[int, int], None] | None = None,
         pool_pressure_threshold: float = 0.8,
     ) -> None:
@@ -400,6 +407,14 @@ class Store:
         self._state = initial_state
         self._lock = threading.Lock()
         self._listeners: list[Callable] = []
+        if max_workers is None:
+            import os
+
+            from kida import WorkloadType, get_optimal_workers
+
+            max_workers = get_optimal_workers(
+                os.cpu_count() or 4, workload_type=WorkloadType.IO_BOUND
+            )
         self._max_workers = max_workers
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._on_pool_pressure = on_pool_pressure

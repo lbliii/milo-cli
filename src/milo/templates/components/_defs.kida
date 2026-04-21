@@ -256,7 +256,9 @@
 {% endmatch -%}
 {%- if state.expanded and is_selected %}
 {{ phase_detail(phase, state.log_scroll, state.log_height, state.auto_follow) }}
+{% flush %}
 {% endif -%}
+{% flush %}
 {%- endfor -%}
 {%- match ps.status -%}
 {%- case "running" -%}
@@ -271,6 +273,7 @@
 
   {{ "pipeline failed" | red | bold }}
 {%- endmatch %}
+{% flush %}
 
 {%- if state.expanded -%}
 {{ key_hints([{"key": "↑↓", "action": "scroll"}, {"key": "⏎", "action": "collapse"}, {"key": "f", "action": "follow"}, {"key": "q", "action": "quit"}]) }}
@@ -292,6 +295,7 @@
 {% case _ -%}
   {{ icons.dot | dim }} {{ phase.name | dim }}
 {% endmatch -%}
+{% flush %}
 {%- endfor -%}
 {%- match state.status -%}
 {%- case "running" -%}
@@ -306,4 +310,5 @@
 
   {{ "pipeline failed" | red | bold }}
 {%- endmatch -%}
+{% flush %}
 {%- enddef -%}

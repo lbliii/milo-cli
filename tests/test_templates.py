@@ -91,6 +91,28 @@ class TestGetEnv:
         output = tmpl.render(state=state)
         assert "testprog" in output
 
+    def test_enable_capture_default_off(self):
+        """Default get_env() leaves enable_capture off (kida's default)."""
+        from milo.templates import get_env
+
+        env = get_env()
+        assert env.enable_capture is False
+
+    def test_enable_capture_opt_in_smoke(self):
+        """get_env(enable_capture=True) returns env where captured_render works."""
+        from kida import captured_render
+
+        from milo.templates import get_env
+
+        env = get_env(enable_capture=True)
+        assert env.enable_capture is True
+        tpl = env.from_string("hello {{ name }}", name="cap_smoke")
+        with captured_render(capture_context=frozenset({"name"})) as cap:
+            out = tpl.render(name="world")
+        assert out == "hello world"
+        # capture_context populated under enable_capture=True
+        assert cap.context_keys.get("name") == "world"
+
 
 class TestComponentTemplatesIncluded:
     def test_components_directory_exists(self):

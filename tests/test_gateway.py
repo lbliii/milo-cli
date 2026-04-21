@@ -184,6 +184,37 @@ class TestNamespacing:
 
 
 # ---------------------------------------------------------------------------
+# Worker sizing
+# ---------------------------------------------------------------------------
+
+
+class TestWorkerSizing:
+    def test_discover_all_uses_io_bound_profile(self):
+        """_discover_all sizes the pool via kida's IO_BOUND profile."""
+        import kida
+
+        clis = {f"cli{i}": {"command": ["x"]} for i in range(3)}
+        children = {
+            name: _make_child(name, tools=[{"name": "t", "inputSchema": {}}]) for name in clis
+        }
+
+        calls: list[tuple[int, Any]] = []
+        real = kida.get_optimal_workers
+
+        def spy(task_count, *, workload_type, **kw):
+            calls.append((task_count, workload_type))
+            return real(task_count, workload_type=workload_type, **kw)
+
+        with patch("kida.get_optimal_workers", side_effect=spy):
+            _discover_all(clis, children)
+
+        assert calls, "get_optimal_workers was not invoked"
+        task_count, workload = calls[0]
+        assert task_count == 3
+        assert workload == kida.WorkloadType.IO_BOUND
+
+
+# ---------------------------------------------------------------------------
 # Tool call proxying
 # ---------------------------------------------------------------------------
 

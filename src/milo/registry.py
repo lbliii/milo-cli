@@ -202,7 +202,9 @@ def check_all(clis: dict[str, dict[str, Any]] | None = None) -> list[HealthResul
     if not clis:
         return []
 
-    max_workers = min(8, len(clis))
+    from kida import WorkloadType, get_optimal_workers
+
+    max_workers = get_optimal_workers(len(clis), workload_type=WorkloadType.IO_BOUND)
     results: dict[str, HealthResult] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {

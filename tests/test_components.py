@@ -396,6 +396,37 @@ class TestPhaseDetail:
         assert "AUTO" in out
 
 
+class TestPipelineFlushBoundaries:
+    """Pipeline defs declare {% flush %} markers where streaming consumers
+    should see incremental output. Interpolated calls (``{{ def(...) }}``)
+    don't propagate flushes today; the markers document the streaming contract
+    and become load-bearing whenever a caller consumes the def as a stream."""
+
+    @pytest.fixture
+    def defs_source(self) -> str:
+        from pathlib import Path
+
+        from milo import templates as _templates
+
+        return (Path(_templates.__file__).parent / "components" / "_defs.kida").read_text()
+
+    def _def_body(self, source: str, name: str) -> str:
+        start_marker = f"{{%- def {name}"
+        start = source.index(start_marker)
+        end = source.index("{%- enddef -%}", start)
+        return source[start:end]
+
+    def test_pipeline_progress_flush_boundaries(self, defs_source: str) -> None:
+        body = self._def_body(defs_source, "pipeline_progress")
+        # One per-phase flush inside the for loop, one after overall-status match.
+        assert body.count("{% flush %}") == 2
+
+    def test_pipeline_detail_flush_boundaries(self, defs_source: str) -> None:
+        body = self._def_body(defs_source, "pipeline_detail")
+        # Per-phase + expanded-detail pane + overall-status = 3 boundaries.
+        assert body.count("{% flush %}") == 3
+
+
 class TestPipelineDetail:
     def _render_detail(self, env, state):
         prefix = '{% from "components/_defs.kida" import pipeline_detail %}'
