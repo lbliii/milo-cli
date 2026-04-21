@@ -25,8 +25,9 @@ from milo import (
     TickCmd,
     ViewState,
 )
+from milo.live import Spinner
 
-SPINNER = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+SPINNER = Spinner.BRAILLE
 
 URLS = (
     "https://example.com",

@@ -185,6 +185,7 @@ Pick the example closest to your use case, copy its `app.py`, and adapt. Every d
 | Sagas for async side effects | [examples/fetcher](examples/fetcher) | `Call`, `Put`, `Select`, `Retry` |
 | Parallel concurrent work | [examples/downloader](examples/downloader) | `Fork`, `Call`, `Delay`, `Timeout` |
 | Bubbletea-style Cmd thunks | [examples/spinner](examples/spinner) | `Cmd`, `Batch`, `TickCmd`, `ViewState` |
+| Live rendering outside an App | [examples/liverender](examples/liverender) | `milo.live.LiveRenderer`, `Spinner`, `terminal_env` |
 
 > Don't see your use case? Run `milo new <name>` to scaffold a fresh CLI with tests, then `milo verify app.py` to confirm it works.
 

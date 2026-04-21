@@ -57,6 +57,9 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format src/ tests/ benchmarks/ --check
 
+      - name: Template compile check
+        run: uv run python scripts/check_templates.py
+
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest

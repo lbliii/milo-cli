@@ -84,6 +84,8 @@ Things that look reasonable and are wrong here:
 - **Top-level imports in `milo/__init__.py`.** Every downstream CLI pays the cost on every invocation. Use `__getattr__`.
 - **Refactoring during a bug fix.** Separate PR. Exception: the refactor *is* the fix, or it's a rename-across-files cleanup.
 - **`print()` in library code.** T20 is enabled. Use the context's output path or raise.
+- **Undeclared template vars, globals, or filters.** Kida 0.7 runs `strict_undefined=True` and milo's `get_env()` defaults `validate_calls=True`. `{{ bar(...) }}` or `{{ x | oops }}` that "used to work" will now raise. Put defaults on your state dataclass, use `| default(...)` / `.get()` at the boundary, and never reference a name that isn't in `env.globals` or passed to `render()`.
+- **`{% def %}` nested inside `{% if %}` / `{% for %}`.** Kida requires top-level defs — the renderer only sees definitions declared at the outermost scope. Declare the macro first, then call it conditionally.
 
 ---
 
@@ -92,6 +94,7 @@ Things that look reasonable and are wrong here:
 A change is done when all of these hold:
 
 - [ ] `make lint`, `make ty`, `make test-cov` clean. No new `type: ignore`, no new S110 suppressions without a `# silent:` justification and per-file entry.
+- [ ] `uv run python scripts/check_templates.py` clean — every `.kida` file under `src/milo/templates/` and `examples/*/templates/` compiles under strict-undefined + `validate_calls=True`. This runs in CI's lint job; run it locally when you touch a template.
 - [ ] Coverage floor (80%, branch-aware) still holds.
 - [ ] Tests exercise the *interesting* path: both modes of a flag, MCP dispatch *and* CLI dispatch *and* `call()` for command changes, the failure path for saga effects, malformed input for schema inference.
 - [ ] Hot-path changes (`state.py` dispatch, `commands.py` resolution, `schema.py` inference) include a benchmark in the PR. "Didn't benchmark" is OK only if you say why.

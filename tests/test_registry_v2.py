@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from milo.registry import HealthResult, doctor, fingerprint, health_check
+from milo.registry import HealthResult, check_all, doctor, fingerprint, health_check
 
 
 class TestHealthResult:
@@ -103,6 +103,34 @@ class TestBackwardCompat:
             result = health_check("old_app")
             assert result.reachable is True
             assert result.stale is False  # no fingerprint to compare
+
+
+class TestWorkerSizing:
+    def test_check_all_uses_io_bound_profile(self) -> None:
+        """check_all sizes the pool via kida's IO_BOUND profile."""
+        import kida
+
+        clis = {f"cli{i}": {"command": ["x"]} for i in range(3)}
+        calls: list[tuple[int, object]] = []
+        real = kida.get_optimal_workers
+
+        def spy(task_count, *, workload_type, **kw):
+            calls.append((task_count, workload_type))
+            return real(task_count, workload_type=workload_type, **kw)
+
+        with (
+            patch("kida.get_optimal_workers", side_effect=spy),
+            patch(
+                "milo.registry._health_check_entry",
+                return_value=HealthResult(name="x", reachable=True, latency_ms=1.0),
+            ),
+        ):
+            check_all(clis)
+
+        assert calls, "get_optimal_workers was not invoked"
+        task_count, workload = calls[0]
+        assert task_count == 3
+        assert workload == kida.WorkloadType.IO_BOUND
 
 
 class TestDoctor:

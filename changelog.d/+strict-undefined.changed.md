@@ -1,0 +1,1 @@
+Bumped to `kida-templates>=0.7.0,<0.8.0`. Kida 0.7 makes `strict_undefined=True` the default — milo's bundled templates already conformed, so no behaviour changes for callers using stock templates. User templates that relied on silent-undefined fallbacks now raise `UndefinedError` at render; opt back into the loose mode by passing `get_env(strict_undefined=False)`.

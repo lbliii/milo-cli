@@ -75,6 +75,14 @@ def _cmd_new(args: argparse.Namespace) -> None:
     )
 
 
+def _cmd_components(args: argparse.Namespace) -> None:
+    """List bundled and user-defined template components."""
+    from milo.components_cli import run
+
+    paths = tuple(Path(p) for p in args.path or ())
+    sys.exit(run(paths=paths, as_json=args.json))
+
+
 def _cmd_replay(args: argparse.Namespace) -> None:
     """Replay a recorded session."""
     from milo.testing._record import load_recording
@@ -171,6 +179,21 @@ def main(argv: list[str] | None = None) -> None:
         "--poll", type=float, default=0.5, help="Poll interval in seconds (default: 0.5)"
     )
 
+    # milo components
+    components_parser = subparsers.add_parser(
+        "components", help="List bundled + user template components (defs)"
+    )
+    components_parser.add_argument(
+        "--path",
+        "-p",
+        action="append",
+        default=[],
+        help="Extra templates dir to scan (repeatable)",
+    )
+    components_parser.add_argument(
+        "--json", action="store_true", help="Emit full def metadata as JSON"
+    )
+
     # milo replay
     replay_parser = subparsers.add_parser("replay", help="Replay a recorded session")
     replay_parser.add_argument("session", help="Path to session JSONL file")
@@ -199,6 +222,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_verify(args)
     elif args.command == "dev":
         _cmd_dev(args)
+    elif args.command == "components":
+        _cmd_components(args)
     elif args.command == "replay":
         _cmd_replay(args)
     else:
