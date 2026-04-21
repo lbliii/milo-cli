@@ -1702,7 +1702,7 @@ class TestConfigurablePool:
         store._executor.shutdown(wait=True)
 
     def test_default_max_workers(self):
-        """Default max_workers is auto-sized by kida's RENDER profile."""
+        """Default max_workers is auto-sized by kida's IO_BOUND profile."""
         import os
 
         from kida import WorkloadType, get_optimal_workers
@@ -1712,7 +1712,7 @@ class TestConfigurablePool:
         def reducer(state, action):
             return state or 0
 
-        expected = get_optimal_workers(os.cpu_count() or 4, workload_type=WorkloadType.RENDER)
+        expected = get_optimal_workers(os.cpu_count() or 4, workload_type=WorkloadType.IO_BOUND)
         store = Store(reducer, None)
         assert store._max_workers == expected
         assert store._executor._max_workers == expected
