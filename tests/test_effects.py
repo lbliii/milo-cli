@@ -1325,7 +1325,8 @@ class TestEffectComposition:
         def reducer(state, action):
             return state or 0
 
-        store = Store(reducer, None)
+        # Use extra workers to prevent pool starvation when Race+All nest
+        store = Store(reducer, None, max_workers=8)
         store.run_saga(parent())
         time.sleep(1.0)
         store._executor.shutdown(wait=True)
@@ -1441,7 +1442,8 @@ class TestEffectComposition:
         def reducer(state, action):
             return state or 0
 
-        store = Store(reducer, None)
+        # Use extra workers to prevent pool starvation when Fork+All+Take nest
+        store = Store(reducer, None, max_workers=8)
         store.run_saga(parent())
         time.sleep(1.0)
         store._executor.shutdown(wait=True)
