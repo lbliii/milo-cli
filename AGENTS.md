@@ -1,122 +1,96 @@
-# AGENTS.md
+# Milo Agent Constitution
 
-milo-cli is infrastructure. One decorator becomes an argparse CLI, an MCP tool, and an llms.txt entry — so every bug you introduce propagates into the CLIs built on top of it, and from there into the AI agents and humans calling those CLIs. The people downstream can't see milo, can't audit it, and can't defend themselves from what it does. Treat the rules below as safety rules, not style rules.
+## North Star
+Milo exists to prove that one typed Python function can safely become a human CLI command, an MCP tool with a truthful JSON Schema, and an llms.txt entry. Protect the shared contract for humans, agents, and downstream CLIs: pure Python, auditable types, deterministic state, and free-threading correctness.
 
----
+## Non-Negotiables
+- Pure Python only. The one runtime dependency is `kida-templates`; no `click`, `rich`, Pydantic, attrs, C extensions, or compiled hot-path shortcuts.
+- Types are the contract. `function_to_schema` derives JSON Schema from annotations, `Annotated[...]` constraints, docstrings, and defaults.
+- Reducers are pure and deterministic. I/O, logging, sleeps, and clocks belong in sagas, `Cmd`, command handlers, or explicit boundary code.
+- Runtime configuration is frozen where modeled that way. Registration happens at import; runtime change is a lifecycle event, not mutation by convenience.
+- Protocol code is sans-I/O unless it is the transport boundary. Command resolution, schema generation, and MCP dispatch return values.
+- Free-threading is first-class. Assume Python 3.14t with `PYTHON_GIL=0`; shared mutable state needs a concurrency story.
+- Keep imports lazy. Do not add top-level imports to `milo/__init__.py`; public names route through `__getattr__`.
+- Sharp edges are bugs: silent `except`, `type: ignore`, ambiguous flags, unhelpful errors, and `print()` in library code all need justification or removal.
 
-## North star
-
-**One function, three protocols — humans and AI agents both native.** milo-cli exists so a single typed Python function is simultaneously a human CLI command, an MCP tool with a real JSON Schema, and a discoverable llms.txt entry. Every decision routes back to that: types that drive schemas, pure Python you can audit, free-threading correctness under true parallelism. If a change doesn't serve that goal, it isn't worth shipping.
-
----
-
-## Design philosophy
-
-- **Pure Python is a constraint.** One runtime dep (`kida-templates`). No C extensions, no `click`, no `rich`. If the dispatch path needs to get faster, the answer is better Python. Compiling something kills the "audit-everything" promise.
-- **Types are the contract.** `function_to_schema` infers JSON Schema from annotations + `Annotated[...]` constraints. No parallel schema definitions, no Pydantic models shadowing the signature. If the type can't express it, fix the type.
-- **Elm architecture means pure reducers.** `Store`, sagas, and `App` assume reducers are side-effect-free and deterministic. Effects go through saga middleware (`Call`, `Put`, `Fork`, ...) or `Cmd`. A reducer that does I/O is a bug, not a shortcut.
-- **Frozen config > locks.** `CLI`, `CommandDef`, and the config dataclasses are `frozen=True, slots=True`. Registration happens at import; runtime changes are lifecycle events, not mutations.
-- **Sans-I/O protocols.** MCP dispatch, schema generation, and command resolution don't touch sockets or stdout. They return values. Load-bearing for testability and for the stdin/stdout JSON-RPC transport.
-- **Free-threading is first-class.** CI runs on 3.14t with `PYTHON_GIL=0` and asserts `sys._is_gil_enabled() is False`. Shared-mutable state is reviewed on that assumption. We are the ecosystem's canary for free-threaded CLIs.
-- **Lazy imports everywhere.** `milo/__init__.py` uses `__getattr__`; unused modules never load. Don't add top-level imports in `__init__.py` — it pays a startup cost on every CLI invocation.
-- **Sharp edges are bugs.** Silent `except`, `type: ignore`, ambiguous flags, unhelpful errors — not taste, bugs. S110 is re-enabled in CI and the last four PRs have all been sharp-edge hunts. Target for `type: ignore` is zero.
-
----
+## Architecture Boundaries
+- `CLI.run()`, `CLI.invoke()`, `CLI.call()`/`call_raw()`, and MCP `tools/call` must agree on command resolution and argument behavior.
+- `src/milo/schema.py` is the single schema source. Do not introduce parallel schema definitions or model classes that shadow signatures.
+- `src/milo/mcp.py`, `src/milo/_mcp_router.py`, `src/milo/gateway.py`, and `src/milo/_jsonrpc.py` own MCP wire behavior and JSON-RPC diagnostics.
+- `src/milo/state.py`, `src/milo/app.py`, reducers, effects, and `Cmd` own the Elm-style runtime and terminal app lifecycle.
+- `src/milo/templates/`, example templates, and scaffold templates must compile under Kida strict undefined and `validate_calls=True`.
+- `src/milo/_scaffold/`, `src/milo/verify.py`, docs, and examples are the onboarding contract for agents and new CLI authors.
 
 ## Stakes
+- Schema drift makes agents send valid-looking JSON that the function rejects or silently misinterprets.
+- MCP regressions break `tools/list`, `tools/call`, resources, prompts, progress, gateway routing, and agent repair loops.
+- Command dispatch drift makes human CLIs work while programmatic or MCP calls fail, or the reverse.
+- Free-threaded races in Store dispatch, saga execution, tick threads, child processes, or terminal state make 3.14t look flaky downstream.
+- Terminal cleanup bugs leave alternate screen, raw mode, cursor visibility, mouse mode, or window title broken after exit.
+- Scaffold, docs, examples, and `milo verify` regressions teach agents to create broken CLIs with confidence.
+- Startup-cost regressions punish every downstream CLI invocation.
 
-When you change something in milo-cli, the blast radius is:
+## Stop And Ask
+- New runtime dependency, compiled extension, or optional dependency promoted into the default install.
+- Public API change: `milo.__all__`, `CLI`, `@command`, `Context`, schema markers, saga effects, `Store`, `App`, pipeline types, plugin hooks.
+- Command-dispatch changes in `commands.py`, `_command_defs.py`, `groups.py`, `cli.py`, or `_mcp_router.py`.
+- MCP protocol surface changes: annotations, resources, prompts, streaming progress, gateway namespacing, error codes, JSON-RPC shape.
+- State runtime changes in `state.py`, `app.py`, terminal cleanup, saga cancellation, dispatch locking, or executor ordering.
+- New global option, config field, saga effect, `Cmd` variant, scaffold shape, or irreversible migration.
+- Security/auth behavior, subprocess execution, registry paths, or child-process lifecycle changes.
+- Test disagrees with code, a bug cannot be reproduced, or a change needs dead-code removal or adjacent cleanup to proceed.
 
-- **Schema generation bugs** → An AI agent sees a tool signature that doesn't match reality. It sends valid-looking JSON that the function rejects, or worse, accepts silently. Harm: agent workflows abort mid-task, or structured output gets corrupted in ways the agent has no way to detect.
-- **MCP dispatch bugs** → `tools/list`, `tools/call`, `resources/read`, streaming progress. A subtly broken response breaks every Claude/DORI/Pounce client calling a milo CLI. Debuggable only with JSON-RPC trace logs.
-- **Free-threaded races** → Store dispatch, saga executor, tick threads, SIGWINCH — all can run truly in parallel on 3.14t. No GIL safety net. A race we ship normalizes "free-threading is flaky" for every Python project watching us.
-- **Command dispatch bugs** → `CLI.run()`, `CLI.call()`, and MCP `tools/call` all route through the same resolver (d6306f6). Break one and you break the other two. Harm: CLIs work interactively but agents get errors, or vice versa.
-- **Terminal rendering bugs** → Alternate screen buffer not restored, cursor left off, raw mode leaked. Harm: the user's terminal is broken after our CLI exits. Happens silently unless you actually run the app to completion.
-- **Pipeline orchestration bugs** → Phase retries, dependency cycles, output capture. These power real deployment tooling for downstream consumers. Harm: a phase appears to succeed but didn't; or a deploy hangs forever.
-- **Startup-cost regressions** → The lazy-import contract is load-bearing. A stray top-level import in `__init__.py` adds latency to every CLI invocation in every downstream project.
-- **Scaffold or `milo verify` regressions** → `milo new` and `milo verify` are the front door and self-diagnosis tool agents use to bootstrap and debug. A broken scaffold produces CLIs that fail their own tests; a broken verify tells agents a correctly-built CLI is wrong, or a broken one is fine. Harm: agent onboarding stalls or agents ship bad CLIs with a green check. Same severity class as schema-generation bugs — both corrupt the agent-facing contract.
+## Anti-Patterns
+- Adding a second schema source, validation framework, or typed model layer instead of improving annotations and `function_to_schema`.
+- Catching broad exceptions without either reporting them or documenting a `# silent: <reason>` suppression in the lint configuration.
+- `# type: ignore` as the first move. Narrow the type or fix the code.
+- Reducers that do I/O, logging, `time.time()`, random generation, sleeps, subprocess work, or mutation outside returned state.
+- Internal defensive validation that duplicates boundary validation and obscures the actual contract.
+- Speculative config, future transports, broad abstractions, or new effects before existing composition fails.
+- Top-level imports in `milo/__init__.py`.
+- `print()` in library code; use context output, structured return values, stderr at transport boundaries, or exceptions.
+- Kida templates with undeclared variables, missing defaults, unknown filters/globals, or `{% def %}` nested inside blocks.
 
-milo-cli is 0.2.x / alpha but has real consumers (Pounce, DORI evaluating). Calibrate accordingly — the API can still move, but not carelessly.
+## Steward System
+Read this root constitution plus the closest scoped `AGENTS.md` before editing. Root is the constitution and routing guide; scoped files are domain stewards. Scoped stewards own local invariants, refusal patterns, docs, tests, examples, fixtures, and checks. Cross-boundary work needs `Steward Notes` in the PR description naming consulted stewards, decisions, risks, and follow-up.
 
----
+Every steward uses this operating model:
+- Point of View: who or what the domain represents.
+- Protect: invariants, contracts, quality bars, and failure modes.
+- Advocate: features, fixes, and investments the domain should push for.
+- Serve Peers: upstream and downstream domains that need clearer contracts, diagnostics, docs, tests, or ergonomics.
+- Do Not: local anti-patterns.
+- Own: tests, docs, examples, fixtures, and maintenance checks.
 
-## Who reads your output
+## When To Consult
+- Proactively consult stewards for cross-boundary, public-facing, hard-to-reverse, performance-sensitive, concurrency-sensitive, security-sensitive, or contract-affecting work.
+- Use the nearest steward for local work.
+- Use multiple stewards when ownership lines cross.
+- Parallelize steward consultation only when questions are independent.
+- Keep final synthesis and implementation accountability with the implementing agent.
 
-- **AI agents** — Claude, DORI, gateway clients. They read JSON Schemas, tool descriptions, error `code` fields, and structured content. If the schema lies, the agent has no recourse.
-- **Human CLI users** — migrating from argparse/click. They read `--help`, tracebacks, and the did-you-mean suggestions. Error messages must tell them what to do next.
-- **Downstream framework consumers** — Pounce first, then DORI and enterprise tooling. They read public API names, `__all__`, and migration notes. Breaking changes cost them a rewrite.
-- **Contributors** — know argparse and MCP at the surface, not our internals. They read `cli.py`, `mcp.py`, `state.py`, and examples.
-- **Me (Lawrence)** — read diffs. Put the what in code, the why in the PR.
+## Ask Stewards
+Trigger phrase: `ask stewards`.
 
----
+For implementation work, consult affected stewards and return the synthesis before or during the change. For backlog, roadmap, or prioritization work, consult all scoped stewards and produce a rollup with raw steward signals, confidence, dependencies, risks, convergence, minority reports, ranked backlog, and not-now items.
 
-## Escape hatches — stop and ask
+## Extension Routing
+- Public CLI commands, groups, global options, resources, prompts: `src/milo/commands.py`, `_command_defs.py`, `groups.py`, `mcp.py`, and `llms.py`.
+- MCP transport and gateway: `src/milo/mcp.py`, `_jsonrpc.py`, `_mcp_router.py`, `_child.py`, `gateway.py`, and `registry.py`.
+- Schema constraints: `src/milo/schema.py`; public exports route through `src/milo/__init__.py`.
+- Interactive apps and state: `src/milo/app.py`, `state.py`, `reducers.py`, `flow.py`, `form.py`, and effect types in `_types.py`.
+- Templates and default terminal UX: `src/milo/templates/`, `src/milo/theme.py`, `src/milo/help.py`, and `examples/*/templates/`.
+- Scaffolding and verification: `src/milo/_scaffold/`, `src/milo/verify.py`, `docs/agent-quickstart.md`, and `docs/testing.md`.
 
-Forks where I want a check-in, not a judgment call:
+## Done Criteria
+- `make lint`, `make ty`, and `make test-cov` clean unless the PR explicitly documents why a narrower check was chosen.
+- Run `uv run python scripts/check_templates.py` when touching `src/milo/templates/`, `examples/*/templates/`, scaffold templates, or Kida-facing docs/examples.
+- Coverage stays at or above the branch-aware 80% floor.
+- Tests exercise the interesting path: schema, CLI dispatch, programmatic call, MCP dispatch, malformed input, failure diagnostics, concurrency, terminal cleanup, or template compilation as relevant.
+- Hot-path changes in schema inference, command resolution, Store dispatch, saga execution, rendering, gateway dispatch, or child process routing include benchmark notes.
+- Free-threading-sensitive changes include notes on shared mutable state, lock ordering, reentrant dispatch, cancellation, executor ordering, or why none apply.
+- Public API changes include a towncrier fragment in `changelog.d/`, migration notes if breaking, and `__all__` updates when needed.
+- Error messages tell the reader what to do next.
 
-- **New runtime dependency.** Zero beyond `kida-templates` is the point. "It already does what we need" is the default answer. Ask.
-- **Touching the command-dispatch path** (`cli.py`, `commands.py`, `_mcp_router.py`). All three callers — `run()`, `call()`, `tools/call` — share this resolver. Show it still works for all three. Benchmarks for hot-path changes.
-- **Touching the saga executor or Store dispatch lock** (`state.py`). Thread-safety on 3.14t is load-bearing. Show before/after benchmarks from `tests/test_bench_contention.py`. Can't measure → don't change.
-- **Public API change** (`milo.__all__`, `CLI`, `@command`, `Context`, saga effects, `Store`, `App`). Ask whether the break is worth it. Downstream projects pin ranges.
-- **New global option or config field.** The surface is already wide. Reshape an existing one first. Speculative config is a smell.
-- **New saga effect or `Cmd` variant.** The effect set is deliberately small. Compose existing ones first.
-- **MCP protocol surface change** (annotations, resources, prompts, streaming). Spec-compliance matters; sketch the change and ask.
-- **Top-level import in `milo/__init__.py`.** Breaks the lazy-import contract. Ask.
-- **Dead code you found.** Flag in the PR, let me decide — it might be public API or load-bearing for an example.
-- **Test disagrees with code.** Ask which is authoritative before "fixing" either.
-- **Can't reproduce a reported bug.** Stop. Ask for a minimal repro or env dump. Don't guess.
-- **Adjacent issues found mid-task.** List in the PR description. Don't fold them in — exception: refactors, where I prefer one bundled PR.
-
----
-
-## Anti-patterns
-
-Things that look reasonable and are wrong here:
-
-- **C extensions or compiled deps "just for the hot path."** No. The whole point is pure, auditable Python.
-- **`try: ... except Exception: pass`.** S110 is re-enabled in CI. If you must swallow, annotate the suppression with a `# silent: <reason>` comment and list the file under per-file ignores — see `version_check.py` and `gateway.py` for examples.
-- **`# type: ignore`.** Target is zero. Narrow the type or fix the code. If you have to, own it in the PR description.
-- **Pydantic / attrs / dataclasses-json for schemas.** `function_to_schema` plus `Annotated` constraints is the contract. Don't shadow it.
-- **Reducers that do I/O, logging, or `time.time()`.** Pure functions only. Side effects go through sagas or `Cmd`.
-- **Speculative config options** for "future flexibility." If no one's asking, don't add it. Configs are easier to add than to remove.
-- **Defensive validation inside internal code.** Validate at the boundary (the `@command` decorator, the MCP dispatch entry, the CLI parser). Internal code trusts its callers.
-- **Abstractions for hypothetical protocols or effects.** MCP is real. A "future transport" is not. YAGNI.
-- **Top-level imports in `milo/__init__.py`.** Every downstream CLI pays the cost on every invocation. Use `__getattr__`.
-- **Refactoring during a bug fix.** Separate PR. Exception: the refactor *is* the fix, or it's a rename-across-files cleanup.
-- **`print()` in library code.** T20 is enabled. Use the context's output path or raise.
-- **Undeclared template vars, globals, or filters.** Kida 0.7 runs `strict_undefined=True` and milo's `get_env()` defaults `validate_calls=True`. `{{ bar(...) }}` or `{{ x | oops }}` that "used to work" will now raise. Put defaults on your state dataclass, use `| default(...)` / `.get()` at the boundary, and never reference a name that isn't in `env.globals` or passed to `render()`.
-- **`{% def %}` nested inside `{% if %}` / `{% for %}`.** Kida requires top-level defs — the renderer only sees definitions declared at the outermost scope. Declare the macro first, then call it conditionally.
-
----
-
-## Done criteria
-
-A change is done when all of these hold:
-
-- [ ] `make lint`, `make ty`, `make test-cov` clean. No new `type: ignore`, no new S110 suppressions without a `# silent:` justification and per-file entry.
-- [ ] `uv run python scripts/check_templates.py` clean — every `.kida` file under `src/milo/templates/` and `examples/*/templates/` compiles under strict-undefined + `validate_calls=True`. This runs in CI's lint job; run it locally when you touch a template.
-- [ ] Coverage floor (80%, branch-aware) still holds.
-- [ ] Tests exercise the *interesting* path: both modes of a flag, MCP dispatch *and* CLI dispatch *and* `call()` for command changes, the failure path for saga effects, malformed input for schema inference.
-- [ ] Hot-path changes (`state.py` dispatch, `commands.py` resolution, `schema.py` inference) include a benchmark in the PR. "Didn't benchmark" is OK only if you say why.
-- [ ] Free-threading-sensitive? Note what you thought about — shared-mutable state, reentrant dispatch, executor ordering. 3.14t is where we run.
-- [ ] Public API changed → towncrier fragment in `changelog.d/`, migration note if breaking, `__all__` updated.
-- [ ] Error messages tell the reader what to do next, not just what went wrong.
-- [ ] PR description explains *why*. The diff explains what.
-
-"Tests pass" is not "done." Tests pass on broken code all the time — especially in a framework where the test is usually a snapshot.
-
----
-
-## Review and assimilation
-
-- **I read diff-first, description-second.** Tight diff + clear why merges fast; sprawling diff gets questions.
-- **One concern per PR.** If the diff needs section headers, it's two PRs. Exception: renames across many files — one bundled PR beats review churn.
-- **Commit style:** see `git log`. `fix:`/`refactor:`/`deps:`/`release:` prefixes or plain descriptive imperative. Body = motivation.
-- **Don't trailing-summary me.** If the diff is readable, I can read it.
-- **Flag surprises.** Weird test, unused public name, unreachable branch, unexpected `# silent:` suppression — put it in the PR description. Don't fix silently, don't ignore.
-
----
-
-## When this file is wrong
-
-It will be. Tell me. The worst outcome is that it sits here for a year contradicting how the project actually works. Updates to AGENTS.md are a first-class PR — short, focused, and welcome.
+## Review Notes
+Keep PRs to one concern unless a mechanical rename is the concern. Follow existing commit style (`fix:`, `refactor:`, `deps:`, `release:` or a plain descriptive imperative). The diff should show what changed; the PR description should explain why. Flag surprises: weird tests, unused public names, unexpected suppressions, dead code, benchmark gaps, free-threading assumptions, and any steward disagreement.
