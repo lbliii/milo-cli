@@ -25,7 +25,7 @@ classifiers = [
 milo = "milo.cli:main"
 
 [project.optional-dependencies]
-docs = ["bengal>=0.2.6"]
+docs = ["bengal>=0.3.2"]
 yaml = ["pyyaml>=6.0"]
 watch = ["watchfiles>=1.0"]
 
@@ -196,5 +196,5 @@ dev = [
     "towncrier>=24.0",
 ]
 docs = [
-    "bengal>=0.2.6",
+    "bengal>=0.3.2",
 ]
