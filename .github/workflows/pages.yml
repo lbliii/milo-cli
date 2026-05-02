@@ -38,25 +38,16 @@ jobs:
         env:
           PYTHON_GIL: "0"
 
-      # Use bengal cache hash for accurate cache invalidation
-      # This includes all build inputs: content, config, autodoc sources, templates, etc.
-      - name: Get cache hash
-        id: cache
-        working-directory: site
-        run: echo "hash=$(uv run bengal cache hash)" >> $GITHUB_OUTPUT
-        env:
-          PYTHON_GIL: "0"
-
       - name: Cache Bengal build state
         uses: actions/cache@v4
         with:
           path: site/.bengal
-          key: bengal-${{ runner.os }}-${{ steps.cache.outputs.hash }}
+          key: bengal-${{ runner.os }}-${{ hashFiles('uv.lock', 'pyproject.toml', 'src/**', 'site/**') }}
           # No restore-keys - we want exact match for correctness
 
       - name: Build documentation site
         working-directory: site
-        run: uv run bengal site build --environment production
+        run: uv run bengal build --environment production
         env:
           PYTHON_GIL: "0"
 
