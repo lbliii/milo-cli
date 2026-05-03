@@ -55,6 +55,32 @@ class TestStore:
         assert len(calls) == 1
         store.shutdown()
 
+    def test_listener_can_dispatch_after_lock_release(self):
+        """Listener dispatch is reentrant because listeners run outside the store lock."""
+
+        def reducer(state, action):
+            if state is None:
+                return {"count": 0, "followups": 0}
+            if action.type == "increment":
+                return {**state, "count": state["count"] + 1}
+            if action.type == "followup":
+                return {**state, "followups": state["followups"] + 1}
+            return state
+
+        store = Store(reducer, None)
+        fired = threading.Event()
+
+        def listener():
+            if not fired.is_set():
+                fired.set()
+                store.dispatch(Action("followup"))
+
+        store.subscribe(listener)
+        store.dispatch(Action("increment"))
+
+        assert store.state == {"count": 1, "followups": 1}
+        store.shutdown()
+
     def test_recording(self):
         def reducer(state, action):
             if state is None:

@@ -196,6 +196,20 @@ class TestRawMode:
                     pass
         mock_restore.assert_called_once()
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="unix only")
+    def test_raw_mode_restores_if_setraw_fails(self):
+        from milo.input._platform import raw_mode
+
+        old_settings = object()
+
+        with patch("termios.tcgetattr", return_value=old_settings):
+            with patch("tty.setraw", side_effect=OSError("raw mode unavailable")):
+                with patch("termios.tcsetattr") as mock_restore:
+                    with pytest.raises(OSError, match="raw mode unavailable"):
+                        with raw_mode(0):
+                            pass
+        mock_restore.assert_called_once()
+
     @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
     def test_raw_mode_win32_is_noop(self):
         from milo.input._platform import raw_mode
