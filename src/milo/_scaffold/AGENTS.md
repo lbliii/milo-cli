@@ -19,6 +19,13 @@ Represent a new CLI author or coding agent who needs a minimal, correct, testabl
 - Scaffold writes must refuse unsafe overwrites and keep error messages actionable.
 - Scaffold templates must stay compatible with current public API exports and Python version requirements.
 
+## Contract Checklist
+- Public API, CLI dispatch, schema, MCP, context, or verify changes test the generated scaffold path or explain why scaffold is unaffected.
+- Scaffold file changes update generated README commands, generated tests, docs quickstarts, and `milo verify` expectations together.
+- New scaffold behavior refuses unsafe overwrites and has actionable error tests.
+- Scaffold examples preserve schema, direct dispatch, and MCP dispatch coverage for a new user's first command.
+- Template or README snippets touched here run through docs/template checks where applicable.
+
 ## Advocate
 - Small generated examples that cover schema, direct dispatch, and MCP dispatch.
 - Better `milo verify` alignment when scaffold expectations evolve.

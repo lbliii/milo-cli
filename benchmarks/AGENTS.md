@@ -17,6 +17,13 @@ Represent downstream CLIs paying startup, dispatch, schema, rendering, gateway, 
 - Optimizations must not add runtime dependencies, compiled code, global mutable caches without invalidation, or protocol drift.
 - Contention benchmarks should preserve free-threaded assumptions rather than relying on the GIL.
 
+## Contract Checklist
+- Hot-path code changes either update/add a benchmark, cite an existing benchmark, or explain `no benchmark impact: <reason>`.
+- Benchmark notes name command, schema, Store, saga, MCP/gateway, rendering, or startup workload and the Python/GIL configuration.
+- Speed claims include before/after numbers or explicitly say no claim is being made.
+- Benchmark changes keep correctness tests as the source of truth; faster-but-drifting behavior is a failure.
+- Baseline updates explain whether the code, benchmark, dependency, or machine environment changed.
+
 ## Advocate
 - Benchmark additions with any hot-path code change.
 - Baseline updates only when the benchmark or environment change is explained.
