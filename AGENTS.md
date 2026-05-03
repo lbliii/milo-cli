@@ -82,6 +82,19 @@ Steward findings should be contract-oriented, evidence-backed, and collateral-aw
 - Collateral: docs, examples, scaffold, llms.txt, changelog, migration notes, or benchmarks that also need updates; write "none: <reason>" when not applicable.
 - Confidence: high/medium/low.
 
+## Steward Swarms
+When the user asks for `ask stewards`, a bugbash, review swarm, or steward synthesis, and delegation is available, spawn independent steward agents for affected domains. Each steward agent reads this file plus its closest scoped `AGENTS.md`, advocates only for that domain's interests, and returns findings in the Steward Signal Format.
+
+The implementing agent owns synthesis and final decisions. It accepts, merges, rejects, or defers findings; prevents unrelated scope expansion; records not-now items; and keeps the final patch coherent. Stewards advise and create useful tension, but they do not own the integrated implementation.
+
+Use independent stewards for independent questions. Do not delegate the immediate blocker on the critical path if the implementing agent must resolve it before any other work can proceed.
+
+## Steward Feedback Loop
+- Steward miss: when a bug escapes an applicable steward, update the steward checklist, a regression test, a docs/snippet check, a routing rule, or record why the miss should not become policy.
+- Steward overreach: when a steward repeatedly pulls unrelated work into PRs, narrow the checklist, split the steward, or move the concern to not-now/follow-up.
+- Repeated high-quality findings should become checklist items; repeated noisy findings should be pruned or clarified.
+- Steward guidance should evolve from evidence: escaped bugs, late collateral updates, CI/review misses, and recurring review comments.
+
 ## When To Consult
 - Proactively consult stewards for cross-boundary, public-facing, hard-to-reverse, performance-sensitive, concurrency-sensitive, security-sensitive, or contract-affecting work.
 - Use the nearest steward for local work.
