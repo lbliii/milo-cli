@@ -179,6 +179,28 @@ def test_fixed_width_panels_use_display_cell_width():
         assert {cell_width(line) for line in boxed} == {78}
 
 
+def test_open_cards_use_even_fading_rules():
+    for argv in (
+        ["catalog"],
+        ["audit", "--limit", "1"],
+        ["directive"],
+        ["audit", "--focus", "LNK001"],
+        ["atlas"],
+        ["primitives"],
+    ):
+        result = cli.invoke(argv)
+        assert result.exit_code == 0
+        rules = [
+            line
+            for line in result.output.splitlines()
+            if line.startswith(("╭─", "├─", "╰─"))
+            and not line.endswith(("╮", "┤", "╯"))
+        ]
+        assert rules
+        assert {cell_width(line) for line in rules} == {78}
+        assert all(line.endswith("╌┄ · .  .") for line in rules)
+
+
 def test_live_interactive_showcase_views_render():
     live = cli.invoke(["live"])
     browser = cli.invoke(["browser"])

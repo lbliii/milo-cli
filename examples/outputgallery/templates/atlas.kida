@@ -19,10 +19,10 @@
 
 {{ "Score Panels" | bold | cyan }}
 {% for panel in report.panels -%}
-╭─ {{ panel.title | bold }} {{ "─" * 24 }}
+{{ panel.title | bold | open_rule }}
 │ {{ panel.meter }} {{ panel.score }}/100
 │ {{ panel.note }}
-╰{{ "─" * 34 }}
+{{ "" | open_rule_end }}
 {% endfor %}
 
 {{ "Next" | bold | cyan }}

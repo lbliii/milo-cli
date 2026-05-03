@@ -3,10 +3,10 @@
 {%- enddef -%}
 
 {%- def issue_card(glyph, code, location, message, fix) -%}
-╭─ {{ glyph }} {{ code | bold }} {{ location }}
+{{ (glyph ~ " " ~ code ~ " " ~ location) | bold | open_rule }}
 │ {{ message }}
 │ fix  {{ fix }}
-╰{{ "─" * 64 }}
+{{ "" | open_rule_end }}
 {%- enddef -%}
 
 {%- def key_bar(keys) -%}

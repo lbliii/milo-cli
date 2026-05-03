@@ -125,6 +125,25 @@ class TestGetEnv:
         out = tmpl.render()
         assert out == "✖  |界 |3|abc…"
 
+    def test_open_rule_filters_render_even_fading_rules(self):
+        from milo._cells import cell_width
+        from milo.templates import get_env
+
+        env = get_env()
+        tmpl = env.from_string(
+            "{{ 'Outcome' | open_rule }}\n"
+            "{{ 'contract' | open_rule_divider }}\n"
+            "{{ '' | open_rule_end }}",
+            name="open_rule_filters",
+        )
+        lines = tmpl.render().splitlines()
+
+        assert {cell_width(line) for line in lines} == {78}
+        assert lines[0].startswith("╭─ Outcome ─")
+        assert lines[1].startswith("├─ contract ─")
+        assert lines[2].startswith("╰─")
+        assert all(line.endswith("╌┄ · .  .") for line in lines)
+
 
 class TestComponentTemplatesIncluded:
     def test_components_directory_exists(self):

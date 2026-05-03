@@ -73,3 +73,33 @@ def cell_truncate(value: object, width: int, marker: str = "…") -> str:
 def cell_fit(value: object, width: int, fill: str = " ", marker: str = "…") -> str:
     """Truncate then left-pad *value* so it occupies exactly *width* cells."""
     return cell_ljust(cell_truncate(value, width, marker=marker), width, fill=fill)
+
+
+def _rule_tail(width: int, fill: str = "─", tail: str = "─╌┄ · .  .") -> str:
+    """Return a fixed-width rule that fades instead of ending abruptly."""
+    if width <= 0:
+        return ""
+    tail_width = cell_width(tail)
+    if width > tail_width + 8:
+        return (fill * (width - tail_width)) + tail
+    return fill * width
+
+
+def open_rule(value: object = "", width: int = 78, corner: str = "╭") -> str:
+    """Return a cell-width exact open-card rule with a fading right edge."""
+    label = str(value)
+    left = f"{corner}─ {label} " if label else corner
+    left_width = cell_width(left)
+    if left_width > width:
+        return cell_truncate(left, width)
+    return left + _rule_tail(width - left_width)
+
+
+def open_rule_divider(value: object = "", width: int = 78) -> str:
+    """Return a cell-width exact open-card section divider."""
+    return open_rule(value, width=width, corner="├")
+
+
+def open_rule_end(value: object = "", width: int = 78) -> str:
+    """Return a cell-width exact open-card bottom rule."""
+    return open_rule(value, width=width, corner="╰")

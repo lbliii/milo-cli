@@ -23,12 +23,16 @@
 
 {{ "Diagnostics" | bold | cyan }}
 {% for section in report.sections -%}
-╭─ {{ section.title | bold }} {{ ("(" ~ (section.count | string) ~ ")") | dim }} {{ "─" * 44 }}
+{{ (section.title ~ " (" ~ (section.count | string) ~ ")") | bold | open_rule }}
 │  {{ section.summary | dim }}
 {% if section.items -%}
 {% for item in section.items -%}
 │
-├─ {{ item.glyph }} {{ item.code | bold }} {{ item.file | bold }}{% if item.line %}:{{ item.line }}{% endif %}
+{% if item.line -%}
+{{ (item.glyph ~ " " ~ item.code ~ " " ~ item.file ~ ":" ~ (item.line | string)) | bold | open_rule_divider }}
+{% else -%}
+{{ (item.glyph ~ " " ~ item.code ~ " " ~ item.file) | bold | open_rule_divider }}
+{% endif -%}
 │    {{ item.message }}
 │    {{ "target" | kv(item.target, width=10) }}
 │    {{ "fix" | kv(item.hint, width=10) }}
@@ -39,7 +43,7 @@
 {% if section.hidden > 0 -%}
 │  {{ ("⋯ " ~ (section.hidden | string) ~ " more hidden; rerun with --limit 0") | dim }}
 {% endif %}
-╰{{ "─" * 72 }}
+{{ "" | open_rule_end }}
 {% endfor %}
 {{ "Next" | bold | cyan }}
 {{ next_steps(report.next_steps) }}

@@ -9,9 +9,9 @@
 
 {{ "Pattern Library" | bold | cyan }}
 {% for pattern in patterns.patterns -%}
-╭─ {{ pattern.name | bold }} {{ "─" * 58 }}
+{{ pattern.name | bold | open_rule }}
 │ {{ "use" | cyan }}   {{ pattern.use_when }}
 │ {{ "shape" | cyan }} {{ pattern.shape }}
 │ {{ "avoid" | cyan }} {{ pattern.avoid }}
-╰{{ "─" * 72 }}
+{{ "" | open_rule_end }}
 {% endfor %}
