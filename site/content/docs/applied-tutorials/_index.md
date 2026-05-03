@@ -19,14 +19,14 @@ Hands-on tutorials that walk you through building complete applications with Mil
 
 :::{card} Build an Install Wizard
 :icon: rocket
-:link: ./build-a-wizard
+:link: ./build-a-wizard/
 :description: Multi-screen flow with forms, validation, and side effects
 Build a three-screen installer using Flows, Forms, and Sagas — the full Milo stack.
 :::{/card}
 
 :::{card} Build a Counter App
-:icon: keyboard
-:link: ./build-a-counter
+:icon: terminal
+:link: ./build-a-counter/
 :description: Interactive terminal app with reducer state and Kida rendering
 Build the smallest useful Milo app: key input, pure reducer, and live template rendering.
 :::{/card}

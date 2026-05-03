@@ -8,7 +8,7 @@ lang: en
 tags: [mcp, ai, json-rpc, tools, gateway]
 keywords: [mcp, model-context-protocol, ai, agent, json-rpc, tools, gateway, registry]
 category: build-clis
-icon: bot
+icon: cpu
 ---
 
 Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing all registered commands as tools that AI agents can discover and invoke. Milo implements the **MCP 2025-11-25** specification.

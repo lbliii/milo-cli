@@ -17,7 +17,6 @@ Can also be run directly for debugging:
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
 import threading
@@ -28,8 +27,8 @@ from typing import Any
 from milo import __version__ as _server_version
 from milo._child import ChildProcess
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
-from milo._jsonrpc import _stderr, _write_error, _write_result
-from milo._mcp_router import dispatch
+from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_result
+from milo._mcp_router import MethodNotFoundError, dispatch
 from milo.registry import list_clis
 
 _logger = logging.getLogger("milo.gateway")
@@ -179,21 +178,20 @@ def _run_gateway() -> None:
             line = line.strip()
             if not line:
                 continue
-            try:
-                request = json.loads(line)
-            except json.JSONDecodeError:
-                _write_error(None, -32700, "Parse error")
+            parsed = _parse_request(line)
+            if parsed is None:
                 continue  # silent: error already sent via JSON-RPC
-
-            req_id = request.get("id")
-            method = request.get("method", "")
+            req_id, method, params, is_notification = parsed
 
             try:
-                result = dispatch(handler, method, request.get("params", {}))
-                if result is not None:
+                result = dispatch(handler, method, params)
+                if result is not None and not is_notification:
                     _write_result(req_id, result)
             except Exception as e:
-                _write_error(req_id, -32603, str(e))
+                if is_notification:
+                    continue  # silent: JSON-RPC notifications do not receive responses
+                code = -32601 if isinstance(e, MethodNotFoundError) else -32603
+                _write_error(req_id, code, str(e))
     finally:
         # Clean up children on exit
         for child in children.values():

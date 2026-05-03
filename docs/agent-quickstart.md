@@ -53,7 +53,8 @@ Rules you can rely on:
 - Type hints become the JSON Schema for the MCP tool — no separate schema file.
 - Parameters without a default are required; parameters with defaults are optional.
 - The docstring's `Args:` section becomes per-parameter `description` in the schema.
-- Return value is serialized to JSON and returned as MCP `structuredContent`.
+- Structured return values are serialized to JSON and returned as MCP
+  `structuredContent`; string results are returned as text content.
 - Add `annotations={"readOnlyHint": True}` etc. in the `@cli.command` decorator
   to set MCP behavioral hints. See `AGENTS.md`.
 

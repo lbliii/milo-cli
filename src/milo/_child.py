@@ -59,7 +59,7 @@ class ChildProcess:
             "method": "initialize",
         }
         self._write_line(json.dumps(req))
-        self._read_line()  # consume initialize response
+        self._read_response(self._request_id)  # consume initialize response
         # Send notifications/initialized
         notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
         self._write_line(json.dumps(notif))
@@ -94,16 +94,8 @@ class ChildProcess:
             }
             self._write_line(json.dumps(request))
             effective_timeout = timeout if timeout is not None else self.request_timeout
-            response_line = self._read_line(timeout=effective_timeout)
+            response = self._read_response(req_id, timeout=effective_timeout)
             self._last_use = time.monotonic()
-
-            if not response_line:
-                return {"error": {"code": -32603, "message": f"No response from {self.name}"}}
-
-            try:
-                response = json.loads(response_line)
-            except json.JSONDecodeError:
-                return {"error": {"code": -32700, "message": "Parse error from child"}}
 
             if "error" in response:
                 return response
@@ -148,6 +140,32 @@ class ChildProcess:
         self._proc.stdin.write(line + "\n")
         self._proc.stdin.flush()
 
+    def _read_response(self, req_id: int, *, timeout: float | None = None) -> dict[str, Any]:
+        """Read frames until the response matching *req_id* arrives."""
+        effective_timeout = timeout if timeout is not None else self.request_timeout
+        deadline = time.monotonic() + effective_timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._graceful_kill()
+                return {"error": {"code": -32603, "message": f"No response from {self.name}"}}
+
+            response_line = self._read_line(timeout=remaining)
+            if not response_line:
+                return {"error": {"code": -32603, "message": f"No response from {self.name}"}}
+
+            try:
+                response = json.loads(response_line)
+            except json.JSONDecodeError:
+                return {"error": {"code": -32700, "message": "Parse error from child"}}
+
+            # Notifications have no id and may be interleaved with streaming tool
+            # results. They are intentionally ignored by the gateway transport.
+            if "id" not in response:
+                continue
+            if response.get("id") == req_id:
+                return response
+
     def _read_line(self, *, timeout: float | None = None) -> str:
         """Read a line from the child's stdout with timeout.
 
@@ -156,10 +174,11 @@ class ChildProcess:
         """
         effective_timeout = timeout if timeout is not None else self.request_timeout
         assert self._proc is not None
-        assert self._proc.stdout is not None
+        stdout = self._proc.stdout
+        assert stdout is not None
         result: list[str] = []
         reader = threading.Thread(
-            target=lambda: result.append(self._proc.stdout.readline()),  # type: ignore[union-attr]
+            target=lambda: result.append(stdout.readline()),
             daemon=True,
         )
         reader.start()

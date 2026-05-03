@@ -75,7 +75,7 @@ The config screen uses `form_reducer` to handle form fields:
 
 ```python
 from milo import FieldSpec, FieldType
-from milo.form import form_reducer
+from milo.form import make_form_reducer
 
 config_specs = [
     FieldSpec("project", "Project name"),
@@ -85,10 +85,7 @@ config_specs = [
               field_type=FieldType.CONFIRM),
 ]
 
-def config_reducer(state, action):
-    if state is None:
-        return form_reducer({"specs": config_specs}, action)
-    return form_reducer(state, action)
+config_reducer = make_form_reducer(*config_specs, navigate_on_submit=True)
 ```
 
 :::{/step}

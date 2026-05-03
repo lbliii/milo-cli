@@ -41,13 +41,13 @@ icon: book-open
 :::::{/card}
 
 :::::{card} Build Apps
-:icon: layout
+:icon: layers
 :link: ./build-apps/
 :description: Build reducer-driven terminal apps with templates, forms, and flows
 :::::{/card}
 
 :::::{card} Quality
-:icon: check-square
+:icon: check-circle
 :link: ./quality/
 :description: Test, verify, debug, and operate Milo projects
 :::::{/card}
@@ -67,7 +67,7 @@ icon: book-open
 :::::{/card}
 
 :::::{card} MCP Server and Gateway
-:icon: bot
+:icon: cpu
 :link: ./build-clis/mcp/
 :description: Expose commands as tools and route multiple CLIs
 :::::{/card}
@@ -79,19 +79,19 @@ icon: book-open
 :::::{/card}
 
 :::::{card} Forms and Navigation
-:icon: textbox
+:icon: edit
 :link: ./build-apps/forms/
 :description: Collect input and move through multi-screen flows
 :::::{/card}
 
 :::::{card} Templates
-:icon: layout
+:icon: layers
 :link: ./build-apps/templates/
 :description: Kida-powered terminal rendering and built-in components
 :::::{/card}
 
 :::::{card} Testing
-:icon: check-square
+:icon: check-circle
 :link: ./quality/testing/
 :description: Schema, dispatch, MCP, verify, snapshots, and replay
 :::::{/card}
@@ -111,13 +111,13 @@ icon: book-open
 :::::{/card}
 
 :::::{card} Examples
-:icon: boxes
+:icon: package
 :link: ./examples/
 :description: Runnable example applications and copy paths
 :::::{/card}
 
 :::::{card} Reference
-:icon: list-magnifying-glass
+:icon: search
 :link: ./reference/
 :description: Schema, dispatch, error codes, actions, and types
 :::::{/card}

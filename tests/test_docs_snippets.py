@@ -62,3 +62,29 @@ def nope(:
 
     assert len(errors) == 1
     assert "Python snippet does not compile" in errors[0]
+
+
+def test_missing_path_is_reported(tmp_path: Path):
+    missing = tmp_path / "missing.md"
+    errors = check_paths([missing], repo_root=tmp_path)
+
+    assert len(errors) == 1
+    assert "path does not exist" in errors[0]
+
+
+def test_indented_tagged_fence_is_checked(tmp_path: Path):
+    doc = tmp_path / "README.md"
+    doc.write_text(
+        """
+   ```python milo-docs:compile
+def nope(:
+    pass
+   ```
+""",
+        encoding="utf-8",
+    )
+
+    errors = check_paths([doc], repo_root=tmp_path)
+
+    assert len(errors) == 1
+    assert "Python snippet does not compile" in errors[0]

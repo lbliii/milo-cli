@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from milo import __version__ as _server_version
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
-from milo._jsonrpc import _stderr, _write_error, _write_notification, _write_result
-from milo._mcp_router import dispatch
+from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_notification, _write_result
+from milo._mcp_router import MethodNotFoundError, dispatch
 from milo.observability import RequestLogger, log_request, new_correlation_id
 
 if TYPE_CHECKING:
@@ -157,20 +157,18 @@ def run_mcp_server(cli: CLI) -> None:
         line = line.strip()
         if not line:
             continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError:
-            _write_error(None, -32700, "Parse error")
+        parsed = _parse_request(line)
+        if parsed is None:
             continue  # silent: error already sent via JSON-RPC
-
-        req_id = request.get("id")
-        method = request.get("method", "")
+        req_id, method, params, is_notification = parsed
 
         try:
-            result = dispatch(handler, method, request.get("params", {}))
-            if result is not None:
+            result = dispatch(handler, method, params)
+            if result is not None and not is_notification:
                 _write_result(req_id, result)
         except Exception as e:
+            if is_notification:
+                continue  # silent: JSON-RPC notifications do not receive responses
             code, data = _classify_exception(e)
             _write_error(req_id, code, str(e), data=data)
 
@@ -203,6 +201,9 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
         # Other MiloErrors -> Internal with structured data (plus traceback)
         data["traceback"] = "".join(tb_mod.format_exception(exc))
         return -32603, data
+
+    if isinstance(exc, MethodNotFoundError):
+        return -32601, {"type": type(exc).__name__}
 
     # Unknown exceptions -> Internal error with traceback
     return -32603, {

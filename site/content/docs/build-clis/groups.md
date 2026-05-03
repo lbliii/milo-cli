@@ -8,7 +8,7 @@ lang: en
 tags: [groups, commands, nesting, hierarchy]
 keywords: [groups, nested, subcommands, hierarchy, namespace]
 category: build-clis
-icon: folder-tree
+icon: tree-structure
 ---
 
 Groups organize commands into namespaces, creating a hierarchical CLI structure. Each group becomes a subcommand that has its own subcommands.

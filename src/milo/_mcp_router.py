@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 
+class MethodNotFoundError(ValueError):
+    """Raised when a JSON-RPC method is not implemented."""
+
+
 class MCPHandler(Protocol):
     """Protocol for MCP method handlers.
 
@@ -52,4 +56,4 @@ def dispatch(handler: MCPHandler, method: str, params: dict[str, Any]) -> dict[s
         case "prompts/get":
             return handler.get_prompt(params)
         case _:
-            raise ValueError(f"Unknown method: {method!r}")
+            raise MethodNotFoundError(f"Unknown method: {method!r}")

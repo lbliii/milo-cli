@@ -7,7 +7,7 @@ lang: en
 tags: [about, output, mcp]
 keywords: [return values, structured content, output, json]
 category: about
-icon: reply
+icon: arrow-left
 ---
 
 Prefer returning structured values from command handlers. Milo can format those

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,7 @@ import pytest
 
 from milo._errors import AppError
 from milo._types import RenderTarget
-from milo.app import App, render_html, run
+from milo.app import App, _TerminalRenderer, render_html, run
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,19 @@ class TestApp:
         assert app._tick_rate == 0.0
         assert app._transient is False
         assert app._target == RenderTarget.TERMINAL
+
+    def test_renderer_truncates_without_cutting_ansi(self):
+        renderer = _TerminalRenderer()
+        renderer._started = True
+        with (
+            patch("shutil.get_terminal_size", return_value=os.terminal_size((5, 24))),
+            patch("sys.stdout") as stdout,
+        ):
+            renderer.update("\033[31mabcdef\033[0m")
+
+        output = "".join(call.args[0] for call in stdout.write.call_args_list)
+        assert "\033[31mabc" not in output
+        assert "abcde" in output
 
     def test_html_target_skips_tty(self):
         """HTML target goes straight to _render_once without TTY check."""

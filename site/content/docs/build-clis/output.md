@@ -8,7 +8,7 @@ lang: en
 tags: [output, formatting, json, table]
 keywords: [output, format, plain, json, table, template, formatting]
 category: build-clis
-icon: layout
+icon: layers
 ---
 
 Milo formats command return values based on the `--format` flag. Every command registered with `@cli.command` automatically supports `--format plain|json|table`.

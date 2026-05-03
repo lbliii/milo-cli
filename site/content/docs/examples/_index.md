@@ -7,7 +7,7 @@ type: doc
 description: Runnable example applications and copy paths.
 keywords: [examples, sample apps, cli, mcp, tui]
 tags: [examples]
-icon: boxes
+icon: package
 ---
 
 The repository examples are copy paths for real projects. Start with the
@@ -30,13 +30,13 @@ smallest example that matches the job, then run `milo verify` after adapting it.
 :::{/card}
 
 :::{card} Task Manager
-:icon: list-checks
+:icon: check
 :link: https://github.com/lbliii/milo-cli/tree/main/examples/taskman
 :description: Commands plus MCP resources over application state
 :::{/card}
 
 :::{card} Output Gallery
-:icon: rows
+:icon: list
 :link: https://github.com/lbliii/milo-cli/tree/main/examples/outputgallery
 :description: Human, CI, JSON, and diagnostic output patterns
 :::{/card}

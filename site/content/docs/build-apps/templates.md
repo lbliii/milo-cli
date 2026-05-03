@@ -8,7 +8,7 @@ lang: en
 tags: [templates, rendering, kida, terminal]
 keywords: [templates, kida, rendering, terminal, jinja2]
 category: build-apps
-icon: layout
+icon: layers
 ---
 
 Milo renders terminal UI through [[ext:kida:|Kida]] templates — the same syntax you'd use for HTML, adapted for terminal output with ANSI colors and live rendering.

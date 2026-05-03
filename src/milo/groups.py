@@ -47,11 +47,13 @@ class Group:
         description: str = "",
         aliases: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        on_change: Callable[[], None] | None = None,
     ) -> None:
         self.name = name
         self.description = description
         self.aliases = tuple(aliases)
         self.hidden = hidden
+        self._on_change = on_change
         self._commands: dict[str, Any] = {}  # str -> CommandDef
         self._alias_map: dict[str, str] = {}
         self._groups: dict[str, Group] = {}
@@ -87,6 +89,7 @@ class Group:
             self._commands[name] = cmd
             for alias in aliases:
                 self._alias_map[alias] = name
+            self._touch()
 
             return func
 
@@ -129,6 +132,7 @@ class Group:
         self._commands[name] = cmd
         for alias in aliases:
             self._alias_map[alias] = name
+        self._touch()
         return cmd
 
     def group(
@@ -140,10 +144,17 @@ class Group:
         hidden: bool = False,
     ) -> Group:
         """Create and register a sub-group. Returns it for chaining."""
-        sub = Group(name, description=description, aliases=aliases, hidden=hidden)
+        sub = Group(
+            name,
+            description=description,
+            aliases=aliases,
+            hidden=hidden,
+            on_change=self._on_change,
+        )
         self._groups[name] = sub
         for alias in aliases:
             self._group_alias_map[alias] = name
+        self._touch()
         return sub
 
     def add_group(self, group: Group) -> None:
@@ -151,6 +162,17 @@ class Group:
         self._groups[group.name] = group
         for alias in group.aliases:
             self._group_alias_map[alias] = group.name
+        group._set_on_change(self._on_change)
+        self._touch()
+
+    def _set_on_change(self, on_change: Callable[[], None] | None) -> None:
+        self._on_change = on_change
+        for group in self._groups.values():
+            group._set_on_change(on_change)
+
+    def _touch(self) -> None:
+        if self._on_change is not None:
+            self._on_change()
 
     @property
     def commands(self) -> dict[str, Any]:

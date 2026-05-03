@@ -227,7 +227,7 @@ def _function_to_schema_cached(
                 pass  # non-serializable nested value — omit default
             else:
                 prop["default"] = param.default
-        if not has_default and not is_optional:
+        if not has_default:
             required.append(name)
 
     result: dict[str, Any] = {"type": "object", "properties": properties}
@@ -290,7 +290,17 @@ def _type_to_schema(
     # Literal
     origin = get_origin(annotation)
     if origin is Literal:
-        return {"enum": list(get_args(annotation))}
+        values = list(get_args(annotation))
+        schema: dict[str, Any] = {"enum": values}
+        if values and all(isinstance(v, bool) for v in values):
+            schema["type"] = "boolean"
+        elif values and all(isinstance(v, int) and not isinstance(v, bool) for v in values):
+            schema["type"] = "integer"
+        elif values and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            schema["type"] = "number"
+        elif values and all(isinstance(v, str) for v in values):
+            schema["type"] = "string"
+        return schema
 
     # dataclass
     if dataclasses.is_dataclass(annotation) and isinstance(annotation, type):

@@ -9,7 +9,7 @@ type: doc
 tags: [migration, cli]
 keywords: [migration, argparse, click, typer, fire, cobra]
 category: onboarding
-icon: arrows-right-left
+icon: workflow
 ---
 
 Use these recipes when you already have a CLI command and want to move it to

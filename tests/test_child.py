@@ -52,6 +52,23 @@ class TestChildProcess:
         assert result == {"tools": [{"name": "greet"}]}
 
     @patch("milo._child.subprocess.Popen")
+    def test_send_call_skips_progress_notifications(self, mock_popen_cls: MagicMock) -> None:
+        init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
+        progress = {
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {"message": "halfway"},
+        }
+        call_response = {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
+        mock_proc = _make_mock_popen([init_response, progress, call_response])
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["python", "-m", "test"])
+        result = child.send_call("tools/call", {"name": "stream"})
+
+        assert result == {"ok": True}
+
+    @patch("milo._child.subprocess.Popen")
     def test_fetch_tools(self, mock_popen_cls: MagicMock) -> None:
         init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
         tools_response = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "add"}]}}

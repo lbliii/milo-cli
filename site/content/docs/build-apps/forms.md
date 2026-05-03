@@ -8,7 +8,7 @@ lang: en
 tags: [forms, fields, input, validation]
 keywords: [forms, fields, text, select, confirm, password, validation]
 category: build-apps
-icon: textbox
+icon: edit
 ---
 
 Milo includes a built-in form system for collecting structured input. Define fields declaratively with `FieldSpec`, then run `form()` to get a dictionary of responses.
@@ -113,14 +113,15 @@ This means forms work in CI pipelines — pipe answers via stdin or set environm
 
 ## Using form_reducer directly
 
-For full control, use `form_reducer` directly in an `App` instead of the `form()` helper:
+For full control, build a reducer with `make_form_reducer()` and run it in an
+`App` instead of the `form()` helper:
 
 ```python
-from milo import App
-from milo.form import form_reducer
+from milo import App, FieldSpec
+from milo.form import make_form_reducer
 
 specs = [FieldSpec("name", "Name"), FieldSpec("age", "Age")]
-app = App(template="form.kida", reducer=form_reducer, initial_state={"specs": specs})
+app = App(template="form.kida", reducer=make_form_reducer(*specs))
 final = app.run()
 ```
 

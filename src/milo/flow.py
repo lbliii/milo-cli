@@ -115,16 +115,22 @@ class Flow:
 
             result = screen.reducer(state.screen_states.get(current), action)
 
-            # Unwrap Quit/ReducerResult to propagate sagas
+            # Unwrap Quit/ReducerResult to propagate effects
             sagas = ()
+            cmds = ()
+            view = None
             quit_signal: Quit | None = None
             if isinstance(result, Quit):
                 quit_signal = result
                 new_screen_state = result.state
                 sagas = result.sagas
+                cmds = result.cmds
+                view = result.view
             elif isinstance(result, ReducerResult):
                 new_screen_state = result.state
                 sagas = result.sagas
+                cmds = result.cmds
+                view = result.view
             else:
                 new_screen_state = result
 
@@ -135,9 +141,15 @@ class Flow:
             )
 
             if quit_signal is not None:
-                return Quit(state=flow_state, code=quit_signal.code, sagas=sagas)
-            if sagas:
-                return ReducerResult(state=flow_state, sagas=sagas)
+                return Quit(
+                    state=flow_state,
+                    code=quit_signal.code,
+                    sagas=sagas,
+                    cmds=cmds,
+                    view=view,
+                )
+            if sagas or cmds or view is not None:
+                return ReducerResult(state=flow_state, sagas=sagas, cmds=cmds, view=view)
             return flow_state
 
         return flow_reducer

@@ -47,7 +47,7 @@ class TestFunctionToSchema:
 
         schema = function_to_schema(func)
         assert schema["properties"]["name"]["type"] == "string"
-        assert "required" not in schema
+        assert schema["required"] == ["name"]
 
     def test_list_type(self):
         def func(tags: list[str]):
@@ -382,7 +382,7 @@ class TestLlmsTxt:
         txt = generate_llms_txt(cli)
         assert "`--env` (string, **required**)" in txt
         assert '`--version` (string, optional, default: "latest")' in txt
-        assert "`--dry_run` (boolean, optional, default: False)" in txt
+        assert "`--dry-run` (boolean, optional, default: False)" in txt
 
     def test_tags_create_sections(self):
         cli = CLI(name="app")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from milo._errors import FlowError
-from milo._types import Action, Quit, ReducerResult
+from milo._types import Action, Cmd, Quit, ReducerResult, ViewState
 from milo.flow import Flow, FlowScreen, FlowState
 
 
@@ -147,6 +147,29 @@ class TestFlowReducer:
         result = reducer(state, Action("trigger"))
         assert isinstance(result, ReducerResult)
         assert result.sagas
+
+    def test_propagates_reducer_result_cmds_and_view_state(self):
+        """ReducerResult commands and view state from screens should propagate."""
+
+        cmd = Cmd(lambda: None)
+        view = ViewState(cursor_visible=False)
+
+        def effect_reducer(state, action):
+            if state is None:
+                return 0
+            if action.type == "trigger":
+                return ReducerResult(state=1, cmds=(cmd,), view=view)
+            return state
+
+        a = FlowScreen("a", "a.kida", effect_reducer)
+        b = FlowScreen("b", "b.kida", noop_reducer)
+        flow = a >> b
+        reducer = flow.build_reducer()
+        state = reducer(None, Action("@@INIT"))
+        result = reducer(state, Action("trigger"))
+        assert isinstance(result, ReducerResult)
+        assert result.cmds == (cmd,)
+        assert result.view == view
 
     def test_propagates_quit_from_screen(self):
         """Quit from a screen reducer should propagate through the flow."""

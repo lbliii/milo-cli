@@ -6,8 +6,8 @@ draft: false
 lang: en
 tags: [tutorial, interactive, app, reducer, templates]
 keywords: [counter, interactive app, reducer, kida, terminal]
-category: applied-tutorialss
-icon: keyboard
+category: applied-tutorials
+icon: terminal
 ---
 
 This tutorial walks through a simple counter app: the smallest useful
@@ -130,25 +130,25 @@ testable.
 
 :::{card} State Management
 :icon: database
-:link: ../build-apps/state
+:link: ../build-apps/state/
 :description: Store, middleware, combined reducers
 :::{/card}
 
 :::{card} Multi-Screen Flows
-:icon: arrows-clockwise
-:link: ../build-apps/flows
+:icon: arrow-clockwise
+:link: ../build-apps/flows/
 :description: Chain screens with the >> operator
 :::{/card}
 
 :::{card} Interactive Forms
-:icon: textbox
-:link: ../build-apps/forms
+:icon: edit
+:link: ../build-apps/forms/
 :description: Collect structured input with validation
 :::{/card}
 
 :::{card} Input Handling
-:icon: keyboard
-:link: ../build-apps/input
+:icon: terminal
+:link: ../build-apps/input/
 :description: Key objects, escape sequences, raw mode, and fallbacks
 :::{/card}
 
