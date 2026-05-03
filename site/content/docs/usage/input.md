@@ -1,7 +1,7 @@
 ---
 title: Input Handling
 nav_title: Input
-description: Cross-platform key reader with full escape sequence support.
+description: Cross-platform key reader with VT100/xterm escape sequence support.
 weight: 50
 draft: false
 lang: en
@@ -11,7 +11,10 @@ category: usage
 icon: keyboard
 ---
 
-Milo's input system reads raw terminal input and translates escape sequences into structured `Key` objects. It handles arrows, function keys, modifiers, and platform differences.
+Milo's input system reads raw terminal input and translates known VT100/xterm
+escape sequences into structured `Key` objects. It handles common arrows,
+function keys, modifiers, and platform differences; unknown escape sequences
+degrade to `SpecialKey.ESCAPE`.
 
 ## KeyReader
 
