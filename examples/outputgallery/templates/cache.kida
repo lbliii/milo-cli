@@ -1,0 +1,15 @@
+{% from "components/_defs.kida" import header, next_steps %}
+{{ header(cache.title, description=cache.subtitle) }}
+
+{{ "Reuse" | bold | cyan }}
+{% for item in cache.summary -%}
+  {{ item.label | pad(16) }} {{ item.bar }} {{ item.value }}
+{% endfor %}
+
+{{ "Invalidations" | bold | cyan }}
+{% for item in cache.invalidations -%}
+  {{ item.glyph }} {{ item.cause | pad(28) }} {{ item.count }}
+{% endfor %}
+
+{{ "Next" | bold | cyan }}
+{{ next_steps(cache.next_steps) }}

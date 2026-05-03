@@ -122,6 +122,22 @@ def test_bengal_diagnostic_views_render():
     assert "content quality" in warnings.output
 
 
+def test_build_telemetry_views_render():
+    heat = cli.invoke(["heat"])
+    spark = cli.invoke(["spark"])
+    cache = cli.invoke(["cache"])
+
+    assert heat.exit_code == 0
+    assert "Build heat" in heat.output
+    assert "Issue Density" in heat.output
+    assert spark.exit_code == 0
+    assert "Build trends" in spark.output
+    assert "cache hit" in spark.output
+    assert cache.exit_code == 0
+    assert "Cache and fingerprints" in cache.output
+    assert "Invalidations" in cache.output
+
+
 def test_audit_resource_exposes_full_fixture():
     data = audit_resource()
 

@@ -1,0 +1,6 @@
+{% from "components/_defs.kida" import header %}
+{{ header(spark.title, description=spark.subtitle) }}
+
+{% for row in spark.series -%}
+  {{ row.name | pad(10) }} {{ row.spark }}  {{ row.now | pad(6) }} {{ row.trend }}
+{% endfor %}

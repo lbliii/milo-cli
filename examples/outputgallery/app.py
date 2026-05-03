@@ -13,6 +13,9 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
     uv run python examples/outputgallery/app.py directive
     uv run python examples/outputgallery/app.py graph
     uv run python examples/outputgallery/app.py grammar
+    uv run python examples/outputgallery/app.py heat
+    uv run python examples/outputgallery/app.py cache
+    uv run python examples/outputgallery/app.py spark
     uv run python examples/outputgallery/app.py timeline
     uv run python examples/outputgallery/app.py warnings
 """
@@ -522,6 +525,69 @@ def warnings_report(ctx: Context = None) -> dict | str:
         ],
     }
     return _plain_or_data(ctx, "warnings.kida", warnings=data)
+
+
+@cli.command("heat", description="Render build heatmaps for phase cost and issue density")
+def heat(ctx: Context = None) -> dict | str:
+    """Show compact heatmaps for build cost and content issue density."""
+    data = {
+        "title": "Build heat",
+        "subtitle": "where time, churn, and issues concentrate",
+        "rows": [
+            {"name": "discover", "cells": "▁▁▂▂▃▂▁▁", "detail": "stable filesystem walk"},
+            {"name": "parse", "cells": "▂▃▄▅▆▄▃▂", "detail": "directive-heavy docs pages"},
+            {"name": "render", "cells": "▃▅▇██▇▅▃", "detail": "largest cost center"},
+            {"name": "links", "cells": "▁▁▂▆█▃▂▁", "detail": "spike from routing changes"},
+            {"name": "search", "cells": "▁▂▂▃▄▅▅▆", "detail": "index growth is linear"},
+        ],
+        "matrix": [
+            {"zone": "docs", "cells": "▓▓▓▒░", "count": 7},
+            {"zone": "blog", "cells": "▒░░░░", "count": 2},
+            {"zone": "root", "cells": "▓░░░░", "count": 1},
+            {"zone": "assets", "cells": "▒▒░░░", "count": 2},
+        ],
+    }
+    return _plain_or_data(ctx, "heat.kida", heat=data)
+
+
+@cli.command("spark", description="Render build trend sparklines")
+def spark(ctx: Context = None) -> dict | str:
+    """Show trend sparklines for repeated build signals."""
+    data = {
+        "title": "Build trends",
+        "subtitle": "small multiples for repeated build runs",
+        "series": [
+            {"name": "render ms", "spark": "▂▃▄▆█▇▅▃", "now": "1.84s", "trend": "up"},
+            {"name": "cache hit", "spark": "█▇▇▆▅▅▄▅", "now": "74%", "trend": "down"},
+            {"name": "broken", "spark": "▁▁▂▂▆█▅▅", "now": "5", "trend": "up"},
+            {"name": "warnings", "spark": "▂▂▃▃▄▅▄▅", "now": "4", "trend": "flat"},
+        ],
+    }
+    return _plain_or_data(ctx, "spark.kida", spark=data)
+
+
+@cli.command("cache", description="Render cache reuse and fingerprint telemetry")
+def cache(ctx: Context = None) -> dict | str:
+    """Show cache reuse, invalidation causes, and asset fingerprint health."""
+    data = {
+        "title": "Cache and fingerprints",
+        "subtitle": "what rebuilt, what reused, and why",
+        "summary": [
+            {"label": "HTML reused", "value": "182/248", "bar": "███████░░░"},
+            {"label": "Assets reused", "value": "1,471/1,482", "bar": "█████████░"},
+            {"label": "Captures reused", "value": "91/104", "bar": "████████░░"},
+        ],
+        "invalidations": [
+            {"glyph": "◆", "cause": "directive contract changed", "count": 3},
+            {"glyph": "▲", "cause": "frontmatter touched", "count": 14},
+            {"glyph": "✖", "cause": "missing fingerprint", "count": 1},
+        ],
+        "next_steps": [
+            "Fix missing fingerprints before trusting CDN cache behavior.",
+            "Track directive contract changes separately from content churn.",
+        ],
+    }
+    return _plain_or_data(ctx, "cache.kida", cache=data)
 
 
 @cli.command(

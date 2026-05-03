@@ -15,6 +15,9 @@ uv run python examples/outputgallery/app.py catalog
 uv run python examples/outputgallery/app.py directive
 uv run python examples/outputgallery/app.py graph
 uv run python examples/outputgallery/app.py grammar
+uv run python examples/outputgallery/app.py heat
+uv run python examples/outputgallery/app.py cache
+uv run python examples/outputgallery/app.py spark
 uv run python examples/outputgallery/app.py timeline
 uv run python examples/outputgallery/app.py warnings
 ```
@@ -28,6 +31,7 @@ Patterns shown:
 - Bengal-style diagnostic views for broken links, directives, and warnings.
 - Progressive disclosure through bounded issue lists and an expansion flag.
 - Phase timelines that explain where time and risk accumulated.
+- Build telemetry views for heat, trends, cache reuse, and fingerprints.
 - Structured JSON for agents, CI annotations, dashboards, and MCP calls.
 
 Research basis:

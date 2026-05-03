@@ -1,0 +1,12 @@
+{% from "components/_defs.kida" import header %}
+{{ header(heat.title, description=heat.subtitle) }}
+
+{{ "Phase Heat" | bold | cyan }}
+{% for row in heat.rows -%}
+  {{ row.name | pad(9) }} {{ row.cells }}  {{ row.detail }}
+{% endfor %}
+
+{{ "Issue Density" | bold | cyan }}
+{% for row in heat.matrix -%}
+  {{ row.zone | pad(7) }} {{ row.cells }}  {{ row.count }}
+{% endfor %}
