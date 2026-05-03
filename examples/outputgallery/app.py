@@ -17,6 +17,7 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
     uv run python examples/outputgallery/app.py grammar
     uv run python examples/outputgallery/app.py heat
     uv run python examples/outputgallery/app.py cache
+    uv run python examples/outputgallery/app.py layout --width narrow
     uv run python examples/outputgallery/app.py spark
     uv run python examples/outputgallery/app.py timeline
     uv run python examples/outputgallery/app.py warnings
@@ -630,6 +631,33 @@ def cache(ctx: Context = None) -> dict | str:
         ],
     }
     return _plain_or_data(ctx, "cache.kida", cache=data)
+
+
+@cli.command("layout", description="Show terminal capability and width adaptations")
+def layout(width: Literal["wide", "narrow"] = "wide", ctx: Context = None) -> dict | str:
+    """Render wide or narrow terminal layout examples for the same report.
+
+    Args:
+        width: Target layout width to demonstrate.
+    """
+    data = {
+        "title": "Layout adaptation",
+        "subtitle": "same signal, different terminal capability envelopes",
+        "width": width,
+        "capabilities": [
+            {"mode": "wide tty", "style": "dense", "shape": "atlas + detail panels"},
+            {"mode": "narrow tty", "style": "summary", "shape": "stacked groups"},
+            {"mode": "unicode off", "style": "ascii", "shape": "+---+ boxes and x/!/^ glyphs"},
+            {"mode": "ci/non-tty", "style": "ci", "shape": "stable lines, no animation"},
+            {"mode": "agent/pipe", "style": "json", "shape": "structured result only"},
+        ],
+        "signals": [
+            {"name": "links", "glyph": "✖", "value": "5", "bar": "▓▓▓▓▓▓▓▓··"},
+            {"name": "directives", "glyph": "◆", "value": "3", "bar": "▒▒▒▒▒▒····"},
+            {"name": "warnings", "glyph": "▲", "value": "4", "bar": "░░░░░░░░··"},
+        ],
+    }
+    return _plain_or_data(ctx, "layout.kida", layout=data)
 
 
 @cli.command(

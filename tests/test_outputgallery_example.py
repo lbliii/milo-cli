@@ -152,6 +152,18 @@ def test_build_telemetry_views_render():
     assert "Invalidations" in cache.output
 
 
+def test_layout_adaptation_views_render():
+    wide = cli.invoke(["layout"])
+    narrow = cli.invoke(["layout", "--width", "narrow"])
+
+    assert wide.exit_code == 0
+    assert "Capability Matrix" in wide.output
+    assert "wide tty" in wide.output
+    assert narrow.exit_code == 0
+    assert "narrow tty" in narrow.output
+    assert "agent/pipe" in narrow.output
+
+
 def test_audit_resource_exposes_full_fixture():
     data = audit_resource()
 

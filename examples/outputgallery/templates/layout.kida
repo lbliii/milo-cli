@@ -1,0 +1,25 @@
+{% from "components/_defs.kida" import header %}
+{{ header(layout.title, description=layout.subtitle) }}
+{% if layout.width == "wide" -%}
+╭───────────────────────────────╮ ╭──────────────────────────────────────────╮
+│ Signals                       │ │ Capability Matrix                        │
+{% for signal in layout.signals -%}
+│ {{ signal.glyph }} {{ signal.name | pad(10) }} {{ signal.bar }} {{ signal.value | pad(3) }} │{% if loop.index0 < (layout.capabilities | length) %} │ {{ layout.capabilities[loop.index0].mode | pad(12) }} {{ layout.capabilities[loop.index0].style | pad(8) }} {{ layout.capabilities[loop.index0].shape | pad(17) }} │{% else %} │ {{ " " * 40 }} │{% endif %}
+{% endfor -%}
+{% for row in layout.capabilities[3:] -%}
+│ {{ " " * 29 }} │ │ {{ row.mode | pad(12) }} {{ row.style | pad(8) }} {{ row.shape | pad(17) }} │
+{% endfor -%}
+╰───────────────────────────────╯ ╰──────────────────────────────────────────╯
+{% else -%}
+{{ "Signals" | bold | cyan }}
+{% for signal in layout.signals -%}
+  {{ signal.glyph }} {{ signal.name | pad(10) }} {{ signal.value }}
+  {{ signal.bar }}
+{% endfor %}
+{{ "Capability Matrix" | bold | cyan }}
+{% for row in layout.capabilities -%}
+  {{ row.mode }}
+    style {{ row.style }}
+    shape {{ row.shape }}
+{% endfor %}
+{% endif -%}
