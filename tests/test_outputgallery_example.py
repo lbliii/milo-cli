@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -227,3 +228,31 @@ def test_audit_resource_exposes_full_fixture():
 
     assert data["sections"][0]["hidden"] == 0
     assert len(data["sections"][0]["items"]) == 5
+
+
+def test_adoption_guide_commands_stay_runnable():
+    guide = Path(__file__).resolve().parents[1] / "examples" / "outputgallery" / "ADOPTION.md"
+    commands: list[str] = []
+    in_recipes = False
+    for line in guide.read_text().splitlines():
+        if line == "## Migration Recipes":
+            in_recipes = True
+            continue
+        if in_recipes and line.startswith("## "):
+            break
+        if in_recipes and line.startswith("|"):
+            commands.extend(part for part in line.split("`")[1::2] if part and part[0].islower())
+
+    assert commands
+    for command in commands:
+        result = cli.invoke(shlex.split(command))
+        assert result.exit_code == 0, command
+        assert result.exception is None, command
+
+
+def test_adoption_guide_names_display_cell_filters():
+    guide = Path(__file__).resolve().parents[1] / "examples" / "outputgallery" / "ADOPTION.md"
+    text = guide.read_text()
+
+    for filter_name in ("cell_fit", "cell_pad", "cell_truncate", "cell_width"):
+        assert f"`{filter_name}`" in text
