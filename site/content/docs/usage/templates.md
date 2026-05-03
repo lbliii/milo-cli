@@ -157,6 +157,7 @@ Uptime: {{ uptime | duration }}
 | `cell_fit(n)` | Truncate and pad to exactly n display cells |
 | `cell_truncate(n)` | Truncate to n display cells |
 | `cell_pad(n)` | Pad on the right to n display cells |
+| `cell_rpad(n)` | Pad on the left to n display cells |
 
 See the [[ext:kida:docs/usage/terminal|Kida terminal reference]] for the full filter list.
 

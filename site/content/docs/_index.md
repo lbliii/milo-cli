@@ -8,7 +8,7 @@ cascade:
   type: doc
   variant: standard
 category: documentation
-description: Learn how to build interactive CLI applications with Milo.
+description: Learn how to build typed CLI commands and interactive terminal apps with Milo.
 keywords: [documentation, docs, milo, cli]
 menu:
   main:
@@ -25,13 +25,19 @@ icon: book-open
 :::::{card} Get Started
 :icon: rocket
 :link: ./get-started/
-:description: Install Milo and build your first interactive CLI app
+:description: Install Milo and build your first typed CLI/MCP command
 :::::{/card}
 
 :::::{card} Tutorials
 :icon: graduation-cap
 :link: ./tutorials/
 :description: Step-by-step guides for building real applications
+:::::{/card}
+
+:::::{card} Migrate
+:icon: arrows-right-left
+:link: ./migrate/
+:description: Translate patterns from argparse, Click, Typer, Fire, and Cobra
 :::::{/card}
 
 :::::{/cards}

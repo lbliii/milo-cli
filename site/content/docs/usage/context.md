@@ -29,6 +29,10 @@ def build(output: str = "_site", ctx: Context = None) -> str:
     return f"Built to {output}"
 ```
 
+The parameter name `ctx` is always treated as injected context. A parameter
+annotated directly as `Context` is also omitted from the public schema. Prefer
+`ctx: Context = None` so the handler remains easy to call in tests and tooling.
+
 ## Verbosity levels
 
 The CLI maps flags to verbosity integers:
@@ -49,6 +53,11 @@ ctx.log("Debug trace", level=2)
 ```
 
 Messages go to stderr, keeping stdout clean for structured output.
+
+That stdout/stderr split matters for MCP: stdout carries JSON-RPC frames under
+`--mcp`, so progress logs and diagnostics must not use `print()` in reusable
+handler or library code. Use `ctx.log()`, `ctx.error()`, `ctx.progress()`, or
+explicit stderr boundary code.
 
 ## Global options
 
@@ -90,6 +99,10 @@ def helper():
 ```
 
 `get_context()` uses a `ContextVar` set by the CLI dispatcher. If no context has been set, it returns a default `Context`.
+
+`get_context()` is a convenience for code already running inside a Milo dispatch
+surface. It should not be used to smuggle hidden inputs into schemas; public
+inputs still belong in the command signature.
 
 ## Running interactive apps from commands
 

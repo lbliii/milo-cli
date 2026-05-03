@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov lint format ty bench ci clean build gh-release changelog changelog-draft
+.PHONY: all help setup install test test-cov lint format ty bench docs-test ci clean build gh-release changelog changelog-draft
 
 all: help
 
@@ -21,6 +21,7 @@ help:
 	@echo "  make format    - ruff format"
 	@echo "  make ty        - ty type checker"
 	@echo "  make ci        - lint + format check + ty + tests + coverage"
+	@echo "  make docs-test - verify templates and tagged docs snippets"
 	@echo "  make clean     - remove build artifacts"
 	@echo "  make build     - uv build"
 	@echo "  make changelog  - compile changelog.d/ fragments into CHANGELOG.md"
@@ -42,6 +43,10 @@ test-cov:
 
 bench:
 	PYTHON_GIL=0 uv run pytest benchmarks/ --benchmark-only -q
+
+docs-test:
+	uv run python scripts/check_templates.py
+	uv run python scripts/check_docs_snippets.py
 
 lint:
 	uv run ruff check src/ tests/ benchmarks/

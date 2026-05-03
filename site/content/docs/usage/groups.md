@@ -15,7 +15,7 @@ Groups organize commands into namespaces, creating a hierarchical CLI structure.
 
 ## Creating groups
 
-```python
+```python milo-docs:compile
 from milo import CLI
 
 cli = CLI(name="myapp", description="My tool")
@@ -40,7 +40,7 @@ myapp site serve --port 3000
 
 Groups can contain sub-groups to any depth:
 
-```python
+```python milo-docs:compile
 config = site.group("config", description="Config management")
 
 @config.command("show", description="Show merged config")
@@ -61,7 +61,7 @@ myapp site config set --key theme --value light
 
 Groups support aliases just like commands:
 
-```python
+```python milo-docs:compile
 site = cli.group("site", description="Site operations", aliases=("s",))
 config = site.group("config", description="Config management", aliases=("cfg",))
 ```
@@ -75,7 +75,7 @@ myapp s cfg show           # same as: myapp site config show
 
 Commands in groups are addressable via dotted paths for programmatic access:
 
-```python
+```python milo-docs:compile
 cmd = cli.get_command("site.build")
 cmd = cli.get_command("site.config.show")
 
@@ -86,7 +86,7 @@ result = cli.call("site.build", output="dist")
 
 `walk_commands()` traverses the entire command tree, yielding dotted paths:
 
-```python
+```python milo-docs:compile
 for path, cmd in cli.walk_commands():
     print(f"{path}: {cmd.description}")
 
@@ -103,7 +103,7 @@ This is used by `--llms-txt` and `--mcp` to discover all commands including thos
 
 Groups can be defined separately and added later:
 
-```python
+```python milo-docs:compile
 from milo import Group
 
 db = Group("db", description="Database operations")
@@ -121,7 +121,7 @@ cli.add_group(db)
 
 Convert a mutable `Group` to an immutable `GroupDef` snapshot:
 
-```python
+```python milo-docs:compile
 frozen = site.to_def()
 print(frozen.name)      # "site"
 print(frozen.commands)   # {"build": CommandDef(...), ...}

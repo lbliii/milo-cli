@@ -16,7 +16,6 @@ If something in this doc no longer works, that's the bug — open an issue.
 
 ```bash
 uv run milo new my_cli
-cd my_cli
 ```
 
 Produces `app.py`, `tests/test_app.py`, `conftest.py`, and a `README.md` — the

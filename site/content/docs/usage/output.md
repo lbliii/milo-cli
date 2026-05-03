@@ -107,6 +107,9 @@ This is what the CLI dispatcher calls after each command handler returns.
 
 For dense diagnostic output, study
 [`examples/outputgallery`](https://github.com/lbliii/milo-cli/tree/main/examples/outputgallery).
+The
+[`ADOPTION.md`](https://github.com/lbliii/milo-cli/tree/main/examples/outputgallery/ADOPTION.md)
+guide shows migration recipes and before/after patterns.
 It shows bounded audit reports, ASCII-safe CI output, drilldowns, topology
 views, build heatmaps, cache telemetry, and JSON output from the same command
 data. Keep command return values structured so `--format json` and MCP

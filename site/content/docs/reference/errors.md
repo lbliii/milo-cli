@@ -1,101 +1,180 @@
 ---
 title: Error Codes
 nav_title: Errors
-description: Structured error hierarchy with namespaced codes.
+description: Structured errors for terminal output, tests, and MCP repair loops.
 weight: 20
 draft: false
 lang: en
-tags: [reference, errors]
-keywords: [errors, error codes, exceptions, debugging]
+tags: [reference, errors, diagnostics]
+keywords: [errors, error codes, exceptions, debugging, errorData]
 category: reference
 icon: warning
 ---
 
-Milo uses a structured error hierarchy with namespaced error codes for precise debugging.
+Milo errors carry namespaced codes and optional repair context. Human CLIs format
+them for the terminal; MCP `tools/call` responses expose the same context in
+`errorData` so agents can retry with corrected arguments.
 
-## Error hierarchy
+## Base Type
 
-```mermaid
-graph TB
-    ME[MiloError] --> IE[InputError]
-    ME --> SE[StateError]
-    ME --> FE[FormError]
-    ME --> AE[AppError]
-    ME --> FLE[FlowError]
-    ME --> DE[DevError]
-```
-
-All Milo errors extend `MiloError(code, message)`:
-
-| Exception | Subsystem | Code prefix |
-|-----------|-----------|-------------|
-| `InputError` | Key reader, raw mode, escape sequences | `M-INP-*` |
-| `StateError` | Store, dispatch, reducers, sagas | `M-STA-*` |
-| `FormError` | Form fields, validation, navigation | `M-FRM-*` |
-| `AppError` | Event loop, rendering, lifecycle | `M-APP-*` |
-| `FlowError` | Flow screens, transitions, navigation | `M-FLW-*` |
-| `DevError` | Dev server, file watching, hot reload | `M-DEV-*` |
-
-## Error codes
-
-The `ErrorCode` enum defines all known error codes:
-
-:::{tab-set}
-:::{tab-item} Input
-
-| Code | Name | Description |
-|------|------|-------------|
-| `M-INP-001` | `INPUT_RAW_MODE` | Failed to enter raw terminal mode |
-| `M-INP-002` | `INPUT_READ` | Error reading from stdin |
-| `M-INP-003` | `INPUT_SEQUENCE` | Unrecognized escape sequence |
-
-:::{/tab-item}
-
-:::{tab-item} State
-
-| Code | Name | Description |
-|------|------|-------------|
-| `M-STA-001` | `STATE_DISPATCH` | Error during action dispatch |
-| `M-STA-002` | `STATE_REDUCER` | Reducer raised an exception |
-| `M-STA-003` | `STATE_SAGA` | Saga execution failed |
-
-:::{/tab-item}
-
-:::{tab-item} Form
-
-| Code | Name | Description |
-|------|------|-------------|
-| `M-FRM-001` | `FORM_VALIDATION` | Field validation error |
-| `M-FRM-002` | `FORM_FIELD` | Invalid field configuration |
-
-:::{/tab-item}
-
-:::{tab-item} App / Flow / Dev
-
-| Code | Name | Description |
-|------|------|-------------|
-| `M-APP-001` | `APP_RENDER` | Template rendering error |
-| `M-APP-002` | `APP_LIFECYCLE` | Event loop lifecycle error |
-| `M-FLW-001` | `FLOW_NAVIGATE` | Invalid screen navigation |
-| `M-FLW-002` | `FLOW_TRANSITION` | No transition defined |
-| `M-DEV-001` | `DEV_WATCH` | File watching error |
-
-:::{/tab-item}
-:::{/tab-set}
-
-## Catching errors
+All Milo errors derive from `MiloError`:
 
 ```python
-from milo import MiloError, StateError
+from milo import ErrorCode, MiloError
 
-try:
-    store.dispatch(action)
-except StateError as e:
-    print(f"[{e.code}] {e.message}")
-except MiloError as e:
-    print(f"Milo error: {e}")
+raise MiloError(
+    ErrorCode.FRM_VALIDATION,
+    "Environment is required",
+    argument="environment",
+    constraint={"minLength": 1},
+    suggestion="Provide a non-empty environment name.",
+)
 ```
 
-:::{tip}
-Catch specific subclasses (`StateError`, `FormError`) when you can handle them. Catch `MiloError` as a fallback for unexpected errors.
-:::
+Constructor fields:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `code` | `ErrorCode` | Stable namespaced error code |
+| `message` | `str` | Human-readable explanation |
+| `suggestion` | `str` | Optional next step |
+| `context` | `dict[str, object]` | Extra structured diagnostics |
+| `docs_url` | `str` | Optional documentation link |
+| `argument` | `str | None` | Parameter that failed |
+| `constraint` | `dict | None` | JSON-Schema-style constraint that failed |
+
+## Error Classes
+
+| Exception | Subsystem |
+|---|---|
+| `InputError` | Raw mode, key reading, escape parsing |
+| `StateError` | Reducers, dispatch, sagas, combined state |
+| `FormError` | Form fields, validation, submit behavior |
+| `AppError` | App lifecycle, rendering, templates |
+| `FlowError` | Flow screens and transitions |
+| `DevError` | Dev server, file watching, hot reload |
+| `ConfigError` | Config parsing, merging, validation, missing files |
+| `PipelineError` | Pipeline phases, timeouts, dependencies |
+| `PluginError` | Plugin loading and hooks |
+
+## Error Codes
+
+| Code | Name | Meaning |
+|---|---|---|
+| `M-INP-001` | `INP_RAW_MODE` | Failed to enter or restore raw terminal mode |
+| `M-INP-002` | `INP_ESCAPE_PARSE` | Failed to parse an escape sequence |
+| `M-INP-003` | `INP_READ` | Failed while reading terminal input |
+| `M-STA-001` | `STA_REDUCER` | Reducer raised or returned invalid state |
+| `M-STA-002` | `STA_DISPATCH` | Dispatch failed |
+| `M-STA-003` | `STA_SAGA` | Saga execution failed |
+| `M-STA-004` | `STA_COMBINE` | Combined reducer failed |
+| `M-APP-001` | `APP_LIFECYCLE` | App lifecycle failure |
+| `M-APP-002` | `APP_RENDER` | Render failure |
+| `M-APP-003` | `APP_TEMPLATE` | Template setup or lookup failure |
+| `M-FRM-001` | `FRM_VALIDATION` | Form validation failure |
+| `M-FRM-002` | `FRM_FIELD` | Invalid form field configuration |
+| `M-FRM-003` | `FRM_SUBMIT` | Form submit failure |
+| `M-FLW-001` | `FLW_TRANSITION` | Invalid or missing transition |
+| `M-FLW-002` | `FLW_SCREEN` | Invalid screen |
+| `M-FLW-003` | `FLW_DUPLICATE` | Duplicate flow entry |
+| `M-DEV-001` | `DEV_WATCH` | File watching failure |
+| `M-DEV-002` | `DEV_RELOAD` | Hot reload failure |
+| `M-CFG-001` | `CFG_PARSE` | Config parse failure |
+| `M-CFG-002` | `CFG_MERGE` | Config merge failure |
+| `M-CFG-003` | `CFG_VALIDATE` | Config validation failure |
+| `M-CFG-004` | `CFG_MISSING` | Required config value or file missing |
+| `M-PIP-001` | `PIP_PHASE` | Pipeline phase failure |
+| `M-PIP-002` | `PIP_TIMEOUT` | Pipeline timeout |
+| `M-PIP-003` | `PIP_DEPENDENCY` | Pipeline dependency failure |
+| `M-PLG-001` | `PLG_LOAD` | Plugin load failure |
+| `M-PLG-002` | `PLG_HOOK` | Plugin hook failure |
+| `M-CMD-001` | `CMD_NOT_FOUND` | Command was not found |
+| `M-CMD-002` | `CMD_AMBIGUOUS` | Command resolution was ambiguous |
+
+## Terminal Formatting
+
+`MiloError.format_compact()` keeps terminal output short and actionable:
+
+```text
+M-FRM-001 `environment`: Environment is required
+  constraint: {'minLength': 1}
+  hint: Provide a non-empty environment name.
+```
+
+Use `format_error(exc)` when boundary code needs to render arbitrary exceptions.
+It uses `format_compact()` when available and falls back to `TypeError: ...`
+style text for plain exceptions.
+
+## MCP Tool Errors
+
+MCP `tools/call` errors are returned as tool results, not JSON-RPC protocol
+errors:
+
+```json
+{
+  "content": [{"type": "text", "text": "Error: ..."}],
+  "isError": true,
+  "errorData": {
+    "tool": "deploy",
+    "errorCode": "M-FRM-001",
+    "type": "MiloError",
+    "argument": "environment",
+    "constraint": {"minLength": 1},
+    "example": "x",
+    "suggestion": "Provide a non-empty environment name.",
+    "schema": {"type": "object", "properties": {"environment": {"type": "string"}}}
+  }
+}
+```
+
+For plain Python `TypeError` from a missing required argument, Milo parses the
+argument name and adds:
+
+```json
+{
+  "argument": "name",
+  "reason": "missing_required_argument",
+  "suggestion": "Provide 'name'."
+}
+```
+
+Agents should use `errorData.argument`, `errorData.constraint`,
+`errorData.reason`, and `errorData.schema` to repair the next call. The
+`content[0].text` field is for humans.
+
+## JSON-RPC Protocol Errors
+
+The stdin/stdout MCP server maps exceptions that escape method dispatch to
+JSON-RPC error codes:
+
+| Condition | JSON-RPC code |
+|---|---|
+| Invalid JSON | `-32700` parse error |
+| Validation/config/form/input `MiloError` | `-32602` invalid params |
+| `CMD_NOT_FOUND` | `-32601` method not found |
+| Other exceptions | `-32603` internal error |
+
+Most command handler failures should stay inside `tools/call` as `isError`
+tool results with `errorData`.
+
+## Raising Repairable Errors
+
+Prefer structured errors at validation boundaries:
+
+```python
+from milo import ErrorCode, MiloError
+
+
+def require_env(environment: str) -> None:
+    if not environment:
+        raise MiloError(
+            ErrorCode.FRM_VALIDATION,
+            "Environment is required",
+            argument="environment",
+            constraint={"minLength": 1},
+            suggestion="Pass --environment staging or another non-empty value.",
+        )
+```
+
+Do not raise broad plain exceptions when an agent could repair the call from a
+specific argument and constraint.

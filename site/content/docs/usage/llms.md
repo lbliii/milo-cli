@@ -55,7 +55,7 @@ The output follows the llms.txt specification:
 
 Commands with tags are grouped under tag-derived headings:
 
-```python
+```python milo-docs:compile
 @cli.command("deploy", description="Deploy the app", tags=("ops",))
 def deploy(target: str) -> str: ...
 
@@ -91,7 +91,7 @@ Command groups produce nested headings:
 
 ## Programmatic generation
 
-```python
+```python milo-docs:compile
 from milo import generate_llms_txt
 
 text = generate_llms_txt(cli)

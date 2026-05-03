@@ -4,13 +4,14 @@ draft: false
 weight: 10
 lang: en
 type: doc
-description: Install Milo and build your first interactive CLI app.
+description: Install Milo and build your first typed CLI command.
 keywords: [get started, installation, quickstart]
 tags: [onboarding]
 icon: rocket
 ---
 
-Install Milo with `pip install milo-cli` (requires Python 3.14+), then create your first app with `milo dev`.
+Install Milo with `pip install milo-cli` (requires Python 3.14+), then scaffold
+a typed command that works as a human CLI, MCP tool, and llms.txt entry.
 
 :::{cards}
 :columns: 1-2
@@ -27,16 +28,16 @@ Set up Milo and verify your Python 3.14t environment.
 :::{card} Quickstart
 :icon: play
 :link: ./quickstart
-:description: Build a counter app in 5 minutes
+:description: Build a typed CLI/MCP command in 5 minutes
 :badge: Step 2
-Write a reducer, create a template, and run your first interactive app.
+Scaffold a command, run it, inspect schemas, test it, and verify MCP transport.
 :::{/card}
 
 :::{/cards}
 
 ## Next steps
 
-- [[docs/usage/state|State management]] — Store, middleware, combined reducers
-- [[docs/usage/flows|Multi-screen flows]] — Chain screens with `>>`
-- [[docs/usage/forms|Interactive forms]] — Collect structured input
-- [[docs/usage/sagas|Sagas]] — Side effects with generators
+- [[docs/usage/cli|CLI and commands]] — Typed command definitions and dispatch
+- [[docs/usage/mcp|MCP server]] — Expose commands as tools
+- [[docs/usage/testing|Testing]] — Schema, CLI, MCP, and verify layers
+- [[docs/tutorials/build-a-counter|Interactive apps]] — Build a reducer-driven terminal app

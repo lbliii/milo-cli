@@ -23,6 +23,13 @@ Hands-on tutorials that walk you through building complete applications with Mil
 Build a three-screen installer using Flows, Forms, and Sagas — the full Milo stack.
 :::{/card}
 
+:::{card} Build a Counter App
+:icon: keyboard
+:link: ./build-a-counter
+:description: Interactive terminal app with reducer state and Kida rendering
+Build the smallest useful Milo app: key input, pure reducer, and live template rendering.
+:::{/card}
+
 :::{/cards}
 
 :::{dropdown} Tutorial ideas

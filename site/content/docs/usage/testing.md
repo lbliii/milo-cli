@@ -13,6 +13,72 @@ icon: check-square
 
 Milo ships with testing utilities purpose-built for the Elm Architecture. Test reducers with action sequences, test views with snapshots, test sagas step-by-step, and record/replay entire sessions.
 
+## CLI command testing
+
+Agent-facing CLIs should test the command contract before interactive behavior.
+Use four small layers:
+
+1. **Schema** — `function_to_schema(command)` matches the function signature.
+2. **Direct dispatch** — `cli.invoke([...])` parses argv and returns the expected `InvokeResult`.
+3. **MCP dispatch** — `_call_tool(cli, {...})` returns the same content and structured `errorData` on malformed input.
+4. **Verify** — `milo.verify.verify("app.py")` passes the same import, discovery, schema, `tools/list`, and subprocess handshake checks as `milo verify`.
+
+```python
+from pathlib import Path
+
+from milo.mcp import _call_tool
+from milo.schema import function_to_schema
+from milo.verify import verify
+
+from app import cli, greet
+
+
+def test_schema_matches_signature():
+    schema = function_to_schema(greet)
+    assert schema["required"] == ["name"]
+    assert schema["properties"]["name"]["type"] == "string"
+
+
+def test_direct_dispatch():
+    result = cli.invoke(["greet", "--name", "Alice"])
+    assert result.exit_code == 0
+    assert "Hello, Alice!" in result.output
+
+
+def test_mcp_dispatch():
+    result = _call_tool(cli, {"name": "greet", "arguments": {"name": "Agent"}})
+    assert result["content"][0]["text"] == "Hello, Agent!"
+    assert "isError" not in result
+
+
+def test_milo_verify_passes():
+    report = verify(str(Path(__file__).resolve().parents[1] / "app.py"))
+    assert report.exit_code == 0, report.format()
+```
+
+Scaffolded projects from `milo new` include these layers in `tests/test_app.py`.
+Use the reducer, render, saga, and replay helpers below for interactive app
+behavior.
+
+## Docs and example drift
+
+Milo's own docs use tagged Markdown fences for snippets that should keep
+working. Only fences marked with `milo-docs:*` are checked, so long-running MCP
+servers and external registration commands can stay documented without running
+in CI.
+
+```bash
+make docs-test
+```
+
+That target compiles built-in and example Kida templates, then runs
+`scripts/check_docs_snippets.py` against the repo docs. Use:
+
+- `milo-docs:run` for deterministic shell snippets.
+- `milo-docs:compile` for Python or Kida snippets that should parse.
+- `milo-docs:skip reason=<why>` for commands that must remain visible but
+  should not run automatically.
+
 ## Testing strategies
 
 ```mermaid
