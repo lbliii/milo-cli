@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from milo._cells import cell_width
 from milo.templates import get_env
 
 
@@ -161,6 +162,16 @@ class TestHeaderBox:
     def test_no_description(self, env):
         out = _render(env, '{{ header_box("myapp") }}')
         assert "myapp" in out
+
+    def test_box_uses_display_cell_width_for_unicode(self, env):
+        tmpl = env.from_string(
+            '{% from "components/_defs.kida" import header_box %}'
+            '{{ header_box("界", description="✖ warning") }}',
+            name="component_panel_cell_width",
+        )
+        out = tmpl.render()
+        boxed = [line for line in out.splitlines() if line]
+        assert len({cell_width(line) for line in boxed}) == 1
 
 
 class TestComposites:

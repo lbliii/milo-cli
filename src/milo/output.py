@@ -45,9 +45,11 @@ def _format_plain(data: Any) -> str:
         return "\n".join(lines)
     if isinstance(data, dict):
         lines = []
-        max_key = max((len(str(k)) for k in data), default=0)
+        from milo._cells import cell_ljust, cell_width
+
+        max_key = max((cell_width(k) for k in data), default=0)
         for k, v in data.items():
-            lines.append(f"  {k!s:<{max_key}}  {v}")
+            lines.append(f"  {cell_ljust(k, max_key)}  {v}")
         return "\n".join(lines)
     return str(data)
 
@@ -76,12 +78,14 @@ def _format_table(data: Any) -> str:
         return tmpl.render(data=rows, headers=headers or [])
     except ImportError:
         # Fallback: simple column alignment
+        from milo._cells import cell_ljust, cell_width
+
         all_rows = [headers, *rows] if headers else rows
-        widths = [max(len(str(cell)) for cell in col) for col in zip(*all_rows, strict=False)]
+        widths = [max(cell_width(cell) for cell in col) for col in zip(*all_rows, strict=False)]
         lines = []
         for row in all_rows:
             lines.append(
-                "  ".join(str(cell).ljust(w) for cell, w in zip(row, widths, strict=False))
+                "  ".join(cell_ljust(cell, w) for cell, w in zip(row, widths, strict=False))
             )
             if row is headers:
                 lines.append("  ".join("-" * w for w in widths))
