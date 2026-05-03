@@ -153,10 +153,19 @@ Uptime: {{ uptime | duration }}
 | `rjust(n)` | Right-justify to n characters |
 | `center(n)` | Center to n characters |
 | `badge` | Status badge (colored based on value) |
+| `cell_width` | Measure terminal display-cell width, ignoring ANSI escapes |
+| `cell_fit(n)` | Truncate and pad to exactly n display cells |
+| `cell_truncate(n)` | Truncate to n display cells |
+| `cell_pad(n)` | Pad on the right to n display cells |
 
 See the [[ext:kida:docs/usage/terminal|Kida terminal reference]] for the full filter list.
 
 :::
+
+Use the `cell_*` filters for fixed-width boxes, rails, tables, and diagnostic
+cards that include ANSI color or wide Unicode glyphs. Plain `ljust(n)` and
+`rjust(n)` operate on Python string length, which can misalign terminal output
+when glyph display width differs from code-point count.
 
 ## Live rendering
 

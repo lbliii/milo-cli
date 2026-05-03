@@ -1,8 +1,9 @@
 # Testing a milo CLI
 
-A milo CLI has three test layers, each short. The template at
+A milo CLI has four test layers, each short. The template at
 [`examples/greet/tests/test_greet.py`](../examples/greet/tests/test_greet.py)
-shows all three. Copy the file next to your own CLI and edit the assertions —
+shows the command-level layers. New projects from `milo new` include all four.
+Copy the file next to your own CLI and edit the assertions —
 the structure is the same for every CLI.
 
 ## Layer 1 — Schema
@@ -60,6 +61,24 @@ def test_mcp_missing_arg_has_argument_context():
 `MiloError` with `argument=` and `constraint=` kwargs, those surface in the
 response so agents can repair the call automatically.
 
+## Layer 4 — `milo verify`
+
+Run the same self-diagnosis that agent quickstarts and scaffolded projects use.
+This checks imports, CLI discovery, schema generation, MCP `tools/list`, and a
+subprocess MCP handshake.
+
+```python
+from pathlib import Path
+
+from milo.verify import verify
+
+
+def test_milo_verify_passes():
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    report = verify(str(app_path))
+    assert report.exit_code == 0, report.format()
+```
+
 ## When to use `assert_renders` / `assert_state` / `assert_saga`
 
 For interactive apps (forms, wizards, TUIs), use the helpers in
@@ -76,6 +95,9 @@ make test
 # A single example
 uv run pytest examples/greet/tests/ -v
 
+# Verify an agent-facing CLI
+uv run milo verify examples/greet/app.py
+
 # With coverage (project enforces 80% floor)
 make test-cov
 ```
@@ -84,4 +106,5 @@ make test-cov
 
 Milo runs its test suite with `PYTHON_GIL=0` on 3.14t builds so threading bugs
 surface in CI. If your CLI adds mutable global state, add a test that exercises
-concurrent calls — see `tests/test_freethreading.py` for patterns.
+concurrent calls — see `tests/test_effects_stress.py` and `tests/test_state.py`
+for patterns.
