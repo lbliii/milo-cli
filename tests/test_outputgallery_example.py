@@ -60,7 +60,10 @@ def test_audit_ascii_style_uses_portable_shape():
     result = cli.invoke(["audit", "--style", "ascii", "--limit", "1"])
 
     assert result.exit_code == 0
-    assert "+----------------------------------------------------------------------------+" in result.output
+    assert (
+        "+----------------------------------------------------------------------------+"
+        in result.output
+    )
     assert "x links" in result.output
     assert "LNK001" in result.output
 
@@ -170,11 +173,7 @@ def test_fixed_width_panels_use_display_cell_width():
     for argv in (["grammar"], ["layout"], ["browser"]):
         result = cli.invoke(argv)
         assert result.exit_code == 0
-        boxed = [
-            line
-            for line in result.output.splitlines()
-            if any(ch in line for ch in "│╭╰├┤╮╯")
-        ]
+        boxed = [line for line in result.output.splitlines() if any(ch in line for ch in "│╭╰├┤╮╯")]
         assert boxed
         assert {cell_width(line) for line in boxed} == {78}
 
@@ -193,8 +192,7 @@ def test_open_cards_use_even_fading_rules():
         rules = [
             line
             for line in result.output.splitlines()
-            if line.startswith(("╭─", "├─", "╰─"))
-            and not line.endswith(("╮", "┤", "╯"))
+            if line.startswith(("╭─", "├─", "╰─")) and not line.endswith(("╮", "┤", "╯"))
         ]
         assert rules
         assert {cell_width(line) for line in rules} == {78}
