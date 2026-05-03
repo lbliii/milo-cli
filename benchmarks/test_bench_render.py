@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+from milo._cells import cell_fit, cell_width, frame_line
 from milo.templates import get_env
 
 # ---------------------------------------------------------------------------
@@ -45,6 +46,14 @@ Examples:
 {% endfor %}
 {% endif %}
 """
+
+CELL_TEXTS = (
+    "plain ascii diagnostic row",
+    "✖ broken link in content/docs/routing.md",
+    "界 wide glyphs stay aligned",
+    "\033[31mred error\033[0m with ANSI color",
+    "very long diagnostic row that must truncate without splitting wide glyphs ✖ 界",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +126,26 @@ def test_bench_render_large(benchmark) -> None:
     tmpl = env.from_string(LARGE_TEMPLATE, name="bench_large")
     state = _large_state()
     benchmark(tmpl.render, **state)
+
+
+# ---------------------------------------------------------------------------
+# Display-cell helper throughput
+# ---------------------------------------------------------------------------
+
+
+def test_bench_cell_width_mixed_text(benchmark) -> None:
+    """Measure display-cell width over ASCII, ANSI, and wide Unicode text."""
+    benchmark(lambda: [cell_width(text) for text in CELL_TEXTS])
+
+
+def test_bench_cell_fit_mixed_text(benchmark) -> None:
+    """Measure truncation and padding for fixed-width terminal columns."""
+    benchmark(lambda: [cell_fit(text, 32) for text in CELL_TEXTS])
+
+
+def test_bench_cell_frame_line_mixed_text(benchmark) -> None:
+    """Measure framed rule construction for open diagnostic cards."""
+    benchmark(lambda: [frame_line(text, width=78) for text in CELL_TEXTS])
 
 
 # ---------------------------------------------------------------------------
