@@ -1,0 +1,14 @@
+{% from "components/_defs.kida" import header, next_steps %}
+{{ header(report.title, report.version, "summary view") }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│" }} {{ report.status.message | bold }}  {{ report.status.detail | pad(57) }}{{ "│" }}
+{{ "│" }} severity {{ report.severity_rail | pad(65) }}{{ "│" }}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}
+
+{{ "Groups" | bold | cyan }}
+{% for section in report.sections -%}
+  {{ section.level | pad(7) }} {{ section.title | pad(28) }} {{ section.count }}
+{% endfor %}
+
+{{ "Next" | bold | cyan }}
+{{ next_steps(report.next_steps) }}

@@ -63,6 +63,20 @@ def test_audit_ascii_style_uses_portable_shape():
     assert "LNK001" in result.output
 
 
+def test_audit_progressive_disclosure_modes():
+    summary = cli.invoke(["audit", "--depth", "summary"])
+    focus = cli.invoke(["audit", "--focus", "LNK001"])
+
+    assert summary.exit_code == 0
+    assert "summary view" in summary.output
+    assert "Groups" in summary.output
+    assert "content/docs/routing.md" not in summary.output
+    assert focus.exit_code == 0
+    assert "Issue drilldown" in focus.output
+    assert "LNK001" in focus.output
+    assert "content/docs/routing.md:82" in focus.output
+
+
 def test_clean_profile_reports_success_with_warning_context():
     result = cli.invoke(["audit", "--profile", "clean"])
 

@@ -8,6 +8,8 @@ phase timelines, and next-step footers.
 ```bash
 uv run python examples/outputgallery/app.py audit
 uv run python examples/outputgallery/app.py audit --limit 0
+uv run python examples/outputgallery/app.py audit --depth summary
+uv run python examples/outputgallery/app.py audit --focus LNK001
 uv run python examples/outputgallery/app.py audit --style ascii
 uv run python examples/outputgallery/app.py audit --format json
 uv run python examples/outputgallery/app.py atlas
@@ -30,6 +32,7 @@ Patterns shown:
 - Character maps, severity rails, branch diagrams, and score panels.
 - Bengal-style diagnostic views for broken links, directives, and warnings.
 - Progressive disclosure through bounded issue lists and an expansion flag.
+- Summary and focus views for drilldown workflows.
 - Phase timelines that explain where time and risk accumulated.
 - Build telemetry views for heat, trends, cache reuse, and fingerprints.
 - Structured JSON for agents, CI annotations, dashboards, and MCP calls.

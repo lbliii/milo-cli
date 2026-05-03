@@ -5,6 +5,8 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
 
     uv run python examples/outputgallery/app.py audit
     uv run python examples/outputgallery/app.py audit --limit 2
+    uv run python examples/outputgallery/app.py audit --depth summary
+    uv run python examples/outputgallery/app.py audit --focus LNK001
     uv run python examples/outputgallery/app.py audit --profile clean
     uv run python examples/outputgallery/app.py audit --style ascii
     uv run python examples/outputgallery/app.py audit --format json
@@ -317,6 +319,38 @@ def _audit_fixture(profile: str, limit: int, style: str = "dense") -> dict:
     }
 
 
+def _find_issue(report: dict, code: str) -> dict:
+    for section in report["sections"]:
+        for item in section["items"]:
+            if item["code"].lower() == code.lower():
+                return {
+                    "title": "Issue drilldown",
+                    "subtitle": "single diagnostic with repair context",
+                    "section": section["title"],
+                    "item": item,
+                    "next": [
+                        "Apply the suggested fix.",
+                        "Rerun audit --focus " + item["code"],
+                        "Rerun audit --depth summary before publishing.",
+                    ],
+                }
+    return {
+        "title": "Issue drilldown",
+        "subtitle": "single diagnostic with repair context",
+        "section": "not found",
+        "item": {
+            "code": code,
+            "glyph": "?",
+            "file": "",
+            "line": 0,
+            "target": "",
+            "hint": "",
+            "message": "No issue matched that code.",
+        },
+        "next": ["Run audit --limit 0 to list every available diagnostic code."],
+    }
+
+
 @cli.command(
     "audit",
     description="Render a static-site build audit with grouped diagnostics",
@@ -329,6 +363,8 @@ def _audit_fixture(profile: str, limit: int, style: str = "dense") -> dict:
 def audit(
     profile: Literal["broken", "warnings", "clean"] = "broken",
     limit: Annotated[int, Ge(0), Le(20)] = 3,
+    depth: Literal["summary", "detail"] = "detail",
+    focus: str = "",
     style: Literal["dense", "editorial", "ascii", "ci"] = "dense",
     ctx: Context = None,
 ) -> dict | str:
@@ -337,10 +373,16 @@ def audit(
     Args:
         profile: Fixture profile to render.
         limit: Maximum items to show in each issue group. Use 0 for all.
+        depth: Summary shows only verdict and grouped counts; detail includes issue rows.
+        focus: Optional diagnostic code to drill into, for example LNK001.
         style: Human rendering style. JSON output always returns the dense data shape.
     """
     if ctx and ctx.format == "plain":
-        report = _audit_fixture(profile, limit, style)
+        report = _audit_fixture(profile, 0 if focus else limit, style)
+        if focus:
+            return ctx.render("focus.kida", env=_env(), focus=_find_issue(report, focus))
+        if depth == "summary":
+            return ctx.render("audit_summary.kida", env=_env(), report=report)
         template = "audit_ascii.kida" if style in {"ascii", "ci"} else "audit.kida"
         return ctx.render(template, env=_env(), report=report)
     return _audit_fixture(profile, limit, "dense")
