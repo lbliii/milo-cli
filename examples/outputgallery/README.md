@@ -20,6 +20,8 @@ uv run python examples/outputgallery/app.py grammar
 uv run python examples/outputgallery/app.py heat
 uv run python examples/outputgallery/app.py cache
 uv run python examples/outputgallery/app.py layout --width narrow
+uv run python examples/outputgallery/app.py live
+uv run python examples/outputgallery/app.py browser
 uv run python examples/outputgallery/app.py spark
 uv run python examples/outputgallery/app.py timeline
 uv run python examples/outputgallery/app.py warnings
@@ -37,6 +39,7 @@ Patterns shown:
 - Phase timelines that explain where time and risk accumulated.
 - Build telemetry views for heat, trends, cache reuse, and fingerprints.
 - Width and capability adaptation examples for wide, narrow, ASCII, CI, and JSON output.
+- Live dashboard and issue-browser surfaces for interactive Milo experiences.
 - Structured JSON for agents, CI annotations, dashboards, and MCP calls.
 
 Research basis:

@@ -164,6 +164,19 @@ def test_layout_adaptation_views_render():
     assert "agent/pipe" in narrow.output
 
 
+def test_live_interactive_showcase_views_render():
+    live = cli.invoke(["live"])
+    browser = cli.invoke(["browser"])
+
+    assert live.exit_code == 0
+    assert "Live build" in live.output
+    assert "link-check" in live.output
+    assert browser.exit_code == 0
+    assert "Issue browser" in browser.output
+    assert "LNK001" in browser.output
+    assert "copy-code" in browser.output
+
+
 def test_audit_resource_exposes_full_fixture():
     data = audit_resource()
 

@@ -18,6 +18,8 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
     uv run python examples/outputgallery/app.py heat
     uv run python examples/outputgallery/app.py cache
     uv run python examples/outputgallery/app.py layout --width narrow
+    uv run python examples/outputgallery/app.py live
+    uv run python examples/outputgallery/app.py browser
     uv run python examples/outputgallery/app.py spark
     uv run python examples/outputgallery/app.py timeline
     uv run python examples/outputgallery/app.py warnings
@@ -658,6 +660,58 @@ def layout(width: Literal["wide", "narrow"] = "wide", ctx: Context = None) -> di
         ],
     }
     return _plain_or_data(ctx, "layout.kida", layout=data)
+
+
+@cli.command("live", description="Render a live build dashboard frame")
+def live(ctx: Context = None) -> dict | str:
+    """Show a live dashboard frame suitable for App or LiveRenderer examples."""
+    data = {
+        "title": "Live build",
+        "subtitle": "single-frame dashboard for long-running terminal work",
+        "phase": "link-check",
+        "progress": "████████░░ 82%",
+        "lanes": [
+            {"name": "discover", "state": "done", "glyph": "✓", "signal": "██████████"},
+            {"name": "parse", "state": "done", "glyph": "✓", "signal": "██████████"},
+            {"name": "render", "state": "warn", "glyph": "▲", "signal": "█████████░"},
+            {"name": "links", "state": "run", "glyph": "●", "signal": "███████░░░"},
+            {"name": "write", "state": "wait", "glyph": "◌", "signal": "░░░░░░░░░░"},
+        ],
+        "events": [
+            "checked 412/503 links",
+            "found LNK001 /docs/pipelines/#parallel-work",
+            "captured 3 directive warnings for final report",
+        ],
+        "keys": "q quit   d details   f follow   j/k move",
+    }
+    return _plain_or_data(ctx, "live.kida", live=data)
+
+
+@cli.command("browser", description="Render an interactive issue browser concept")
+def browser(ctx: Context = None) -> dict | str:
+    """Show a keyboard-navigable issue browser surface as a static frame."""
+    data = {
+        "title": "Issue browser",
+        "subtitle": "interactive drilldown surface for diagnostics",
+        "cursor": "LNK001",
+        "groups": [
+            {"name": "Broken links", "count": 5, "selected": True},
+            {"name": "Directive failures", "count": 3, "selected": False},
+            {"name": "Warnings", "count": 4, "selected": False},
+        ],
+        "items": [
+            {"code": "LNK001", "glyph": "✖", "label": "content/docs/routing.md:82", "selected": True},
+            {"code": "LNK002", "glyph": "✖", "label": "content/blog/milo-bridge.md:31", "selected": False},
+            {"code": "LNK003", "glyph": "✖", "label": "content/docs/templates.md:144", "selected": False},
+        ],
+        "detail": {
+            "target": "/docs/pipelines/#parallel-work",
+            "message": "Link target was not found",
+            "fix": "Rename the anchor or add an explicit heading id.",
+        },
+        "keys": "↑↓ select   enter expand   g graph   c copy-code   q quit",
+    }
+    return _plain_or_data(ctx, "browser.kida", browser=data)
 
 
 @cli.command(

@@ -1,0 +1,13 @@
+{% from "components/_defs.kida" import header %}
+{{ header(browser.title, description=browser.subtitle) }}
+╭──────────────────────╮ ╭────────────────────────────╮ ╭────────────────────╮
+│ Groups               │ │ Issues                     │ │ Detail             │
+{% for group in browser.groups -%}
+│ {{ "›" if group.selected else " " }} {{ group.name | pad(15) }} {{ group.count }} │{% if loop.index0 < (browser.items | length) %}{% set item = browser.items[loop.index0] %} │ {{ "›" if item.selected else " " }} {{ item.glyph }} {{ item.code }} {{ item.label | pad(12) }} │{% if loop.first %} │ target             │{% elif loop.index0 == 1 %} │ {{ browser.detail.target | pad(18) }} │{% else %} │ {{ " " * 18 }} │{% endif %}{% else %} │ {{ " " * 26 }} │ │ {{ " " * 18 }} │{% endif %}
+{% endfor -%}
+╰──────────────────────╯ ╰────────────────────────────╯ │ issue              │
+                                                       │ {{ browser.detail.message | pad(18) }} │
+                                                       │ fix                │
+                                                       │ {{ browser.detail.fix | pad(18) }} │
+                                                       ╰────────────────────╯
+{{ browser.keys | dim }}

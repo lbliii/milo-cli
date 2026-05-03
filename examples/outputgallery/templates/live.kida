@@ -1,0 +1,17 @@
+{% from "components/_defs.kida" import header %}
+{{ header(live.title, description=live.subtitle) }}
+╭────────────────────────────────────────────────────────────────────────────╮
+│ phase {{ live.phase | pad(18) }} {{ live.progress | pad(47) }}│
+╰────────────────────────────────────────────────────────────────────────────╯
+
+{{ "Lanes" | bold | cyan }}
+{% for lane in live.lanes -%}
+  {{ lane.glyph }} {{ lane.name | pad(10) }} {{ lane.signal }} {{ lane.state }}
+{% endfor %}
+
+{{ "Events" | bold | cyan }}
+{% for event in live.events -%}
+  • {{ event }}
+{% endfor %}
+
+{{ live.keys | dim }}
