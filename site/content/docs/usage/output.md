@@ -66,6 +66,11 @@ id  name   status
 2   Beta   pending
 ```
 
+Milo's built-in table and plain dict formatting align by terminal display cells,
+not Python character count. ANSI color escapes are ignored for width, and wide
+Unicode glyphs count as two cells, so diagnostic tables stay aligned in real
+terminals.
+
 ### Template
 
 Render through a kida template:
@@ -97,3 +102,12 @@ write_output(data, fmt="table")
 ```
 
 This is what the CLI dispatcher calls after each command handler returns.
+
+## Advanced terminal reports
+
+For dense diagnostic output, study
+[`examples/outputgallery`](https://github.com/lbliii/milo-cli/tree/main/examples/outputgallery).
+It shows bounded audit reports, ASCII-safe CI output, drilldowns, topology
+views, build heatmaps, cache telemetry, and JSON output from the same command
+data. Keep command return values structured so `--format json` and MCP
+`structuredContent` remain useful.

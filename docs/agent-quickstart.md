@@ -199,12 +199,14 @@ Parse these fields. Don't rely on the error message string.
 ## Test your CLI
 
 Copy `examples/greet/tests/test_greet.py` next to your `app.py`, rename the
-imports, and edit the assertions. The three test layers (schema, direct
-dispatch, MCP dispatch) cover the common regression surface. See
+imports, and edit the assertions. The command-level layers (schema, direct
+dispatch, MCP dispatch) cover the common regression surface; `milo new` also
+adds a `milo verify` test for the full agent-facing CLI. See
 [`testing.md`](./testing.md) for the full testing story.
 
 ```bash
 uv run pytest my_cli/tests/ -v
+uv run milo verify my_cli/app.py
 ```
 
 ## Next

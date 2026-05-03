@@ -115,6 +115,26 @@ Blocking sagas don't slow dispatch itself (dispatch doesn't use the pool), but t
 | Load template (form.kida) | 4.0μs | Similar complexity |
 | **get_env() (cached)** | **125ns** | Singleton cache hit |
 
+### Display-Cell Helpers
+
+Display-cell benchmarks were added after this v0.2.2 baseline to cover fixed-width
+terminal output with ANSI escape sequences and wide Unicode glyphs.
+
+Local spot check: 2026-05-03, macOS Darwin 25.3.0, CPython 3.14.2t, default
+local benchmark settings.
+
+| Operation | Median | Notes |
+|---|---|---|
+| `cell_width` mixed text | 20.4μs | 5 strings: ASCII, ANSI, wide Unicode, long diagnostic |
+| `cell_fit` mixed text | 55.4μs | Truncate and pad the same 5 strings to 32 cells |
+| `frame_line` mixed text | 66.3μs | Build 78-cell framed rows for the same 5 strings |
+
+Refresh this section on the next full baseline run with:
+
+```bash
+PYTHON_GIL=0 uv run pytest benchmarks/test_bench_render.py --benchmark-only -q
+```
+
 **Note**: `get_env()` is now cached as a module-level singleton. First call costs ~125μs (loader chain + theme registration); subsequent default-args calls return the cached instance in ~125ns.
 
 ---

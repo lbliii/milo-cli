@@ -1,15 +1,17 @@
-"""Tests for {{name}} — schema, direct dispatch, MCP dispatch.
+"""Tests for {{name}} — schema, direct dispatch, MCP dispatch, verify.
 
-Three layers cover the common regression surface:
+Four layers cover the common regression surface:
   1. Schema    — `function_to_schema(greet)` matches the function signature.
   2. Direct    — `cli.invoke([...])` returns the expected output.
   3. MCP       — `_call_tool(cli, {...})` returns the expected response and,
                  on error, structured `errorData` with `argument` context.
+  4. Verify    — `milo verify` passes against the scaffolded app.
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +19,7 @@ from app import cli, greet
 
 from milo.mcp import _call_tool, _list_tools
 from milo.schema import function_to_schema
+from milo.verify import verify
 
 
 class TestSchema:
@@ -59,6 +62,14 @@ class TestMCPDispatch:
         assert result["isError"] is True
         assert result["errorData"]["argument"] == "name"
         assert result["errorData"]["reason"] == "missing_required_argument"
+
+
+class TestVerify:
+    def test_milo_verify_passes_for_scaffolded_cli(self):
+        app_path = Path(__file__).resolve().parents[1] / "app.py"
+        report = verify(str(app_path))
+        assert report.exit_code == 0, report.format()
+        assert report.failures == 0
 
 
 if __name__ == "__main__":

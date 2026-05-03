@@ -20,9 +20,11 @@ uv run python app.py --mcp
 
 ```bash
 uv run pytest tests/ -v
+uv run milo verify app.py
 ```
 
-The test file covers three layers — schema, direct dispatch, MCP dispatch.
+The test file covers four layers — schema, direct dispatch, MCP dispatch, and
+`milo verify`.
 Add commands by adding `@cli.command(...)` functions to `app.py`, then add
 matching tests in `tests/test_app.py`.
 

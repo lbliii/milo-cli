@@ -1,0 +1,1 @@
+Added steward-priority coverage for command dispatch parity, runnable output-gallery adoption guidance, scaffolded `milo verify`, terminal cleanup, dispatch lock edges, and display-cell rendering benchmarks.

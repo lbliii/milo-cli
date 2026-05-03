@@ -41,7 +41,7 @@ For regression detection, compare **Median** values — they're most resistant t
 | `test_bench_contention.py` | Lock contention | Multi-thread dispatch throughput, listener overhead, lock fairness |
 | `test_bench_reducer.py` | Reducer complexity | Cmd/Batch/Sequence costs, combine_reducers scaling, listener notification |
 | `test_bench_saga.py` | Saga executor | End-to-end saga latency, pool saturation, blocking call impact |
-| `test_bench_render.py` | Rendering | Kida template render by size, env creation, terminal update simulation |
+| `test_bench_render.py` | Rendering | Kida template render by size, display-cell helpers, env creation, terminal update simulation |
 | `test_bench_mcp.py` | MCP protocol | JSON-RPC parse/serialize, router dispatch, tools/list generation, full round-trip |
 | `test_bench_schema.py` | Schema generation | function_to_schema by param count, type complexity, Annotated constraints |
 | `test_bench_gateway.py` | Gateway | Discovery cost, proxied tools/call, tool routing, scaling with N children |
