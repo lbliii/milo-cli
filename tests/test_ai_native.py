@@ -87,6 +87,13 @@ class TestFormatOutput:
         assert "name" in out
         assert "Alice" in out
 
+    def test_plain_dict_aligns_wide_keys_by_display_cells(self):
+        from milo._cells import cell_width
+
+        out = format_output({"界": "wide", "aa": "ascii"})
+        lines = out.splitlines()
+        assert cell_width(lines[0].split("wide")[0]) == cell_width(lines[1].split("ascii")[0])
+
     def test_plain_list(self):
         out = format_output([{"a": 1}, {"a": 2}])
         assert "1" in out
@@ -111,6 +118,25 @@ class TestFormatOutput:
         out = format_output(data, fmt="table")
         assert "Alice" in out
         assert "Bob" in out
+
+    def test_table_fallback_aligns_wide_cells(self, monkeypatch):
+        import builtins
+
+        from milo.output import _format_table
+
+        original_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "kida":
+                raise ImportError(name)
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        out = _format_table([{"glyph": "界", "value": "wide"}, {"glyph": "aa", "value": "ascii"}])
+        lines = out.splitlines()
+        from milo._cells import cell_width
+
+        assert cell_width(lines[2].split("wide")[0]) == cell_width(lines[3].split("ascii")[0])
 
     def test_table_empty(self):
         assert format_output([], fmt="table") == "(empty)"

@@ -1,0 +1,18 @@
+{{ grammar.title | bold | cyan }}
+{{ grammar.subtitle }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│ " }}{{ "Glyphs" | cell_fit(75) }}{{ "│" }}
+{% for item in grammar.glyphs -%}
+{{ "│" }}  {{ item.glyph }} / {{ item.ascii }}  {{ item.name | cell_fit(10) }} {{ item.meaning | cell_fit(56) }}{{ "│" }}
+{% endfor -%}
+{{ "├" ~ ("─" * 76) ~ "┤" }}
+{{ "│ " }}{{ "Zones" | cell_fit(75) }}{{ "│" }}
+{% for item in grammar.zones -%}
+{{ "│" }}  {{ item.glyph }} / {{ item.ascii }}  {{ item.name | cell_fit(10) }} {{ item.meaning | cell_fit(56) }}{{ "│" }}
+{% endfor -%}
+{{ "├" ~ ("─" * 76) ~ "┤" }}
+{{ "│ " }}{{ "Styles" | cell_fit(75) }}{{ "│" }}
+{% for item in grammar.styles -%}
+{{ "│" }}  {{ item.name | cell_fit(10) }} {{ item.use | cell_fit(63) }}{{ "│" }}
+{% endfor -%}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}

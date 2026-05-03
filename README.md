@@ -159,6 +159,7 @@ Pick the example closest to your use case, copy its `app.py`, and adapt. Every d
 | Fast startup via deferred imports | [examples/lazyapp](examples/lazyapp) | `cli.lazy_command()` |
 | Production CLI with hooks, completions, doctor | [examples/devtool](examples/devtool) | `run_doctor`, `before_run`/`after_run`, did-you-mean, completions |
 | AI-native CLI surfacing tools + resources | [examples/taskman](examples/taskman) | `@command`, `@resource`, `--format`, `--llms-txt`, `--mcp` |
+| Advanced terminal reports and diagnostics | [examples/outputgallery](examples/outputgallery) | `Context.render`, Kida templates, character maps, JSON output |
 
 **Configuration, plugins, pipelines**
 

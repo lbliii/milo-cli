@@ -1,0 +1,14 @@
+{% from "components/_defs.kida" import header %}
+{{ header(directives.title, description=directives.subtitle) }}
+{% for card in directives.cards -%}
+{{ (card.glyph ~ " " ~ card.code ~ " " ~ card.name) | bold | open_rule }}
+│ source    {{ card.source }}
+│ impact    {{ card.impact }}
+{{ "contract" | open_rule_divider }}
+│ expected  {{ card.expected }}
+│ actual    {{ card.actual }}
+│ rule      {{ card.contract }}
+{{ "fix" | open_rule_divider }}
+│ {{ card.fix }}
+{{ "" | open_rule_end }}
+{% endfor %}

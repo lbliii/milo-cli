@@ -1,0 +1,49 @@
+{% from "components/_defs.kida" import header, status_line, next_steps %}
+{{ header(report.title, report.version, report.subtitle) }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│ " }}{{ report.status.message | cell_fit(18) }} {{ report.status.detail | cell_fit(56) }}{{ "│" }}
+{{ "├" ~ ("─" * 76) ~ "┤" }}
+{{ "│ " }}{{ "severity" | cell_fit(10) }}{{ report.severity_rail | cell_fit(65) }}{{ "│" }}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}
+
+{{ "Issue Mix" | bold | cyan }}
+{% for item in report.issue_mix -%}
+  {{ item.glyph }} {{ item.label | cell_fit(11) }} {{ item.bar }} {{ item.count }}
+{% endfor %}
+
+{{ "File Zones" | bold | cyan }}
+{% for zone in report.file_zones -%}
+  {{ zone.glyph }} {{ zone.label | cell_fit(7) }} {{ zone.bar }} {{ zone.count }}
+{% endfor %}
+
+{{ "Overview" | bold | cyan }}
+{% for metric in report.metrics -%}
+  {{ metric.label | kv(metric.value, width=24) }}
+{% endfor %}
+
+{{ "Diagnostics" | bold | cyan }}
+{% for section in report.sections -%}
+{{ (section.title ~ " (" ~ (section.count | string) ~ ")") | bold | open_rule }}
+│  {{ section.summary | dim }}
+{% if section.items -%}
+{% for item in section.items -%}
+│
+{% if item.line -%}
+{{ (item.glyph ~ " " ~ item.code ~ " " ~ item.file ~ ":" ~ (item.line | string)) | bold | open_rule_divider }}
+{% else -%}
+{{ (item.glyph ~ " " ~ item.code ~ " " ~ item.file) | bold | open_rule_divider }}
+{% endif -%}
+│    {{ item.message }}
+│    {{ "target" | kv(item.target, width=10) }}
+│    {{ "fix" | kv(item.hint, width=10) }}
+{% endfor -%}
+{% else -%}
+│  {{ "● none" | green }}
+{% endif -%}
+{% if section.hidden > 0 -%}
+│  {{ ("⋯ " ~ (section.hidden | string) ~ " more hidden; rerun with --limit 0") | dim }}
+{% endif %}
+{{ "" | open_rule_end }}
+{% endfor %}
+{{ "Next" | bold | cyan }}
+{{ next_steps(report.next_steps) }}

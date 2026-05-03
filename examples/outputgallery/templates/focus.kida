@@ -1,0 +1,15 @@
+{% from "components/_defs.kida" import header, next_steps %}
+{{ header(focus.title, description=focus.subtitle) }}
+{{ (focus.item.glyph ~ " " ~ focus.item.code ~ " " ~ focus.section) | bold | open_rule }}
+{% if focus.item.file -%}
+│ where   {{ focus.item.file }}{% if focus.item.line %}:{{ focus.item.line }}{% endif %}
+│ target  {{ focus.item.target }}
+│ issue   {{ focus.item.message }}
+│ fix     {{ focus.item.hint }}
+{% else -%}
+│ {{ focus.item.message }}
+{% endif -%}
+{{ "" | open_rule_end }}
+
+{{ "Next" | bold | cyan }}
+{{ next_steps(focus.next) }}

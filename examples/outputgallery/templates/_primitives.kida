@@ -1,0 +1,14 @@
+{%- def meter_row(glyph, label, bar, value) -%}
+{{ glyph }} {{ label | cell_fit(12) }} {{ bar }} {{ value }}
+{%- enddef -%}
+
+{%- def issue_card(glyph, code, location, message, fix) -%}
+{{ (glyph ~ " " ~ code ~ " " ~ location) | bold | open_rule }}
+│ {{ message }}
+│ fix  {{ fix }}
+{{ "" | open_rule_end }}
+{%- enddef -%}
+
+{%- def key_bar(keys) -%}
+{{ keys | dim }}
+{%- enddef -%}

@@ -140,9 +140,9 @@
 {%- set title = name ~ (" " ~ version if version else "") -%}
 {%- set width = [title | length + 2, 40] | max -%}
 {{ b.tl }}{{ b.h * width }}{{ b.tr }}
-{{ b.v }} {{ title | bold | cyan | pad(width - 1) }}{{ b.v }}
+{{ b.v }} {{ title | bold | cyan | cell_fit(width - 1) }}{{ b.v }}
 {%- if description %}
-{{ b.v }} {{ description | pad(width - 1) }}{{ b.v }}
+{{ b.v }} {{ description | cell_fit(width - 1) }}{{ b.v }}
 {%- endif %}
 {{ b.bl }}{{ b.h * width }}{{ b.br }}
 {%- enddef -%}
@@ -165,7 +165,7 @@
 {{ b.tl }}{{ b.h * inner_w }}{{ b.tr }}
 {%- endif -%}
 {%- for line in lines %}
-{{ b.v }} {{ line | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ line | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endfor %}
 {{ b.bl }}{{ b.h * inner_w }}{{ b.br }}
 {%- enddef -%}
@@ -206,30 +206,30 @@
 {%- set visible_start = log_scroll -%}
 {%- set visible_end = log_scroll + log_height -%}
 {%- if visible_start > 0 %}
-{{ b.v }} {{ ("... " ~ (visible_start | string) ~ " more above") | dim | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ ("... " ~ (visible_start | string) ~ " more above") | dim | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif -%}
 {%- for entry in phase.logs[visible_start:visible_end] %}
 {%- if entry.stream == "stderr" %}
-{{ b.v }} {{ entry.line | yellow | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ entry.line | yellow | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- else %}
-{{ b.v }} {{ entry.line | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ entry.line | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif -%}
 {%- endfor -%}
 {%- if (phase.logs | length) > visible_end %}
-{{ b.v }} {{ ("... " ~ ((phase.logs | length) - visible_end) | string ~ " more below") | dim | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ ("... " ~ ((phase.logs | length) - visible_end) | string ~ " more below") | dim | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif -%}
 {%- if auto_follow %}
-{{ b.v }} {{ "[AUTO]" | dim | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ "[AUTO]" | dim | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif -%}
 {%- if phase.status == "failed" and phase.error %}
-{{ b.v }} {{ "" | pad(inner_w - 2) }} {{ b.v }}
-{{ b.v }} {{ ("Error: " ~ phase.error) | red | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ "" | cell_fit(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ ("Error: " ~ phase.error) | red | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif %}
 {%- else -%}
 {%- if phase.status == "failed" and phase.error %}
-{{ b.v }} {{ ("Error: " ~ phase.error) | red | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ ("Error: " ~ phase.error) | red | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- else %}
-{{ b.v }} {{ "No output captured." | dim | pad(inner_w - 2) }} {{ b.v }}
+{{ b.v }} {{ "No output captured." | dim | cell_fit(inner_w - 2) }} {{ b.v }}
 {%- endif %}
 {%- endif %}
 {{ b.bl }}{{ b.h * inner_w }}{{ b.br }}

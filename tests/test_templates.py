@@ -113,6 +113,61 @@ class TestGetEnv:
         # capture_context populated under enable_capture=True
         assert cap.context_keys.get("name") == "world"
 
+    def test_cell_width_filters_align_unicode_and_ansi(self):
+        from milo.templates import get_env
+
+        env = get_env()
+        tmpl = env.from_string(
+            "{{ '✖' | cell_fit(3) }}|{{ '界' | cell_fit(3) }}|"
+            "{{ '\x1b[31mred\x1b[0m' | cell_width }}|{{ 'abcdef' | cell_fit(4) }}",
+            name="cell_width_filters",
+        )
+        out = tmpl.render()
+        assert out == "✖  |界 |3|abc…"
+
+    def test_open_rule_filters_render_even_fading_rules(self):
+        from milo._cells import cell_width
+        from milo.templates import get_env
+
+        env = get_env()
+        tmpl = env.from_string(
+            "{{ 'Outcome' | open_rule }}\n"
+            "{{ 'contract' | open_rule_divider }}\n"
+            "{{ '' | open_rule_end }}",
+            name="open_rule_filters",
+        )
+        lines = tmpl.render().splitlines()
+
+        assert {cell_width(line) for line in lines} == {78}
+        assert lines[0].startswith("╭─ Outcome ─")
+        assert lines[1].startswith("├─ contract ─")
+        assert lines[2].startswith("╰─")
+        assert all(line.endswith("╌┄") for line in lines)
+
+    def test_topology_filters_render_cell_exact_primitives(self):
+        from milo._cells import cell_width
+        from milo.templates import get_env
+
+        env = get_env()
+        tmpl = env.from_string(
+            "{{ '界 header' | rule_line(width=24) }}\n"
+            "{{ 'body ✖' | frame_line(width=24) }}\n"
+            "{{ 'repair hint' | rail_line(width=24) }}\n"
+            "{{ 'contract' | divider_line(width=24) }}\n"
+            "{{ '' | bottom_rule(width=24) }}\n"
+            "{{ 3 | cell_meter(4, width=8) }}",
+            name="topology_filters",
+        )
+        lines = tmpl.render().splitlines()
+
+        assert {cell_width(line) for line in lines[:5]} == {24}
+        assert lines[0].startswith("╭─ 界 header ")
+        assert lines[1].startswith("│ body ✖")
+        assert lines[2].startswith("│ repair hint")
+        assert lines[3].startswith("├─ contract ")
+        assert lines[4] == "╰──────────────────────╯"
+        assert lines[5] == "██████░░"
+
 
 class TestComponentTemplatesIncluded:
     def test_components_directory_exists(self):

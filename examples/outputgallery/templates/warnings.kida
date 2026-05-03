@@ -1,0 +1,14 @@
+{% from "components/_defs.kida" import header %}
+{{ header(warnings.title, description=warnings.subtitle) }}
+{{ "" | rule_line }}
+{{ ("budget " ~ warnings.budget.bar ~ " " ~ (warnings.budget.used | string) ~ "/" ~ (warnings.budget.limit | string)) | frame_line }}
+{{ "" | bottom_rule }}
+
+{% for group in warnings.groups -%}
+{{ group.glyph }} {{ group.name | bold }} {{ ("owner: " ~ group.owner) | dim }}
+{% for item in group.items -%}
+  ├─ {{ item.file }}
+  │  {{ item.message }}
+  │  fix  {{ item.fix }}
+{% endfor %}
+{% endfor %}

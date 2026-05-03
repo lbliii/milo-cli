@@ -1,0 +1,46 @@
+{{ report.title }} {{ report.version }}
+{{ report.subtitle }}
++----------------------------------------------------------------------------+
+| {{ report.status.message }} - {{ report.status.detail }}
+| severity {{ report.severity_rail }}
++----------------------------------------------------------------------------+
+
+Issue Mix
+{% for item in report.issue_mix -%}
+  {{ item.glyph }} {{ item.label | cell_fit(11) }} {{ item.bar }} {{ item.count }}
+{% endfor %}
+
+File Zones
+{% for zone in report.file_zones -%}
+  {{ zone.glyph }} {{ zone.label | cell_fit(7) }} {{ zone.bar }} {{ zone.count }}
+{% endfor %}
+
+Overview
+{% for metric in report.metrics -%}
+  {{ metric.label | kv(metric.value, width=24) }}
+{% endfor %}
+
+Diagnostics
+{% for section in report.sections -%}
++-- {{ section.title }} ({{ section.count }})
+| {{ section.summary }}
+{% if section.items -%}
+{% for item in section.items -%}
+|
++-- {{ item.glyph }} {{ item.code }} {{ item.file }}{% if item.line %}:{{ item.line }}{% endif %}
+|   {{ item.message }}
+|   {{ "target" | kv(item.target, width=10) }}
+|   {{ "fix" | kv(item.hint, width=10) }}
+{% endfor -%}
+{% else -%}
+|   . none
+{% endif -%}
+{% if section.hidden > 0 -%}
+|   ... {{ section.hidden }} more hidden; rerun with --limit 0
+{% endif -%}
++----------------------------------------------------------------------------
+{% endfor %}
+Next
+{% for step in report.next_steps -%}
+  {{ loop.index }}. {{ step }}
+{% endfor %}

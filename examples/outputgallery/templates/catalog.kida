@@ -1,0 +1,17 @@
+{% from "components/_defs.kida" import header %}
+{{ header(patterns.title, description=patterns.subtitle) }}
+{{ "" | rule_line }}
+{{ "Principles" | frame_line }}
+{% for item in patterns.principles -%}
+{{ (" ◆ " ~ (item.label | cell_fit(27)) ~ " " ~ (item.value | cell_fit(43))) | frame_line }}
+{% endfor -%}
+{{ "" | bottom_rule }}
+
+{{ "Pattern Library" | bold | cyan }}
+{% for pattern in patterns.patterns -%}
+{{ pattern.name | bold | open_rule }}
+│ {{ "use" | cyan }}   {{ pattern.use_when }}
+│ {{ "shape" | cyan }} {{ pattern.shape }}
+│ {{ "avoid" | cyan }} {{ pattern.avoid }}
+{{ "" | open_rule_end }}
+{% endfor %}

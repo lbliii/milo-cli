@@ -1,0 +1,28 @@
+{% from "components/_defs.kida" import header, status_line, next_steps %}
+{{ header(run.title, description=run.subtitle) }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│ " }}{{ status_line(run.status.level, run.status.message, run.status.detail) }}{{ " " * 43 }}{{ "│" }}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}
+
+{{ "Phase Signal" | bold | cyan }}
+{% for phase in run.phases -%}
+{% match phase.status -%}
+{% case "success" -%}
+  ✓ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
+{% case "warning" -%}
+  ▲ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
+{% case "error" -%}
+  ✖ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
+{% case _ -%}
+  · {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
+{% endmatch -%}
+{% endfor %}
+
+{{ "Critical Path" | bold | cyan }}
+discover ── parse ── render ──╮
+                              ├── write
+assets   ─────────────────────╯
+link-check ✖ blocks publish
+
+{{ "Next" | bold | cyan }}
+{{ next_steps(run.next_steps) }}

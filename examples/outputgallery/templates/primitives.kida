@@ -1,0 +1,20 @@
+{% from "components/_defs.kida" import header %}
+{% from "_primitives.kida" import meter_row, issue_card, key_bar %}
+{{ header(primitives.title, description=primitives.subtitle) }}
+
+{{ "Available Defs" | bold | cyan }}
+{% for card in primitives.cards -%}
+  {{ card.name | cell_fit(13) }} {{ card.sample | cell_fit(32) }} {{ card.use }}
+{% endfor %}
+
+{{ "Meters" | bold | cyan }}
+{% for row in primitives.rows -%}
+  {{ meter_row(row.glyph, row.label, row.bar, row.value) }}
+{% endfor %}
+  {{ "● generated" | cell_fit(13) }} {{ 8 | cell_meter(10, width=18) }} 8/10
+
+{{ "Card" | bold | cyan }}
+{{ issue_card("✖", "LNK001", "content/docs/routing.md:82", "Link target was not found", "Rename the anchor or add an explicit heading id.") }}
+
+{{ "Keys" | bold | cyan }}
+{{ key_bar("q quit   d details   f follow   j/k move") }}
