@@ -22,6 +22,14 @@ Represent downstream CLI authors, MCP clients, human terminal users, and contrib
 - Terminal app lifecycle restores raw mode, alternate screen, cursor, mouse mode, and resize handling even on errors.
 - Pipeline dependencies, retries, output capture, and progress state cannot report success for skipped or failed work.
 
+## Contract Checklist
+- Command dispatch changes get parity coverage across CLI invocation, programmatic call/call_raw, MCP `tools/call`, help/llms.txt when applicable, and malformed input diagnostics.
+- Schema changes exercise annotations, defaults, `Annotated`, `Literal`, optionality, docstring descriptions, and MCP input schema output.
+- MCP/gateway changes cover `initialize`, `tools/list`, `tools/call`, resources/prompts when touched, JSON-RPC error codes, notifications, streaming progress, and child-process routing.
+- State/app/runtime changes name shared mutable state, lock ordering, reentrant dispatch risks, cancellation/shutdown behavior, executor ordering, and terminal cleanup.
+- Public exports or dataclass/effect/config changes update `src/milo/__init__.py`, docs, examples, scaffold, changelog, and typing tests as relevant.
+- Hot-path changes include benchmark notes for schema inference, command resolution, Store dispatch, saga execution, rendering, gateway dispatch, or child process routing.
+
 ## Advocate
 - More schema coverage for modern typing when it improves agent correctness.
 - Clearer diagnostics at CLI, MCP, and `milo verify` boundaries.

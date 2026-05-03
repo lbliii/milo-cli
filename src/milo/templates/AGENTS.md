@@ -19,6 +19,13 @@ Represent app authors who expect templates to be strict, composable, accessible 
 - Help, error, form, field, and progress templates must render useful output in narrow terminals and without color assumptions.
 - Theme filters and defaults should not require extra runtime dependencies.
 
+## Contract Checklist
+- Template changes run `uv run python scripts/check_templates.py` and update snapshots or focused rendering tests as needed.
+- Form/help/progress/error template changes check the producer data shape in Python code, docs examples, scaffold, and examples.
+- New filters, globals, or template state keys are documented at the render boundary and tested under strict undefined.
+- Narrow-terminal or display-cell behavior changes include rendering evidence or tests for ANSI, CJK, combining marks, and plain fallback where relevant.
+- Docs and examples that copy Kida snippets are updated in the same PR or marked `no docs impact: <reason>`.
+
 ## Advocate
 - Reusable Kida components only when they remove real duplication across bundled templates or examples.
 - Snapshot tests for rendering changes that affect users.

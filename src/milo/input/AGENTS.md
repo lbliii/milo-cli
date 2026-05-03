@@ -18,6 +18,13 @@ Represent humans using interactive Milo apps on real terminals, tests simulating
 - Input errors must be actionable and wrapped as Milo input errors where callers can recover or report cleanly.
 - No reader path should busy-spin or block terminal cleanup.
 
+## Contract Checklist
+- Decoder changes include fixture/table coverage for printable keys, modifiers, Ctrl keys, escape sequences, and unknown sequences relevant to the change.
+- Raw-mode or platform changes document cleanup paths and test context-manager restoration where practical.
+- App/form/flow changes relying on key semantics update input docs and examples if user-visible key names or behavior change.
+- Non-TTY behavior remains explicit; no interactive path should accidentally consume redirected stdin as terminal input.
+- Terminal error paths keep actionable Milo errors rather than platform tracebacks.
+
 ## Advocate
 - Small fixture-driven tests for new escape sequences and platform edge cases.
 - More explicit docs for unsupported terminal behavior when users can act on it.

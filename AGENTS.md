@@ -57,10 +57,30 @@ Read this root constitution plus the closest scoped `AGENTS.md` before editing. 
 Every steward uses this operating model:
 - Point of View: who or what the domain represents.
 - Protect: invariants, contracts, quality bars, and failure modes.
+- Contract Checklist: concrete surfaces to inspect when the domain changes, including tests, docs, examples, and generated artifacts that should move with code.
 - Advocate: features, fixes, and investments the domain should push for.
 - Serve Peers: upstream and downstream domains that need clearer contracts, diagnostics, docs, tests, or ergonomics.
 - Do Not: local anti-patterns.
 - Own: tests, docs, examples, fixtures, and maintenance checks.
+
+## Contract Checklist
+- Contract changes identify every surface that should agree: CLI, programmatic call, MCP, schema, llms.txt, docs, examples, scaffold, tests, benchmarks, and changelog.
+- Each accepted finding names required proof and collateral updates, or explicitly records `no collateral: <reason>`.
+- Cross-surface fixes include a parity matrix in Steward Notes when behavior must agree across multiple entrypoints.
+- Docs/examples/scaffold move in the same PR as user-facing behavior unless the synthesis records why they are unaffected.
+
+## Steward Signal Format
+Steward findings should be contract-oriented, evidence-backed, and collateral-aware. Prefer this shape for review, bugbash, and planning signals:
+- Steward: domain name.
+- Area: files or feature surface.
+- Severity: P0/P1/P2/P3.
+- Invariant: the contract being protected.
+- Evidence: observed code, test, doc, or behavior proving the concern.
+- User Impact: how humans, agents, or downstream CLIs experience the bug or drift.
+- Required Fix: the smallest behavior or docs change that restores the invariant.
+- Required Proof: tests, docs checks, snippets, benchmarks, or manual checks that must move with the fix.
+- Collateral: docs, examples, scaffold, llms.txt, changelog, migration notes, or benchmarks that also need updates; write "none: <reason>" when not applicable.
+- Confidence: high/medium/low.
 
 ## When To Consult
 - Proactively consult stewards for cross-boundary, public-facing, hard-to-reverse, performance-sensitive, concurrency-sensitive, security-sensitive, or contract-affecting work.
@@ -68,11 +88,20 @@ Every steward uses this operating model:
 - Use multiple stewards when ownership lines cross.
 - Parallelize steward consultation only when questions are independent.
 - Keep final synthesis and implementation accountability with the implementing agent.
+- Keep PR scope bounded by accepted findings and their required proof/collateral. Defer unrelated steward suggestions to follow-up.
 
 ## Ask Stewards
 Trigger phrase: `ask stewards`.
 
 For implementation work, consult affected stewards and return the synthesis before or during the change. For backlog, roadmap, or prioritization work, consult all scoped stewards and produce a rollup with raw steward signals, confidence, dependencies, risks, convergence, minority reports, ranked backlog, and not-now items.
+
+For implementation swarms and bugbashes, the synthesis must include:
+- Accepted findings, merged duplicates, and rejected/deferred findings with reasons.
+- Cross-cutting invariants and ownership boundaries.
+- Required proof and collateral updates for each accepted finding.
+- Minority reports or steward disagreements.
+- A contract parity matrix when behavior spans surfaces such as CLI, programmatic call, MCP, schema, docs, examples, or scaffold.
+- Final implementation accountability: stewards advise; the implementing agent owns the integrated fix.
 
 ## Extension Routing
 - Public CLI commands, groups, global options, resources, prompts: `src/milo/commands.py`, `_command_defs.py`, `groups.py`, `mcp.py`, and `llms.py`.
@@ -87,6 +116,8 @@ For implementation work, consult affected stewards and return the synthesis befo
 - Run `uv run python scripts/check_templates.py` when touching `src/milo/templates/`, `examples/*/templates/`, scaffold templates, or Kida-facing docs/examples.
 - Coverage stays at or above the branch-aware 80% floor.
 - Tests exercise the interesting path: schema, CLI dispatch, programmatic call, MCP dispatch, malformed input, failure diagnostics, concurrency, terminal cleanup, or template compilation as relevant.
+- Every accepted steward finding has one of: test updated, docs/example/scaffold updated, benchmark note added, or `no collateral: <reason>` in Steward Notes.
+- Contract-affecting PRs include a short parity matrix covering the surfaces touched, such as CLI invoke, CLI call, MCP, schema, docs, examples, scaffold, and tests.
 - Hot-path changes in schema inference, command resolution, Store dispatch, saga execution, rendering, gateway dispatch, or child process routing include benchmark notes.
 - Free-threading-sensitive changes include notes on shared mutable state, lock ordering, reentrant dispatch, cancellation, executor ordering, or why none apply.
 - Public API changes include a towncrier fragment in `changelog.d/`, migration notes if breaking, and `__all__` updates when needed.

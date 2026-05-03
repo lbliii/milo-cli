@@ -18,6 +18,14 @@ Represent external readers evaluating Milo, current users upgrading, and contrib
 - Release notes and changelog material must match towncrier fragments and package version intent.
 - Site config changes must not break search, navigation, or docs discoverability.
 
+## Contract Checklist
+- Public behavior changes update the closest reference page, tutorial, or usage guide, or Steward Notes say `no site docs impact: <reason>`.
+- CLI flag, command, schema, MCP, or llms.txt changes keep README, site docs, and agent docs in agreement.
+- Runtime architecture changes update diagrams or conceptual pages when reducers, effects, Store locking, terminal lifecycle, or free-threading assumptions move.
+- Code blocks that claim to compile or run are tagged for `scripts/check_docs_snippets.py` when practical.
+- Card links, frontmatter icons, categories, and navigation paths resolve under the repo's docs tests before relying on Bengal output.
+- Changelog fragments exist for public API, protocol, or user-visible behavior changes.
+
 ## Advocate
 - Short reference pages that spell out contracts, error behavior, and migration notes.
 - Cross-links from each feature to the closest runnable example and test pattern.

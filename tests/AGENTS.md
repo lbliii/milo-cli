@@ -19,6 +19,14 @@ Represent maintainers reviewing risk and downstream users who cannot inspect Mil
 - Template tests should catch strict-undefined problems before docs or examples copy them.
 - Fixtures should be small, explicit, and local; no hidden dependence on test order or global mutable state.
 
+## Contract Checklist
+- Every bug fix gets a regression test or a written `no test impact: <reason>` note.
+- Cross-surface behavior gets a parity test matrix rather than isolated helper assertions.
+- Error behavior tests assert machine-readable fields, error codes, and repair guidance where those are part of the contract.
+- Free-threading-sensitive tests run under the existing `PYTHON_GIL=0` coverage path and avoid sleeps as synchronization unless time is the subject.
+- Docs, examples, scaffold, and templates that teach behavior have matching tests or tagged snippet/template checks.
+- New helpers in `src/milo/testing/**` are justified by repeated test patterns, not one-off convenience.
+
 ## Advocate
 - Regression tests for every reported bug before or with the fix.
 - Property or table tests for schema and parser edge cases where the matrix is large.

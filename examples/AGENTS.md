@@ -19,6 +19,13 @@ Represent developers and coding agents choosing the nearest example, copying it,
 - Interactive examples must keep reducers pure and push effects into sagas or `Cmd`.
 - Example templates must compile under strict Kida rules.
 
+## Contract Checklist
+- Public API, CLI flag, schema, MCP, app/runtime, form/flow, or template changes check affected examples for drift.
+- New examples include the smallest useful runnable path and avoid mixing unrelated features.
+- Example README commands, README index rows, site docs, and tests point to the same existing files and commands.
+- Example templates touched by a change run through `scripts/check_templates.py`.
+- Examples that demonstrate a public contract have at least a smoke test or a documented reason they are docs-only.
+
 ## Advocate
 - Examples that show hard boundaries clearly: MCP errors, context output, lazy imports, config, pipeline, plugins, forms, flows, and sagas.
 - Small tests for representative examples when they document a public contract.

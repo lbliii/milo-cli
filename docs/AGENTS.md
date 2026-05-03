@@ -17,6 +17,13 @@ Represent coding agents and maintainers who need concise, executable instruction
 - Error examples must preserve structured `errorData` fields agents can parse.
 - Docs should distinguish warnings from failures for `milo verify`.
 
+## Contract Checklist
+- Public CLI, MCP, schema, scaffold, or verify changes update `docs/agent-quickstart.md` or `docs/testing.md`, or the PR explains why these docs are unaffected.
+- New or changed command snippets use current flags, current import paths, and a runnable project shape.
+- Structured error behavior changes include an agent-parseable example or a `no docs impact` note.
+- Tagged code fences are covered by `uv run python scripts/check_docs_snippets.py`; untagged snippets must be intentionally illustrative.
+- Cross-links to README, site docs, examples, scaffold, and tests remain pointed at existing files or pages.
+
 ## Advocate
 - Troubleshooting tables that map symptoms to fixes agents can execute.
 - Links from short docs to deeper site reference when detail would bloat the quick path.
