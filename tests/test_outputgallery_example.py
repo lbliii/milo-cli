@@ -106,6 +106,22 @@ def test_atlas_renders_character_map_dashboard():
     assert "✖ ✖ ◆" in result.output
 
 
+def test_bengal_diagnostic_views_render():
+    graph = cli.invoke(["graph"])
+    directive = cli.invoke(["directive"])
+    warnings = cli.invoke(["warnings"])
+
+    assert graph.exit_code == 0
+    assert "Link graph" in graph.output
+    assert "redirect loop" in graph.output
+    assert directive.exit_code == 0
+    assert "Directive contracts" in directive.output
+    assert "DIR002" in directive.output
+    assert warnings.exit_code == 0
+    assert "Warning budget" in warnings.output
+    assert "content quality" in warnings.output
+
+
 def test_audit_resource_exposes_full_fixture():
     data = audit_resource()
 

@@ -12,8 +12,11 @@ uv run python examples/outputgallery/app.py audit --style ascii
 uv run python examples/outputgallery/app.py audit --format json
 uv run python examples/outputgallery/app.py atlas
 uv run python examples/outputgallery/app.py catalog
+uv run python examples/outputgallery/app.py directive
+uv run python examples/outputgallery/app.py graph
 uv run python examples/outputgallery/app.py grammar
 uv run python examples/outputgallery/app.py timeline
+uv run python examples/outputgallery/app.py warnings
 ```
 
 Patterns shown:
@@ -22,6 +25,7 @@ Patterns shown:
 - A visual grammar with Unicode and ASCII-safe equivalents.
 - Grouped diagnostics with file, line, target, and repair hint.
 - Character maps, severity rails, branch diagrams, and score panels.
+- Bengal-style diagnostic views for broken links, directives, and warnings.
 - Progressive disclosure through bounded issue lists and an expansion flag.
 - Phase timelines that explain where time and risk accumulated.
 - Structured JSON for agents, CI annotations, dashboards, and MCP calls.

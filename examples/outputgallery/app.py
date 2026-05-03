@@ -10,8 +10,11 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
     uv run python examples/outputgallery/app.py audit --format json
     uv run python examples/outputgallery/app.py atlas
     uv run python examples/outputgallery/app.py catalog
+    uv run python examples/outputgallery/app.py directive
+    uv run python examples/outputgallery/app.py graph
     uv run python examples/outputgallery/app.py grammar
     uv run python examples/outputgallery/app.py timeline
+    uv run python examples/outputgallery/app.py warnings
 """
 
 from __future__ import annotations
@@ -367,6 +370,158 @@ def grammar(ctx: Context = None) -> dict | str:
         ],
     }
     return _plain_or_data(ctx, "grammar.kida", grammar=data)
+
+
+@cli.command("graph", description="Render broken links as a topology view")
+def graph(ctx: Context = None) -> dict | str:
+    """Show broken links as a graph-shaped report for static-site builds."""
+    data = {
+        "title": "Link graph",
+        "subtitle": "broken routes grouped by source page and target topology",
+        "summary": {"status": "blocked", "sources": 4, "broken": 5, "loops": 1},
+        "nodes": [
+            {
+                "source": "content/docs/routing.md",
+                "owner": "docs",
+                "edges": [
+                    {
+                        "glyph": "✖",
+                        "target": "/docs/pipelines/#parallel-work",
+                        "reason": "missing anchor",
+                        "fix": "rename the heading id or update the link",
+                    },
+                    {
+                        "glyph": "●",
+                        "target": "/docs/templates/",
+                        "reason": "ok",
+                        "fix": "",
+                    },
+                ],
+            },
+            {
+                "source": "content/blog/milo-bridge.md",
+                "owner": "editorial",
+                "edges": [
+                    {
+                        "glyph": "✖",
+                        "target": "../../private/notes.md",
+                        "reason": "escapes content root",
+                        "fix": "move the note into public content",
+                    }
+                ],
+            },
+            {
+                "source": "content/index.md",
+                "owner": "routing",
+                "edges": [
+                    {
+                        "glyph": "✖",
+                        "target": "/",
+                        "reason": "redirect loop",
+                        "fix": "point at a canonical destination",
+                    }
+                ],
+            },
+        ],
+        "next_steps": [
+            "Fix redirect loops before ordinary missing anchors.",
+            "Use the source page owner to split repair work.",
+            "Keep successful edges visible when they explain nearby failures.",
+        ],
+    }
+    return _plain_or_data(ctx, "graph.kida", graph=data)
+
+
+@cli.command("directive", description="Render markdown directive failures as contract cards")
+def directive(ctx: Context = None) -> dict | str:
+    """Show directive render errors with source, contract, output, and fix."""
+    data = {
+        "title": "Directive contracts",
+        "subtitle": "markdown directive failures with repairable boundaries",
+        "cards": [
+            {
+                "code": "DIR001",
+                "glyph": "◆",
+                "name": "::bengal-card-grid",
+                "source": "content/docs/components.md:57",
+                "contract": "registered directive name",
+                "expected": "::card-grid{columns=3}",
+                "actual": "::bengal-card-grid",
+                "impact": "blocker",
+                "fix": "Register the directive or replace it with a supported block.",
+            },
+            {
+                "code": "DIR002",
+                "glyph": "◆",
+                "name": "::callout",
+                "source": "content/docs/mcp.md:118",
+                "contract": "required prop: title",
+                "expected": '::callout{title="MCP gateway"}',
+                "actual": "::callout",
+                "impact": "blocker",
+                "fix": "Add title=... or switch to a plain note.",
+            },
+            {
+                "code": "DIR003",
+                "glyph": "◆",
+                "name": "::asset-table",
+                "source": "content/docs/assets.md:41",
+                "contract": "deterministic captured output",
+                "expected": "stable rows across render passes",
+                "actual": "row order changed after capture",
+                "impact": "blocker",
+                "fix": "Move non-deterministic data into an explicit build input.",
+            },
+        ],
+    }
+    return _plain_or_data(ctx, "directive.kida", directives=data)
+
+
+@cli.command("warnings", description="Render grouped publish warnings")
+def warnings_report(ctx: Context = None) -> dict | str:
+    """Show publishable warnings grouped by owner and warning type."""
+    data = {
+        "title": "Warning budget",
+        "subtitle": "publishable issues grouped for cleanup planning",
+        "budget": {"used": 4, "limit": 10, "bar": "████░░░░░░"},
+        "groups": [
+            {
+                "name": "content quality",
+                "owner": "docs",
+                "glyph": "▲",
+                "items": [
+                    {
+                        "file": "content/docs/install.md:12",
+                        "message": "Heading skips from h1 to h3",
+                        "fix": "Use a second-level heading.",
+                    },
+                    {
+                        "file": "content/docs/rss.md:33",
+                        "message": "Date lacks timezone",
+                        "fix": "Write ISO 8601 with an explicit offset.",
+                    },
+                ],
+            },
+            {
+                "name": "search preview",
+                "owner": "site",
+                "glyph": "▲",
+                "items": [
+                    {
+                        "file": "content/blog/launch.md:7",
+                        "message": "Description exceeds social preview length",
+                        "fix": "Keep descriptions near 150 characters.",
+                    },
+                    {
+                        "file": "content/docs/search.md:88",
+                        "message": "Search excerpt contains unresolved shortcode text",
+                        "fix": "Render the shortcode before indexing.",
+                    },
+                ],
+            },
+        ],
+    }
+    return _plain_or_data(ctx, "warnings.kida", warnings=data)
 
 
 @cli.command(

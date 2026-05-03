@@ -1,0 +1,17 @@
+{% from "components/_defs.kida" import header, next_steps %}
+{{ header(graph.title, description=graph.subtitle) }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│" }} status {{ graph.summary.status | pad(11) }} sources {{ graph.summary.sources }}  broken {{ graph.summary.broken }}  loops {{ graph.summary.loops }}{{ " " * 28 }}{{ "│" }}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}
+
+{{ "Topology" | bold | cyan }}
+{% for node in graph.nodes -%}
+{{ node.source | bold }} {{ ("[" ~ node.owner ~ "]") | dim }}
+{% for edge in node.edges -%}
+  {{ "├" if not loop.last else "╰" }}─ {{ edge.glyph }} {{ edge.target }}
+     {{ edge.reason }}
+{% if edge.fix %}     fix  {{ edge.fix }}{% endif %}
+{% endfor %}
+{% endfor %}
+{{ "Next" | bold | cyan }}
+{{ next_steps(graph.next_steps) }}
