@@ -7,7 +7,7 @@ Related docs:
 - `src/milo/AGENTS.md`
 - `README.md`
 - `docs/agent-quickstart.md`
-- `site/content/docs/usage/*`
+- `site/content/docs/build-clis/*`
 
 ## Point Of View
 Represent developers and coding agents choosing the nearest example, copying it, and adapting it under time pressure.

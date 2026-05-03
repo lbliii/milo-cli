@@ -116,31 +116,31 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 
 | Feature | Description | Docs |
 |---------|-------------|------|
-| **MCP Server** | Every CLI doubles as an MCP server — AI agents discover and call commands via JSON-RPC | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
-| **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
-| **Tool Annotations** | Declare `readOnlyHint`, `destructiveHint`, `idempotentHint` per MCP spec | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
-| **Streaming Progress** | Commands yield `Progress` objects; MCP clients receive real-time notifications | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
-| **Schema Constraints** | `Annotated[str, MinLen(1), MaxLen(100)]` generates rich JSON Schema | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
-| **llms.txt** | Generate AI-readable discovery documents from CLI command definitions | [llms.txt →](https://lbliii.github.io/milo-cli/docs/usage/llms/) |
-| **Middleware** | Intercept MCP calls and CLI commands for logging, auth, and transformation | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
-| **Observability** | Built-in request logging with latency stats (`milo://stats` resource) | [MCP →](https://lbliii.github.io/milo-cli/docs/usage/mcp/) |
-| **State Management** | Redux-style `Store` with dispatch, listeners, middleware, and saga scheduling | [State →](https://lbliii.github.io/milo-cli/docs/usage/state/) |
-| **Commands** | Lightweight `Cmd` thunks, `Batch`, `Sequence`, `TickCmd` for one-shot effects | [Commands →](https://lbliii.github.io/milo-cli/docs/usage/commands-effects/) |
-| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry`, `Race`, `All`, `Take`, and more | [Sagas →](https://lbliii.github.io/milo-cli/docs/usage/sagas/) |
-| **ViewState** | Declarative terminal state (`cursor_visible`, `alt_screen`, `window_title`, `mouse_mode`) | [Commands →](https://lbliii.github.io/milo-cli/docs/usage/commands-effects/) |
-| **Flows** | Multi-screen state machines with `>>` operator and custom transitions | [Flows →](https://lbliii.github.io/milo-cli/docs/usage/flows/) |
-| **Forms** | Text, select, confirm, password fields with validation and TTY fallback | [Forms →](https://lbliii.github.io/milo-cli/docs/usage/forms/) |
-| **Input Handling** | Cross-platform key reader with VT100/xterm escape sequence support (arrows, F-keys, modifiers) | [Input →](https://lbliii.github.io/milo-cli/docs/usage/input/) |
-| **Templates** | Kida-powered terminal rendering with built-in form, field, help, and progress templates | [Templates →](https://lbliii.github.io/milo-cli/docs/usage/templates/) |
-| **Dev Server** | `milo dev` with filesystem polling and `@@HOT_RELOAD` dispatch | [Dev →](https://lbliii.github.io/milo-cli/docs/usage/dev/) |
-| **Session Recording** | JSONL action log with state hashes for debugging and regression testing | [Testing →](https://lbliii.github.io/milo-cli/docs/usage/testing/) |
-| **Snapshot Testing** | `assert_renders`, `assert_state`, `assert_saga` for deterministic test coverage | [Testing →](https://lbliii.github.io/milo-cli/docs/usage/testing/) |
-| **Pipeline** | Declarative multi-phase workflows with dependency graphs, retry policies, and output capture | [Pipeline →](https://lbliii.github.io/milo-cli/docs/usage/pipeline/) |
-| **Help Rendering** | `HelpRenderer` — drop-in `argparse.HelpFormatter` using Kida templates | [Help →](https://lbliii.github.io/milo-cli/docs/usage/help/) |
-| **Context** | Execution context with verbosity, output format, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo-cli/docs/usage/context/) |
-| **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo-cli/docs/usage/config/) |
-| **Shell Completions** | Generate bash/zsh/fish completions from CLI definitions | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
-| **Doctor Diagnostics** | `run_doctor()` validates environment, dependencies, and config health | [CLI →](https://lbliii.github.io/milo-cli/docs/usage/cli/) |
+| **MCP Server** | Every CLI doubles as an MCP server — AI agents discover and call commands via JSON-RPC | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **Tool Annotations** | Declare `readOnlyHint`, `destructiveHint`, `idempotentHint` per MCP spec | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **Streaming Progress** | Commands yield `Progress` objects; MCP clients receive real-time notifications | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **Schema Constraints** | `Annotated[str, MinLen(1), MaxLen(100)]` generates rich JSON Schema | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
+| **llms.txt** | Generate AI-readable discovery documents from CLI command definitions | [llms.txt →](https://lbliii.github.io/milo-cli/docs/build-clis/llms/) |
+| **Middleware** | Intercept MCP calls and CLI commands for logging, auth, and transformation | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
+| **Observability** | Built-in request logging with latency stats (`milo://stats` resource) | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **State Management** | Redux-style `Store` with dispatch, listeners, middleware, and saga scheduling | [State →](https://lbliii.github.io/milo-cli/docs/build-apps/state/) |
+| **Commands** | Lightweight `Cmd` thunks, `Batch`, `Sequence`, `TickCmd` for one-shot effects | [Commands →](https://lbliii.github.io/milo-cli/docs/build-apps/commands-effects/) |
+| **Sagas** | Generator-based side effects: `Call`, `Put`, `Select`, `Fork`, `Delay`, `Retry`, `Race`, `All`, `Take`, and more | [Sagas →](https://lbliii.github.io/milo-cli/docs/build-apps/sagas/) |
+| **ViewState** | Declarative terminal state (`cursor_visible`, `alt_screen`, `window_title`, `mouse_mode`) | [Commands →](https://lbliii.github.io/milo-cli/docs/build-apps/commands-effects/) |
+| **Flows** | Multi-screen state machines with `>>` operator and custom transitions | [Flows →](https://lbliii.github.io/milo-cli/docs/build-apps/flows/) |
+| **Forms** | Text, select, confirm, password fields with validation and TTY fallback | [Forms →](https://lbliii.github.io/milo-cli/docs/build-apps/forms/) |
+| **Input Handling** | Cross-platform key reader with VT100/xterm escape sequence support (arrows, F-keys, modifiers) | [Input →](https://lbliii.github.io/milo-cli/docs/build-apps/input/) |
+| **Templates** | Kida-powered terminal rendering with built-in form, field, help, and progress templates | [Templates →](https://lbliii.github.io/milo-cli/docs/build-apps/templates/) |
+| **Dev Server** | `milo dev` with filesystem polling and `@@HOT_RELOAD` dispatch | [Dev →](https://lbliii.github.io/milo-cli/docs/build-apps/dev/) |
+| **Session Recording** | JSONL action log with state hashes for debugging and regression testing | [Testing →](https://lbliii.github.io/milo-cli/docs/quality/testing/) |
+| **Snapshot Testing** | `assert_renders`, `assert_state`, `assert_saga` for deterministic test coverage | [Testing →](https://lbliii.github.io/milo-cli/docs/quality/testing/) |
+| **Pipeline** | Declarative multi-phase workflows with dependency graphs, retry policies, and output capture | [Pipeline →](https://lbliii.github.io/milo-cli/docs/quality/pipeline/) |
+| **Help Rendering** | `HelpRenderer` — drop-in `argparse.HelpFormatter` using Kida templates | [Help →](https://lbliii.github.io/milo-cli/docs/build-clis/help/) |
+| **Context** | Execution context with verbosity, output format, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo-cli/docs/build-clis/context/) |
+| **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo-cli/docs/about/concepts/configuration/) |
+| **Shell Completions** | Generate bash/zsh/fish completions from CLI definitions | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
+| **Doctor Diagnostics** | `run_doctor()` validates environment, dependencies, and config health | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
 
 ---
 
@@ -480,11 +480,12 @@ App.run()
 
 | Section | Description |
 |---------|-------------|
+| [About](https://lbliii.github.io/milo-cli/docs/about/) | Philosophy, architecture, concepts, and lifecycle |
 | [Get Started](https://lbliii.github.io/milo-cli/docs/get-started/) | Installation and quickstart |
-| [MCP & AI](https://lbliii.github.io/milo-cli/docs/usage/mcp/) | MCP server, gateway, annotations, streaming, and llms.txt |
-| [Usage](https://lbliii.github.io/milo-cli/docs/usage/) | State, sagas, flows, forms, templates |
-| [Testing](https://lbliii.github.io/milo-cli/docs/usage/testing/) | Snapshots, recording, replay |
-| [Reference](https://lbliii.github.io/milo-cli/docs/reference/) | Complete API documentation |
+| [Build CLIs](https://lbliii.github.io/milo-cli/docs/build-clis/) | Commands, groups, MCP, llms.txt, context, output, and help |
+| [Build Apps](https://lbliii.github.io/milo-cli/docs/build-apps/) | State, reducers, templates, input, forms, flows, sagas, and live rendering |
+| [Quality](https://lbliii.github.io/milo-cli/docs/quality/) | Testing, verification, debugging, and pipelines |
+| [Reference](https://lbliii.github.io/milo-cli/docs/reference/) | Schema, dispatch, error codes, actions, and types |
 
 ---
 

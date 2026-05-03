@@ -1,7 +1,7 @@
 ---
 title: Reference
 draft: false
-weight: 30
+weight: 60
 lang: en
 type: doc
 description: API reference, built-in actions, error codes, and type definitions.
@@ -18,5 +18,5 @@ Technical reference for the Milo API surface.
 :::
 
 :::{note}
-Reference pages document **what** each API does and its exact signature. For **how** and **when** to use them, see the [[docs/usage|Usage guides]].
+Reference pages document **what** each API does and its exact signature. For **how** and **when** to use them, see [[docs/build-clis|Build CLIs]], [[docs/build-apps|Build Apps]], and [[docs/quality|Quality and Operations]].
 :::

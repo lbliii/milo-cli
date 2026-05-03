@@ -50,7 +50,7 @@ Milo's type system uses frozen dataclasses for immutability and protocols for st
 
 ## Command types
 
-Lightweight alternatives to sagas for one-shot effects. See [[docs/usage/commands-effects|Commands]] for usage.
+Lightweight alternatives to sagas for one-shot effects. See [[docs/build-apps/commands-effects|Commands]] for usage.
 
 | Type | Description |
 |------|-------------|

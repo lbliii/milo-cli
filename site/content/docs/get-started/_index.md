@@ -1,7 +1,7 @@
 ---
 title: Get Started
 draft: false
-weight: 10
+weight: 20
 lang: en
 type: doc
 description: Install Milo and build your first typed CLI command.
@@ -33,11 +33,18 @@ Set up Milo and verify your Python 3.14t environment.
 Scaffold a command, run it, inspect schemas, test it, and verify MCP transport.
 :::{/card}
 
+:::{card} Migrate Existing CLI
+:icon: arrows-right-left
+:link: ./migrate-existing-cli
+:description: Translate argparse, Click, Typer, Fire, or Cobra patterns
+Move one command at a time into Milo's typed function contract.
+:::{/card}
+
 :::{/cards}
 
 ## Next steps
 
-- [[docs/usage/cli|CLI and commands]] — Typed command definitions and dispatch
-- [[docs/usage/mcp|MCP server]] — Expose commands as tools
-- [[docs/usage/testing|Testing]] — Schema, CLI, MCP, and verify layers
-- [[docs/tutorials/build-a-counter|Interactive apps]] — Build a reducer-driven terminal app
+- [[docs/build-clis/commands|CLI and commands]] — Typed command definitions and dispatch
+- [[docs/build-clis/mcp|MCP server]] — Expose commands as tools
+- [[docs/quality/testing|Testing]] — Schema, CLI, MCP, and verify layers
+- [[docs/applied-tutorials/build-a-counter|Interactive apps]] — Build a reducer-driven terminal app

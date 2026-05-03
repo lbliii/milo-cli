@@ -22,132 +22,104 @@ icon: book-open
 :columns: 2
 :gap: medium
 
+:::::{card} About
+:icon: info
+:link: ./about/
+:description: Philosophy, architecture, concepts, and lifecycle
+:::::{/card}
+
 :::::{card} Get Started
 :icon: rocket
 :link: ./get-started/
 :description: Install Milo and build your first typed CLI/MCP command
 :::::{/card}
 
-:::::{card} Tutorials
-:icon: graduation-cap
-:link: ./tutorials/
-:description: Step-by-step guides for building real applications
+:::::{card} Build CLIs
+:icon: terminal
+:link: ./build-clis/
+:description: Build typed commands, MCP tools, and llms.txt discovery
 :::::{/card}
 
-:::::{card} Migrate
-:icon: arrows-right-left
-:link: ./migrate/
-:description: Translate patterns from argparse, Click, Typer, Fire, and Cobra
+:::::{card} Build Apps
+:icon: layout
+:link: ./build-apps/
+:description: Build reducer-driven terminal apps with templates, forms, and flows
+:::::{/card}
+
+:::::{card} Quality
+:icon: check-square
+:link: ./quality/
+:description: Test, verify, debug, and operate Milo projects
 :::::{/card}
 
 :::::{/cards}
 
-## Learn
+## Build
 
 :::::{cards}
 :columns: 2
 :gap: medium
 
-:::::{card} State Management
+:::::{card} Commands and Groups
+:icon: terminal
+:link: ./build-clis/commands/
+:description: Register typed handlers and organize command trees
+:::::{/card}
+
+:::::{card} MCP Server and Gateway
+:icon: bot
+:link: ./build-clis/mcp/
+:description: Expose commands as tools and route multiple CLIs
+:::::{/card}
+
+:::::{card} State and Reducers
 :icon: database
-:link: ./usage/state/
-:description: Store, reducers, middleware, and combined state
+:link: ./build-apps/state/
+:description: Model app state and deterministic updates
 :::::{/card}
 
-:::::{card} Sagas
-:icon: arrows-split
-:link: ./usage/sagas/
-:description: Generator-based side effects with Call, Put, Select, Fork
-:::::{/card}
-
-:::::{card} Multi-Screen Flows
-:icon: arrows-clockwise
-:link: ./usage/flows/
-:description: Declarative screen chains with the >> operator
-:::::{/card}
-
-:::::{card} Interactive Forms
+:::::{card} Forms and Navigation
 :icon: textbox
-:link: ./usage/forms/
-:description: Text, select, confirm fields with validation
+:link: ./build-apps/forms/
+:description: Collect input and move through multi-screen flows
 :::::{/card}
 
 :::::{card} Templates
 :icon: layout
-:link: ./usage/templates/
+:link: ./build-apps/templates/
 :description: Kida-powered terminal rendering and built-in components
 :::::{/card}
 
 :::::{card} Testing
 :icon: check-square
-:link: ./usage/testing/
-:description: Snapshots, session recording, replay, and assertions
+:link: ./quality/testing/
+:description: Schema, dispatch, MCP, verify, snapshots, and replay
 :::::{/card}
 
 :::::{/cards}
 
-## Build & Ship
+## More
 
 :::::{cards}
 :columns: 2
 :gap: medium
 
-:::::{card} Dev Server
-:icon: arrow-clockwise
-:link: ./usage/dev/
-:description: Hot reload templates during development
+:::::{card} Applied Tutorials
+:icon: graduation-cap
+:link: ./applied-tutorials/
+:description: Step-by-step projects built with Milo
 :::::{/card}
 
-:::::{card} Input Handling
-:icon: keyboard
-:link: ./usage/input/
-:description: Cross-platform key reader with escape sequence support
+:::::{card} Examples
+:icon: boxes
+:link: ./examples/
+:description: Runnable example applications and copy paths
 :::::{/card}
-
-:::::{card} Help Rendering
-:icon: question
-:link: ./usage/help/
-:description: Drop-in argparse formatter using Kida templates
-:::::{/card}
-
-:::::{/cards}
-
-## AI Integration
-
-:::::{cards}
-:columns: 2
-:gap: medium
-
-:::::{card} MCP Server & Gateway
-:icon: bot
-:link: ./usage/mcp/
-:description: Expose commands as MCP tools; unify multiple CLIs behind a single gateway
-:::::{/card}
-
-:::::{card} llms.txt
-:icon: file-text
-:link: ./usage/llms/
-:description: Generate AI-readable discovery documents from command definitions
-:::::{/card}
-
-:::::{/cards}
-
-## Look It Up
-
-:::::{cards}
-:columns: 2
-:gap: medium
 
 :::::{card} Reference
 :icon: list-magnifying-glass
 :link: ./reference/
-:description: Actions, error codes, types, and protocol definitions
-:::::{/card}
-
-:::::{card} About
-:icon: info
-:link: ./about/
-:description: Architecture, design decisions, and the Elm pattern
+:description: Schema, dispatch, error codes, actions, and types
 :::::{/card}
 
 :::::{/cards}
