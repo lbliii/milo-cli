@@ -5,6 +5,8 @@ dumping noisy logs. The fixtures are static-site flavored so Bengal can copy the
 shapes directly: broken links, failed markdown directives, publish warnings,
 phase timelines, and next-step footers.
 
+See [ADOPTION.md](ADOPTION.md) for migration recipes and before/after patterns.
+
 ```bash
 uv run python examples/outputgallery/app.py audit
 uv run python examples/outputgallery/app.py audit --limit 0
