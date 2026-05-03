@@ -142,7 +142,7 @@ class TestGetEnv:
         assert lines[0].startswith("╭─ Outcome ─")
         assert lines[1].startswith("├─ contract ─")
         assert lines[2].startswith("╰─")
-        assert all(line.endswith("╌┄ · .  .") for line in lines)
+        assert all(line.endswith("╌┄") for line in lines)
 
 
 class TestComponentTemplatesIncluded:

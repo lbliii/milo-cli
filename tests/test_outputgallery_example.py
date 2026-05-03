@@ -198,7 +198,7 @@ def test_open_cards_use_even_fading_rules():
         ]
         assert rules
         assert {cell_width(line) for line in rules} == {78}
-        assert all(line.endswith("╌┄ · .  .") for line in rules)
+        assert all(line.endswith("╌┄") for line in rules)
 
 
 def test_live_interactive_showcase_views_render():

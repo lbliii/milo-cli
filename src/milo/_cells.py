@@ -75,7 +75,7 @@ def cell_fit(value: object, width: int, fill: str = " ", marker: str = "…") ->
     return cell_ljust(cell_truncate(value, width, marker=marker), width, fill=fill)
 
 
-def _rule_tail(width: int, fill: str = "─", tail: str = "─╌┄ · .  .") -> str:
+def _rule_tail(width: int, fill: str = "─", tail: str = "╌┄") -> str:
     """Return a fixed-width rule that fades instead of ending abruptly."""
     if width <= 0:
         return ""
