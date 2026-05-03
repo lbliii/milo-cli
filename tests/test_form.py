@@ -45,7 +45,8 @@ class TestMakeInitialFields:
             ),
         )
         fields = _make_initial_fields(specs)
-        assert fields[0].value == 0  # Default index
+        assert fields[0].value == "dev"
+        assert fields[0].selected_index == 0
 
     def test_confirm_field(self):
         specs = (FieldSpec(name="ok", label="Continue?", field_type=FieldType.CONFIRM),)
@@ -157,6 +158,27 @@ class TestFormReducer:
         assert result.fields[0].focused is False
         assert result.fields[1].focused is True
 
+    def test_shift_tab_moves_to_previous(self):
+        specs = (
+            FieldSpec(name="a", label="A"),
+            FieldSpec(name="b", label="B"),
+        )
+        state = FormState(
+            fields=(
+                FieldState(value="", cursor=0, focused=False),
+                FieldState(value="x", cursor=1, focused=True),
+            ),
+            specs=specs,
+            active_index=1,
+        )
+        result = form_reducer(
+            state,
+            Action("@@KEY", payload=Key(name=SpecialKey.TAB, shift=True)),
+        )
+        assert result.active_index == 0
+        assert result.fields[0].focused is True
+        assert result.fields[1].focused is False
+
     def test_enter_on_last_submits(self):
         specs = (FieldSpec(name="a", label="A"),)
         state = FormState(
@@ -186,6 +208,36 @@ class TestFormReducer:
         result = form_reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.TAB)))
         assert result.active_index == 0
         assert result.fields[0].error == "Required"
+
+    def test_validator_accepts_none_or_error_string_contract(self):
+        def must_not_empty(val):
+            return None if val else "Required"
+
+        specs = (
+            FieldSpec(name="a", label="A", validator=must_not_empty),
+            FieldSpec(name="b", label="B"),
+        )
+        state = FormState(
+            fields=(
+                FieldState(value="", cursor=0, focused=True),
+                FieldState(value="", cursor=0, focused=False),
+            ),
+            specs=specs,
+            active_index=0,
+        )
+        blocked = form_reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.TAB)))
+        assert blocked.fields[0].error == "Required"
+
+        ok_state = FormState(
+            fields=(
+                FieldState(value="x", cursor=1, focused=True),
+                FieldState(value="", cursor=0, focused=False),
+            ),
+            specs=specs,
+            active_index=0,
+        )
+        advanced = form_reducer(ok_state, Action("@@KEY", payload=Key(name=SpecialKey.TAB)))
+        assert advanced.active_index == 1
 
 
 class TestHandleSelectKey:
@@ -249,6 +301,22 @@ class TestFormReducerSelectAndPassword:
         result = form_reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.DOWN)))
         assert result.fields[0].selected_index == 1
         assert result.fields[0].value == "prod"
+
+    def test_unchanged_select_submits_choice_value(self):
+        specs = (
+            FieldSpec(
+                name="env", label="Env", field_type=FieldType.SELECT, choices=("dev", "prod")
+            ),
+        )
+        state = FormState(
+            fields=_make_initial_fields(specs),
+            specs=specs,
+            active_index=0,
+        )
+        submitted = form_reducer(state, Action("@@KEY", payload=Key(name=SpecialKey.ENTER)))
+
+        assert submitted.submitted is True
+        assert submitted.fields[0].value == "dev"
 
     def test_password_field_accepts_chars(self):
         specs = (FieldSpec(name="pw", label="Password", field_type=FieldType.PASSWORD),)

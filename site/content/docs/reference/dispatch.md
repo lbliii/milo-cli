@@ -8,7 +8,7 @@ lang: en
 tags: [reference, dispatch, cli, mcp]
 keywords: [dispatch, invoke, call, call_raw, tools/call, command resolution]
 category: reference
-icon: arrows-split
+icon: workflow
 ---
 
 Milo command handlers are resolved through one command registry. Human CLI

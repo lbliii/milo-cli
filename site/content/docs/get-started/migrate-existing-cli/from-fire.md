@@ -7,7 +7,7 @@ lang: en
 tags: [migration, fire, cli]
 keywords: [python fire, migration, automatic cli, schema]
 category: onboarding
-icon: flame
+icon: zap
 ---
 
 Python Fire is optimized for turning Python objects into CLIs with very little

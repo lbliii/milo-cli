@@ -8,7 +8,7 @@ lang: en
 tags: [input, keyboard, keys, terminal]
 keywords: [input, keyboard, keys, escape sequences, terminal, raw mode]
 category: build-apps
-icon: keyboard
+icon: terminal
 ---
 
 Milo's input system reads raw terminal input and translates known VT100/xterm

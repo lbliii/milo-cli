@@ -7,7 +7,7 @@ lang: en
 tags: [about, lifecycle, app]
 keywords: [app lifecycle, event loop, reducer, render, cleanup]
 category: about
-icon: repeat
+icon: recycle
 ---
 
 A Milo app starts a store, reads terminal input, dispatches actions, renders a

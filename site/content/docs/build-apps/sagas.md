@@ -8,7 +8,7 @@ lang: en
 tags: [sagas, effects, side-effects, concurrency]
 keywords: [sagas, effects, call, put, select, fork, delay, race, all, take, debounce, retry, generator]
 category: build-apps
-icon: arrows-split
+icon: workflow
 ---
 
 Sagas handle side effects in Milo — network requests, timers, file I/O, and anything else that isn't a pure state transformation. They're generator functions that yield effect descriptors, keeping your reducers pure.
@@ -63,7 +63,7 @@ The store dispatches the state change first, then schedules the sagas. This mean
 
 :::{tab-set}
 :::{tab-item} Call
-:icon: play
+:icon: rocket
 
 Execute a function and receive its return value:
 

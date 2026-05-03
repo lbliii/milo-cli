@@ -7,7 +7,7 @@ lang: en
 tags: [migration, click, cli]
 keywords: [click, migration, command, option, group, context]
 category: onboarding
-icon: mouse-pointer-click
+icon: terminal
 ---
 
 Click and Milo both use decorators, but they put the contract in different

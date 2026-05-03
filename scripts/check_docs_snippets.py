@@ -25,7 +25,10 @@ DEFAULT_TARGETS = (
     ROOT / "examples",
     ROOT / "src" / "milo" / "_scaffold" / "default" / "README.md",
 )
-FENCE_RE = re.compile(r"^```(?P<info>[^\n`]*)\n(?P<body>.*?)(?:\n```)", re.MULTILINE | re.DOTALL)
+FENCE_RE = re.compile(
+    r"^[ ]{0,3}```(?P<info>[^\n`]*)\n(?P<body>.*?)(?:\n[ ]{0,3}```)",
+    re.MULTILINE | re.DOTALL,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +166,7 @@ def check_snippet(snippet: Snippet, repo_root: Path, timeout: int = 30) -> list[
 
 
 def check_paths(paths: Sequence[Path], repo_root: Path = ROOT, timeout: int = 30) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = [f"{path}: path does not exist" for path in paths if not path.exists()]
     for snippet in iter_snippets(paths):
         errors.extend(check_snippet(snippet, repo_root=repo_root, timeout=timeout))
     return errors

@@ -61,17 +61,17 @@ class TestEnum:
 class TestLiteral:
     def test_string_literal(self) -> None:
         schema = _type_to_schema(Literal["a", "b", "c"])
-        assert schema == {"enum": ["a", "b", "c"]}
+        assert schema == {"type": "string", "enum": ["a", "b", "c"]}
 
     def test_int_literal(self) -> None:
         schema = _type_to_schema(Literal[1, 2, 3])
-        assert schema == {"enum": [1, 2, 3]}
+        assert schema == {"type": "integer", "enum": [1, 2, 3]}
 
     def test_literal_in_function(self) -> None:
         def f(mode: Literal["fast", "slow"]) -> None: ...
 
         schema = function_to_schema(f)
-        assert schema["properties"]["mode"] == {"enum": ["fast", "slow"]}
+        assert schema["properties"]["mode"] == {"type": "string", "enum": ["fast", "slow"]}
 
 
 # --- Test dataclass ---

@@ -7,7 +7,7 @@ lang: en
 tags: [about, concepts]
 keywords: [core concepts, cli, app, reducer, schema, mcp]
 category: about
-icon: shapes
+icon: layers
 ---
 
 Milo has two related building blocks:

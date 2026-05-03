@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from milo.commands import CLI
+from milo.groups import Group
 from milo.mcp import (
     _builtin_resources,
     _call_tool,
@@ -101,6 +102,37 @@ class TestListTools:
         tools = _list_tools(cli)
         greet = next(t for t in tools if t["name"] == "greet")
         assert greet["description"] == "Say hello"
+
+    def test_handler_cache_invalidates_when_group_command_added(self) -> None:
+        cli = CLI(name="testapp", description="")
+        handler = _CLIHandler(cli)
+
+        assert handler.list_tools({}) == {"tools": []}
+
+        site = cli.group("site")
+
+        @site.command("build")
+        def build() -> str:
+            return "built"
+
+        tools = handler.list_tools({})["tools"]
+        assert [tool["name"] for tool in tools] == ["site.build"]
+
+    def test_handler_cache_invalidates_for_nested_existing_group(self) -> None:
+        cli = CLI(name="testapp", description="")
+        handler = _CLIHandler(cli)
+        site = Group("site")
+        config = site.group("config")
+        cli.add_group(site)
+
+        assert handler.list_tools({}) == {"tools": []}
+
+        @config.command("show")
+        def show() -> str:
+            return "shown"
+
+        tools = handler.list_tools({})["tools"]
+        assert [tool["name"] for tool in tools] == ["site.config.show"]
 
 
 # ---------------------------------------------------------------------------

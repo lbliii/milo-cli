@@ -8,7 +8,7 @@ lang: en
 tags: [plugins, hooks, middleware, extensibility]
 keywords: [plugins, hooks, registry, middleware, listeners, extensibility]
 category: build-apps
-icon: plug
+icon: puzzle-piece
 ---
 
 Milo's plugin system uses a `HookRegistry` to define named extension points that plugins can subscribe to. Hooks can fire manually or automatically via Store middleware when matching actions are dispatched.

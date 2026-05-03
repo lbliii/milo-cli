@@ -150,15 +150,16 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
     if props:
         params = []
         for name, schema in props.items():
+            flag = f"--{name.replace('_', '-')}"
             param_type = schema.get("type", "string")
             if name in required:
-                params.append(f"`--{name}` ({param_type}, **required**)")
+                params.append(f"`{flag}` ({param_type}, **required**)")
             elif "default" in schema:
                 default = schema["default"]
                 default_repr = f'"{default}"' if isinstance(default, str) else repr(default)
-                params.append(f"`--{name}` ({param_type}, optional, default: {default_repr})")
+                params.append(f"`{flag}` ({param_type}, optional, default: {default_repr})")
             else:
-                params.append(f"`--{name}` ({param_type}, optional)")
+                params.append(f"`{flag}` ({param_type}, optional)")
         parts.append("\n  Parameters: " + ", ".join(params))
 
     # Examples
@@ -166,7 +167,7 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
     if examples:
         parts.append("\n  Examples:")
         for ex in examples:
-            args_str = " ".join(f"--{k} {v}" for k, v in ex.items())
+            args_str = " ".join(f"--{k.replace('_', '-')} {v}" for k, v in ex.items())
             parts.append(f"\n    `{cmd.name} {args_str}`")
 
     return "".join(parts)

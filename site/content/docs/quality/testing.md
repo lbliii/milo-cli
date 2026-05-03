@@ -8,7 +8,7 @@ lang: en
 tags: [testing, snapshots, recording, replay]
 keywords: [testing, snapshots, recording, replay, assert, CI]
 category: quality
-icon: check-square
+icon: check-circle
 ---
 
 Milo ships with testing utilities purpose-built for the Elm Architecture. Test reducers with action sequences, test views with snapshots, test sagas step-by-step, and record/replay entire sessions.

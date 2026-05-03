@@ -8,7 +8,7 @@ lang: en
 tags: [flows, screens, navigation, state-machine]
 keywords: [flows, screens, navigation, multi-screen, state machine]
 category: build-apps
-icon: arrows-clockwise
+icon: arrow-clockwise
 ---
 
 Flows let you build multi-screen terminal applications by chaining screens together with the `>>` operator. Each screen has its own template, reducer, and state slice — Milo handles navigation and state routing.

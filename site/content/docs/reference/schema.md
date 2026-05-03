@@ -8,7 +8,7 @@ lang: en
 tags: [reference, schema, json-schema, annotations]
 keywords: [schema, json schema, function_to_schema, return_to_schema, annotated]
 category: reference
-icon: braces
+icon: code
 ---
 
 `function_to_schema()` is Milo's single source of truth for MCP input schemas.
@@ -51,7 +51,8 @@ The MCP `inputSchema` contains `environment`, `service`, and `version`.
 |---|---|
 | `name: str` | Required |
 | `name: str = "World"` | Optional with `"default": "World"` |
-| `name: str \| None` | Optional, unwrapped to the base type |
+| `name: str \| None` | Required unless it has a default; unwrapped to the base type |
+| `name: str \| None = None` | Optional with `"default": null` |
 | `ctx: Context = None` | Omitted from CLI and MCP schemas |
 
 Only JSON-serializable defaults are emitted as schema defaults.
@@ -70,7 +71,7 @@ Only JSON-serializable defaults are emitted as schema defaults.
 | `dict` | `{"type": "object"}` |
 | `dict[str, T]` | Object with `additionalProperties` |
 | `Enum` | String or integer enum, based on member values |
-| `Literal[...]` | `{"enum": [...]}` |
+| `Literal[...]` | `{"type": ...,"enum": [...]}` when all values share a JSON type |
 | `A \| B` | `{"anyOf": [...]}` |
 | `dataclass` | Object with field properties |
 | `TypedDict` | Object with key properties and required keys |

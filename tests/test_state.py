@@ -8,7 +8,7 @@ import time
 import pytest
 
 from milo._errors import StateError
-from milo._types import Action, Call, Fork, Put, Quit, ReducerResult, Select
+from milo._types import Action, All, Call, Delay, Fork, Put, Quit, ReducerResult, Select, Take
 from milo.state import Store, combine_reducers
 
 
@@ -80,6 +80,54 @@ class TestStore:
 
         assert store.state == {"count": 1, "followups": 1}
         store.shutdown()
+
+    def test_listeners_are_serialized_across_dispatch_threads(self):
+        def reducer(state, action):
+            if state is None:
+                return 0
+            return state + 1 if action.type == "increment" else state
+
+        store = Store(reducer, None)
+        active = 0
+        max_active = 0
+        guard = threading.Lock()
+
+        def listener():
+            nonlocal active, max_active
+            with guard:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.01)
+            with guard:
+                active -= 1
+
+        store.subscribe(listener)
+        threads = [
+            threading.Thread(target=store.dispatch, args=(Action("increment"),)) for _ in range(8)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert max_active == 1
+        store.shutdown()
+
+    def test_shutdown_cancels_blocked_take_saga(self):
+        def reducer(state, action):
+            return state or 0
+
+        def waiter():
+            yield Take("NEVER")
+
+        store = Store(reducer, None)
+        store.run_saga(waiter())
+        time.sleep(0.05)
+
+        started = time.monotonic()
+        store.shutdown()
+
+        assert time.monotonic() - started < 0.5
 
     def test_recording(self):
         def reducer(state, action):
@@ -246,6 +294,28 @@ class TestSagas:
         time.sleep(0.1)
         assert store.state == 99
         store.shutdown()
+
+    def test_all_completes_with_single_worker(self):
+        results = []
+
+        def child():
+            yield Delay(0.01)
+            return "done"
+
+        def parent():
+            results.append((yield All((child(),))))
+
+        def reducer(state, action):
+            return state or 0
+
+        store = Store(reducer, None, max_workers=1)
+        store.run_saga(parent())
+        deadline = time.monotonic() + 1.0
+        while not results and time.monotonic() < deadline:
+            time.sleep(0.01)
+        store.shutdown()
+
+        assert results == [("done",)]
 
     def test_fork_effect(self):
         results = []

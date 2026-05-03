@@ -7,7 +7,7 @@ type: doc
 description: API reference, built-in actions, error codes, and type definitions.
 keywords: [reference, api, errors, types, actions]
 tags: [reference]
-icon: list-magnifying-glass
+icon: search
 ---
 
 Technical reference for the Milo API surface.

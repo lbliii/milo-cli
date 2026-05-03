@@ -7,7 +7,7 @@ lang: en
 tags: [migration, typer, cli, mcp]
 keywords: [typer, migration, type hints, commands]
 category: onboarding
-icon: keyboard
+icon: terminal
 ---
 
 Typer and Milo both make Python type hints central to CLI authoring. The main

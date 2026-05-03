@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import queue
 import shutil
 import sys
 import threading
@@ -10,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from milo._cells import cell_truncate
 from milo._compat import enable_vt_processing, watch_terminal_resize
 from milo._errors import AppError, ErrorCode, format_render_error
 from milo._types import Action, AppStatus, RenderTarget, ViewState
@@ -89,7 +91,7 @@ class _TerminalRenderer:
         # Write each line, clearing to end of line
         for line in lines:
             # Truncate to terminal width to avoid wrapping artifacts
-            sys.stdout.write(line[:cols])
+            sys.stdout.write(cell_truncate(line, cols, marker=""))
             sys.stdout.write("\033[K\n")  # Clear to end of line
 
         # Clear any leftover lines from previous frame
@@ -168,6 +170,7 @@ class App:
 
         self._middleware = middleware
         self._record = record
+        self._store: Store | None = None
 
     @classmethod
     def from_dir(
@@ -259,6 +262,7 @@ class App:
             self._middleware,
             record=self._record,
         )
+        self._store = store
 
         if self._target == RenderTarget.HTML or not is_tty():
             # Single render pass, no input
@@ -270,19 +274,39 @@ class App:
                 except Exception as e:
                     msg = format_render_error(e, template_name=self._exit_template, env=env)
                     sys.stderr.write(f"[milo] {msg}\n")
-            return store.state
+            final_state = store.state
+            store.shutdown()
+            self._store = None
+            return final_state
 
         self._status = AppStatus.RUNNING
         self._stop.clear()
 
-        # Set up cross-platform resize monitoring
+        resize_events: queue.Queue[tuple[int, int]] = queue.Queue()
+        stop_resize_thread = threading.Event()
+
+        def _resize_loop() -> None:
+            while not stop_resize_thread.is_set():
+                try:
+                    cols, rows = resize_events.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                if not stop_resize_thread.is_set():
+                    store.dispatch(Action("@@RESIZE", payload=(cols, rows)))
+
+        resize_thread = threading.Thread(target=_resize_loop, daemon=True)
+        resize_thread.start()
+
+        # Set up cross-platform resize monitoring. The signal/polling callback
+        # only enqueues work so it never re-enters Store.dispatch directly.
         def _on_resize(cols: int, rows: int) -> None:
-            store.dispatch(Action("@@RESIZE", payload=(cols, rows)))
+            resize_events.put((cols, rows))
 
         stop_resize = watch_terminal_resize(_on_resize)
 
         # Set up tick timer
         tick_thread = None
+        stop_tick: threading.Event | None = None
         if self._tick_rate > 0:
             stop_tick = threading.Event()
 
@@ -358,13 +382,18 @@ class App:
             # does not prevent the rest from running.
             if tick_thread is not None:
                 with contextlib.suppress(Exception):  # silent: teardown must not propagate
-                    stop_tick.set()
+                    if stop_tick is not None:
+                        stop_tick.set()
+            stop_resize_thread.set()
             with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 renderer.stop()
             with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 stop_resize()
             with contextlib.suppress(Exception):  # silent: teardown must not propagate
+                resize_thread.join(timeout=1.0)
+            with contextlib.suppress(Exception):  # silent: teardown must not propagate
                 store.shutdown()
+            self._store = None
 
         final_state = store.state
 

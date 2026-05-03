@@ -8,7 +8,7 @@ lang: en
 tags: [reference, types, protocols]
 keywords: [types, dataclasses, protocols, enums, frozen]
 category: reference
-icon: brackets-curly
+icon: code
 ---
 
 Milo's type system uses frozen dataclasses for immutability and protocols for structural typing. All types use `@dataclass(frozen=True, slots=True)` for immutability and memory efficiency.

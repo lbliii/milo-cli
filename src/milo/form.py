@@ -34,7 +34,25 @@ def _make_initial_fields(specs: tuple[FieldSpec, ...]) -> tuple[FieldState, ...]
         if spec.field_type == FieldType.CONFIRM:
             default = spec.default if spec.default is not None else False
         elif spec.field_type == FieldType.SELECT:
-            default = spec.default if spec.default is not None else 0
+            if spec.default is not None:
+                default = spec.default
+                selected_index = (
+                    spec.choices.index(default)
+                    if isinstance(default, str) and default in spec.choices
+                    else 0
+                )
+            else:
+                default = spec.choices[0] if spec.choices else ""
+                selected_index = 0
+            fields.append(
+                FieldState(
+                    value=default,
+                    cursor=0,
+                    focused=(i == 0),
+                    selected_index=selected_index,
+                )
+            )
+            continue
         fields.append(
             FieldState(
                 value=default,
@@ -75,13 +93,22 @@ def form_reducer(state: FormState | None, action: Action) -> FormState:
     field = state.fields[idx]
     spec = state.specs[idx]
 
+    # Shift+Tab: move to previous field
+    if key.name == SpecialKey.TAB and key.shift:
+        if idx > 0:
+            fields = _replace_field(state.fields, idx, replace(field, focused=False))
+            prev_field = replace(state.fields[idx - 1], focused=True)
+            fields = _replace_field(fields, idx - 1, prev_field)
+            return replace(state, fields=fields, active_index=idx - 1)
+        return state
+
     # Tab / Enter: move to next field or submit
     if key.name == SpecialKey.TAB or key.name == SpecialKey.ENTER:
         if key.name == SpecialKey.ENTER and spec.field_type != FieldType.TEXT:
             pass  # Enter confirms select/confirm fields too
         # Validate current field
         if spec.validator:
-            ok, err = spec.validator(field.value)
+            ok, err = _run_validator(spec.validator, field.value)
             if not ok:
                 new_field = replace(field, error=err)
                 fields = _replace_field(state.fields, idx, new_field)
@@ -101,15 +128,6 @@ def form_reducer(state: FormState | None, action: Action) -> FormState:
             # Submit
             return replace(state, submitted=True)
 
-    # Shift+Tab: move to previous field
-    if key.name == SpecialKey.TAB and key.shift:
-        if idx > 0:
-            fields = _replace_field(state.fields, idx, replace(field, focused=False))
-            prev_field = replace(state.fields[idx - 1], focused=True)
-            fields = _replace_field(fields, idx - 1, prev_field)
-            return replace(state, fields=fields, active_index=idx - 1)
-        return state
-
     # Field-type specific handling
     match spec.field_type:
         case FieldType.TEXT | FieldType.PASSWORD:
@@ -126,6 +144,18 @@ def form_reducer(state: FormState | None, action: Action) -> FormState:
         return replace(state, fields=fields)
 
     return state
+
+
+def _run_validator(validator: Callable[[Any], Any], value: Any) -> tuple[bool, str]:
+    result = validator(value)
+    if isinstance(result, tuple) and len(result) == 2:
+        ok, error = result
+        return bool(ok), "" if error is None else str(error)
+    if result is None:
+        return True, ""
+    if isinstance(result, str):
+        return False, result
+    return bool(result), "" if result else "Invalid value"
 
 
 def _handle_text_key(field: FieldState, key: Key) -> FieldState:

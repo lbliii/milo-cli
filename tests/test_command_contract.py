@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from milo import CLI, Context, MinLen
+from milo.llms import generate_llms_txt
 from milo.mcp import _call_tool, _list_tools
 
 
@@ -19,7 +20,7 @@ def _make_contract_cli() -> CLI:
         ctx: Context = None,
     ) -> dict[str, str]:
         """Deploy a service through every Milo dispatch surface."""
-        _ = ctx
+        assert isinstance(ctx, Context)
         return {
             "environment": environment,
             "service": service,
@@ -113,3 +114,60 @@ def test_grouped_command_result_matches_call_invoke_and_mcp() -> None:
     )
     assert "isError" not in mcp
     assert mcp["structuredContent"] == expected
+
+
+def test_context_injected_for_call_call_raw_and_mcp() -> None:
+    cli = CLI(name="contract", description="")
+
+    @cli.command("who")
+    def who(ctx: Context = None) -> dict[str, str]:
+        return {"ctx": type(ctx).__name__}
+
+    assert cli.call("who") == {"ctx": "Context"}
+    assert cli.call_raw("who") == {"ctx": "Context"}
+    mcp = _call_tool(cli, {"name": "who", "arguments": {}})
+    assert mcp["structuredContent"] == {"ctx": "Context"}
+
+
+def test_required_bool_is_required_on_cli_and_mcp() -> None:
+    cli = CLI(name="contract", description="")
+
+    @cli.command("set")
+    def set_flag(active: bool) -> bool:
+        return active
+
+    missing = cli.invoke(["set"])
+    assert missing.exit_code == 2
+    assert "--active" in missing.stderr
+
+    assert cli.invoke(["set", "--active"]).result is True
+    assert cli.call("set", active=True) is True
+
+    mcp = _call_tool(cli, {"name": "set", "arguments": {}})
+    assert mcp["isError"] is True
+    assert mcp["errorData"]["argument"] == "active"
+
+
+def test_integer_literal_cli_matches_programmatic_and_mcp() -> None:
+    cli = CLI(name="contract", description="")
+
+    @cli.command("pick")
+    def pick(level: Literal[1, 2]) -> int:
+        return level
+
+    assert cli.invoke(["pick", "--level", "1"]).result == 1
+    assert cli.call("pick", level=1) == 1
+    mcp = _call_tool(cli, {"name": "pick", "arguments": {"level": 1}})
+    assert mcp["structuredContent"] == 1
+
+
+def test_llms_txt_uses_cli_flag_names() -> None:
+    cli = CLI(name="contract", description="")
+
+    @cli.command("deploy")
+    def deploy(dry_run: bool = False) -> bool:
+        return dry_run
+
+    output = generate_llms_txt(cli)
+    assert "--dry-run" in output
+    assert "--dry_run" not in output

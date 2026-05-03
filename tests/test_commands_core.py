@@ -359,6 +359,19 @@ class TestMount:
 
 
 # ---------------------------------------------------------------------------
+# Built-in modes
+# ---------------------------------------------------------------------------
+
+
+class TestBuiltinModes:
+    def test_powershell_completion_mode(self) -> None:
+        cli = _make_cli()
+        result = cli.invoke(["--completions", "powershell"])
+        assert result.exit_code == 0
+        assert "Register-ArgumentCompleter" in result.output
+
+
+# ---------------------------------------------------------------------------
 # No-clobber output file
 # ---------------------------------------------------------------------------
 

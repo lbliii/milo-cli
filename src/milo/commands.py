@@ -175,6 +175,10 @@ class CLI:
         self._run_called: bool = False
         """Set to True after run() is called; used for dev warnings."""
 
+    def _bump_command_version(self) -> None:
+        """Mark command discovery caches stale."""
+        self._command_version += 1
+
     def global_option(
         self,
         name: str,
@@ -295,7 +299,7 @@ class CLI:
             self._commands[name] = cmd
             for alias in aliases:
                 self._alias_map[alias] = name
-            self._command_version += 1
+            self._bump_command_version()
 
             return func
 
@@ -341,7 +345,7 @@ class CLI:
         self._commands[name] = cmd
         for alias in aliases:
             self._alias_map[alias] = name
-        self._command_version += 1
+        self._bump_command_version()
         return cmd
 
     def resource(
@@ -451,10 +455,17 @@ class CLI:
         """
         from milo.groups import Group as GroupClass
 
-        grp = GroupClass(name, description=description, aliases=aliases, hidden=hidden)
+        grp = GroupClass(
+            name,
+            description=description,
+            aliases=aliases,
+            hidden=hidden,
+            on_change=self._bump_command_version,
+        )
         self._groups[name] = grp
         for alias in aliases:
             self._group_alias_map[alias] = name
+        self._bump_command_version()
         return grp
 
     def add_group(self, group: Group) -> None:
@@ -462,6 +473,8 @@ class CLI:
         self._groups[group.name] = group
         for alias in group.aliases:
             self._group_alias_map[alias] = group.name
+        group._set_on_change(self._bump_command_version)
+        self._bump_command_version()
 
     def mount(self, prefix: str, other: CLI) -> None:
         """Mount another CLI as a command group. In-process, no subprocess.
@@ -475,7 +488,9 @@ class CLI:
         """
         from milo.groups import Group as GroupClass
 
-        grp = GroupClass(prefix, description=other.description)
+        grp = GroupClass(
+            prefix, description=other.description, on_change=self._bump_command_version
+        )
 
         # Mount commands
         for cmd_name, cmd in other._commands.items():
@@ -491,6 +506,7 @@ class CLI:
                 grp._group_alias_map[alias] = gname
 
         self._groups[prefix] = grp
+        self._bump_command_version()
 
         # Mount resources with prefix
         for uri, res in other._resources.items():
@@ -618,10 +634,10 @@ class CLI:
         )
         parser.add_argument(
             "--completions",
-            choices=["bash", "zsh", "fish"],
+            choices=["bash", "zsh", "fish", "powershell"],
             default=None,
             metavar="SHELL",
-            help="Output shell completion script (bash, zsh, fish)",
+            help="Output shell completion script (bash, zsh, fish, powershell)",
         )
 
         # Built-in global options
@@ -775,6 +791,7 @@ class CLI:
             # Determine type
             json_type = param_schema.get("type", "string")
             if json_type == "boolean":
+                is_required = param_name in required_set
                 if param and param.default is not inspect.Parameter.empty:
                     default = param.default
                 elif "default" in param_schema:
@@ -793,6 +810,8 @@ class CLI:
                     continue
                 else:
                     kwargs["action"] = "store_true"
+                    if is_required:
+                        kwargs["required"] = True
             elif json_type == "integer":
                 kwargs["type"] = int
             elif json_type == "number":
@@ -1022,6 +1041,20 @@ class CLI:
             for k, v in kwargs.items()
             if k in sig.parameters and not _is_context_param(sig.parameters[k])
         }
+
+    def _build_call_kwargs(
+        self,
+        command: CommandDef,
+        kwargs: dict[str, Any],
+        ctx: Context,
+    ) -> dict[str, Any]:
+        """Build handler kwargs for programmatic/MCP calls, injecting context."""
+        sig = inspect.signature(command.handler)
+        filtered = self._filter_call_kwargs(command, kwargs)
+        for param_name, param in sig.parameters.items():
+            if param_name == "ctx" or _is_context_param(param):
+                filtered[param_name] = ctx
+        return filtered
 
     def _new_call_context(self) -> Context:
         """Create a default context for programmatic command calls."""
@@ -1264,7 +1297,7 @@ class CLI:
         _found, cmd = self._get_resolved_command(command_name)
         ctx = self._new_call_context()
         result = self._execute_command(
-            cmd, ctx, self._filter_call_kwargs(cmd, kwargs), raise_on_error=True
+            cmd, ctx, self._build_call_kwargs(cmd, kwargs, ctx), raise_on_error=True
         )
         return self._consume_result(result, emit_progress=False)
 
@@ -1280,7 +1313,7 @@ class CLI:
         return self._execute_command(
             cmd,
             ctx,
-            self._filter_call_kwargs(cmd, kwargs),
+            self._build_call_kwargs(cmd, kwargs, ctx),
             method="tools/call",
             call_name=command_name,
             raise_on_error=True,

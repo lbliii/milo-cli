@@ -7,7 +7,7 @@ lang: en
 tags: [about, decision]
 keywords: [when to use, cli, mcp, terminal apps]
 category: about
-icon: signpost
+icon: compass
 ---
 
 Use Milo when the same code must serve more than one surface:

@@ -20,25 +20,25 @@ formatting, llms.txt, and MCP.
 
 :::{card} Commands
 :icon: terminal
-:link: ./commands
+:link: ./commands/
 :description: Register typed command handlers and run them from argv
 :::{/card}
 
 :::{card} Groups
-:icon: folder-tree
-:link: ./groups
+:icon: tree-structure
+:link: ./groups/
 :description: Organize commands into nested namespaces
 :::{/card}
 
 :::{card} Context and Output
-:icon: rows
-:link: ./context
+:icon: list
+:link: ./context/
 :description: Use injected context, global options, and structured returns
 :::{/card}
 
 :::{card} MCP Server
-:icon: bot
-:link: ./mcp
+:icon: cpu
+:link: ./mcp/
 :description: Expose commands as MCP tools and run the gateway
 :::{/card}
 

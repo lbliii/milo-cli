@@ -8,7 +8,7 @@ lang: en
 tags: [context, global-options, verbosity]
 keywords: [context, global, options, verbosity, verbose, quiet, color]
 category: build-clis
-icon: sliders
+icon: settings
 ---
 
 The `Context` carries execution metadata — verbosity level, output format, color preference, and user-defined global options — to every command handler.
@@ -66,8 +66,6 @@ Register CLI-wide options that are available on every command via `ctx.globals`:
 ```python
 cli.global_option("environment", short="-e", default="local",
                   description="Target environment")
-cli.global_option("dry_run", is_flag=True,
-                  description="Simulate without making changes")
 ```
 
 Access them in handlers:
@@ -76,14 +74,13 @@ Access them in handlers:
 @cli.command("deploy", description="Deploy the app")
 def deploy(service: str, ctx: Context = None) -> dict:
     env = ctx.globals.get("environment", "local")
-    dry = ctx.globals.get("dry_run", False)
-    if dry:
+    if ctx.dry_run:
         return {"action": "dry-run", "service": service, "env": env}
     return {"action": "deployed", "service": service, "env": env}
 ```
 
 ```
-myapp deploy --service api -e staging --dry-run
+myapp -e staging --dry-run deploy --service api
 ```
 
 ## get_context()

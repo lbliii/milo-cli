@@ -407,6 +407,7 @@ class Store:
         self._state = initial_state
         self._lock = threading.Lock()
         self._listeners: list[Callable] = []
+        self._listener_lock = threading.RLock()
         if max_workers is None:
             import os
 
@@ -430,6 +431,8 @@ class Store:
         # Take effect: waiters keyed by action_type
         # Each entry: list of (Event, result_box_list) tuples
         self._action_waiters: dict[str, list[tuple[threading.Event, list]]] = {}
+        self._root_contexts: set[SagaContext] = set()
+        self._root_contexts_lock = threading.Lock()
 
         # Build middleware chain
         self._dispatch_fn = self._base_dispatch
@@ -535,22 +538,25 @@ class Store:
         # Append recording entry outside the lock (list.append is thread-safe in CPython)
         if record_entry is not None:
             action_type, action_payload, state_hash = record_entry
-            self._recording.append(
-                {
-                    "timestamp": time.time(),
-                    "action_type": action_type,
-                    "action_payload": action_payload,
-                    "state_hash": state_hash,
-                }
-            )
+            recording = self._recording
+            if recording is not None:
+                recording.append(
+                    {
+                        "timestamp": time.time(),
+                        "action_type": action_type,
+                        "action_payload": action_payload,
+                        "state_hash": state_hash,
+                    }
+                )
 
         # Store latest view state for renderer to pick up
         if view is not None:
             self._view_state = view
 
         # Notify listeners
-        for listener in self._listeners:
-            listener()
+        with self._listener_lock:
+            for listener in tuple(self._listeners):
+                listener()
 
         # Schedule sagas outside the lock
         for saga_fn in sagas:
@@ -591,6 +597,9 @@ class Store:
         if context is None:
             ctx_cancel = cancel or threading.Event()
             context = SagaContext(cancel=ctx_cancel)
+        if context.parent is None:
+            with self._root_contexts_lock:
+                self._root_contexts.add(context)
         self._tracked_submit(self._run_saga, saga, context)
         return context
 
@@ -663,6 +672,9 @@ class Store:
             # Prune this child from parent to prevent unbounded growth
             if context.parent is not None:
                 context.parent._remove_child(context)
+            else:
+                with self._root_contexts_lock:
+                    self._root_contexts.discard(context)
 
     def _execute_timeout(self, effect: Call | Retry, seconds: float) -> Any:
         """Execute a blocking effect with a timeout deadline.
@@ -760,7 +772,7 @@ class Store:
                 with condition:
                     condition.notify_all()
 
-            self._executor.submit(_notify_wrapper)
+            threading.Thread(target=_notify_wrapper, daemon=True).start()
 
         # Wait for first completion or parent cancellation
         with condition:
@@ -820,7 +832,7 @@ class Store:
                 with condition:
                     condition.notify_all()
 
-            self._executor.submit(_notify_wrapper)
+            threading.Thread(target=_notify_wrapper, daemon=True).start()
 
         # Wait for all to complete or first failure
         with condition:
@@ -952,10 +964,12 @@ class Store:
 
     def subscribe(self, listener: Callable) -> Callable[[], None]:
         """Register state-change listener. Returns unsubscribe callable."""
-        self._listeners.append(listener)
+        with self._listener_lock:
+            self._listeners.append(listener)
 
         def unsubscribe() -> None:
-            self._listeners.remove(listener)
+            with self._listener_lock:
+                self._listeners.remove(listener)
 
         return unsubscribe
 
@@ -975,8 +989,24 @@ class Store:
         return self._recording
 
     def shutdown(self) -> None:
-        """Shut down the thread pool, waiting for pending work."""
-        self._executor.shutdown(wait=True)
+        """Cancel root sagas and shut down the thread pool."""
+        with self._root_contexts_lock:
+            roots = tuple(self._root_contexts)
+        for context in roots:
+            context.cancel_tree()
+
+        with self._lock:
+            waiters = [
+                (event, result_box)
+                for entries in self._action_waiters.values()
+                for event, result_box in entries
+            ]
+            self._action_waiters.clear()
+        for event, result_box in waiters:
+            result_box.clear()
+            event.set()
+
+        self._executor.shutdown(wait=False, cancel_futures=True)
 
 
 def combine_reducers(**reducers: Callable) -> Callable:

@@ -8,7 +8,7 @@ lang: en
 tags: [live, rendering, spinner, streaming, kida]
 keywords: [live, spinner, liverenderer, stream_to_terminal, milo.live]
 category: build-apps
-icon: activity
+icon: monitor
 ---
 
 `milo.live` re-exports Kida's terminal live-rendering primitives for use

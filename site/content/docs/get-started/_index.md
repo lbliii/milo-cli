@@ -19,23 +19,23 @@ a typed command that works as a human CLI, MCP tool, and llms.txt entry.
 
 :::{card} Installation
 :icon: download
-:link: ./installation
+:link: ./installation/
 :description: Install with uv, pip, or from source
 :badge: Step 1
 Set up Milo and verify your Python 3.14t environment.
 :::{/card}
 
 :::{card} Quickstart
-:icon: play
-:link: ./quickstart
+:icon: rocket
+:link: ./quickstart/
 :description: Build a typed CLI/MCP command in 5 minutes
 :badge: Step 2
 Scaffold a command, run it, inspect schemas, test it, and verify MCP transport.
 :::{/card}
 
 :::{card} Migrate Existing CLI
-:icon: arrows-right-left
-:link: ./migrate-existing-cli
+:icon: workflow
+:link: ./migrate-existing-cli/
 :description: Translate argparse, Click, Typer, Fire, or Cobra patterns
 Move one command at a time into Milo's typed function contract.
 :::{/card}
