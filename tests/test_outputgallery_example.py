@@ -177,6 +177,16 @@ def test_live_interactive_showcase_views_render():
     assert "copy-code" in browser.output
 
 
+def test_primitives_view_renders_copyable_defs():
+    result = cli.invoke(["primitives"])
+
+    assert result.exit_code == 0
+    assert "Primitive shelf" in result.output
+    assert "issue_rail" in result.output
+    assert "meter_row" in result.output
+    assert "LNK001" in result.output
+
+
 def test_audit_resource_exposes_full_fixture():
     data = audit_resource()
 

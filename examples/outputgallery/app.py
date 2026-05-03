@@ -20,6 +20,7 @@ fallbacks, grouped diagnostics, warning summaries, timelines, and next steps.
     uv run python examples/outputgallery/app.py layout --width narrow
     uv run python examples/outputgallery/app.py live
     uv run python examples/outputgallery/app.py browser
+    uv run python examples/outputgallery/app.py primitives
     uv run python examples/outputgallery/app.py spark
     uv run python examples/outputgallery/app.py timeline
     uv run python examples/outputgallery/app.py warnings
@@ -712,6 +713,27 @@ def browser(ctx: Context = None) -> dict | str:
         "keys": "↑↓ select   enter expand   g graph   c copy-code   q quit",
     }
     return _plain_or_data(ctx, "browser.kida", browser=data)
+
+
+@cli.command("primitives", description="Show reusable example-local output primitives")
+def primitives(ctx: Context = None) -> dict | str:
+    """Render copyable Kida primitive examples for downstream CLIs."""
+    data = {
+        "title": "Primitive shelf",
+        "subtitle": "example-local Kida defs worth copying into downstream CLIs",
+        "cards": [
+            {"name": "issue_rail", "sample": "✖✖✖ ◆◆ ▲▲▲", "use": "tiny severity summary"},
+            {"name": "meter_row", "sample": "links ▓▓▓▓·· 5", "use": "count plus density"},
+            {"name": "issue_card", "sample": "LNK001 content/docs/routing.md:82", "use": "repairable diagnostic"},
+            {"name": "key_bar", "sample": "q quit   d details   f follow", "use": "interactive hints"},
+        ],
+        "rows": [
+            {"glyph": "✖", "label": "links", "bar": "▓▓▓▓▓▓····", "value": "5"},
+            {"glyph": "◆", "label": "directives", "bar": "▒▒▒▒······", "value": "3"},
+            {"glyph": "▲", "label": "warnings", "bar": "░░░░░░····", "value": "4"},
+        ],
+    }
+    return _plain_or_data(ctx, "primitives.kida", primitives=data)
 
 
 @cli.command(
