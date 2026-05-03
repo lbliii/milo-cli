@@ -5,7 +5,7 @@ This domain represents raw terminal input, key decoding, and platform-specific t
 Related docs:
 - root `AGENTS.md`
 - `src/milo/AGENTS.md`
-- `site/content/docs/usage/input.md`
+- `site/content/docs/build-apps/input.md`
 - `site/content/docs/about/architecture.md`
 
 ## Point Of View
@@ -37,4 +37,4 @@ Represent humans using interactive Milo apps on real terminals, tests simulating
 ## Own
 - `src/milo/input/_reader.py`, `_platform.py`, `_sequences.py`, and package exports.
 - `tests/test_input.py` plus any platform-specific fixtures added for key parsing.
-- Input sections in `site/content/docs/usage/input.md` and examples that rely on special keys.
+- Input sections in `site/content/docs/build-apps/input.md` and examples that rely on special keys.

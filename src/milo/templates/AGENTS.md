@@ -5,9 +5,9 @@ This domain represents Milo's bundled Kida templates, theme filters, help/progre
 Related docs:
 - root `AGENTS.md`
 - `src/milo/AGENTS.md`
-- `site/content/docs/usage/templates.md`
-- `site/content/docs/usage/help.md`
-- `site/content/docs/usage/forms.md`
+- `site/content/docs/build-apps/templates.md`
+- `site/content/docs/build-clis/help.md`
+- `site/content/docs/build-apps/forms.md`
 
 ## Point Of View
 Represent app authors who expect templates to be strict, composable, accessible in plain terminals, and stable enough to snapshot-test.

@@ -189,25 +189,25 @@ dispatch tied to one definition. That is the part to preserve as your CLI grows.
 
 :::{card} CLI & Commands
 :icon: terminal
-:link: ../usage/cli
+:link: ../build-clis/commands
 :description: Typed commands, built-in flags, output formats, and completions
 :::{/card}
 
 :::{card} MCP Server
 :icon: bot
-:link: ../usage/mcp
+:link: ../build-clis/mcp
 :description: Expose commands as tools and use the Milo gateway
 :::{/card}
 
 :::{card} Testing
 :icon: check-square
-:link: ../usage/testing
+:link: ../quality/testing
 :description: Schema, dispatch, MCP, verify, snapshots, and replay
 :::{/card}
 
 :::{card} Interactive Apps
 :icon: layout
-:link: ../tutorials/build-a-counter
+:link: ../applied-tutorials/build-a-counter
 :description: Build a reducer-driven terminal app with Kida templates
 :::{/card}
 

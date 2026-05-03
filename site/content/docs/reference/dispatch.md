@@ -111,4 +111,4 @@ Use the four-layer testing pattern:
 4. `_call_tool(cli, {"name": ..., "arguments": ...})` for MCP behavior and
    structured `errorData`.
 
-See [[docs/usage/testing|Testing]] for examples.
+See [[docs/quality/testing|Testing]] for examples.

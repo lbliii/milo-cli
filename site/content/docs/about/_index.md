@@ -1,16 +1,17 @@
 ---
 title: About
 draft: false
-weight: 50
+weight: 10
 lang: en
 type: doc
-description: Architecture, design decisions, and the Elm Architecture pattern.
-keywords: [about, architecture, elm, design]
+description: Philosophy, architecture, concepts, thread safety, and ecosystem.
+keywords: [about, philosophy, architecture, concepts, lifecycle, thread safety]
 tags: [about]
 icon: info
 ---
 
-Background on Milo's architecture, the Elm Architecture pattern, and design decisions.
+Background on Milo's philosophy, architecture, concepts, free-threading model,
+and ecosystem.
 
 | Aspect | Milo's approach |
 |--------|----------------|
