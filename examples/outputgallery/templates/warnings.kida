@@ -1,8 +1,8 @@
 {% from "components/_defs.kida" import header %}
 {{ header(warnings.title, description=warnings.subtitle) }}
-{{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│ " }}{{ ("budget " ~ warnings.budget.bar ~ " " ~ (warnings.budget.used | string) ~ "/" ~ (warnings.budget.limit | string)) | cell_fit(75) }}{{ "│" }}
-{{ "╰" ~ ("─" * 76) ~ "╯" }}
+{{ "" | rule_line }}
+{{ ("budget " ~ warnings.budget.bar ~ " " ~ (warnings.budget.used | string) ~ "/" ~ (warnings.budget.limit | string)) | frame_line }}
+{{ "" | bottom_rule }}
 
 {% for group in warnings.groups -%}
 {{ group.glyph }} {{ group.name | bold }} {{ ("owner: " ~ group.owner) | dim }}

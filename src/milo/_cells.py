@@ -75,24 +75,77 @@ def cell_fit(value: object, width: int, fill: str = " ", marker: str = "…") ->
     return cell_ljust(cell_truncate(value, width, marker=marker), width, fill=fill)
 
 
-def _rule_tail(width: int, fill: str = "─", tail: str = "╌┄") -> str:
-    """Return a fixed-width rule that fades instead of ending abruptly."""
+def cell_fill(width: int, fill: str = " ") -> str:
+    """Return *fill* repeated/truncated to exactly *width* display cells."""
     if width <= 0:
         return ""
+    fill_width = cell_width(fill)
+    if fill_width <= 0:
+        return " " * width
+    repeated = str(fill) * ((width // fill_width) + 1)
+    return cell_truncate(repeated, width, marker="")
+
+
+def _rule_tail(width: int, fill: str = "─", tail: str = "╌┄") -> str:
+    """Return a fixed-width rule that fades instead of ending abruptly."""
     tail_width = cell_width(tail)
     if width > tail_width + 8:
-        return (fill * (width - tail_width)) + tail
-    return fill * width
+        return cell_fill(width - tail_width, fill) + tail
+    return cell_fill(width, fill)
+
+
+def rule_line(
+    value: object = "",
+    width: int = 78,
+    left: str = "╭",
+    right: str = "╮",
+    fill: str = "─",
+    tail: str = "",
+) -> str:
+    """Return a display-cell exact horizontal rule."""
+    label = str(value)
+    prefix = f"{left}─ {label} " if label else left
+    suffix_width = cell_width(right)
+    body_width = width - suffix_width
+    prefix_width = cell_width(prefix)
+    if body_width <= 0:
+        return cell_truncate(right, width, marker="")
+    if prefix_width > body_width:
+        return cell_fit(cell_truncate(prefix, body_width, marker="…"), body_width) + right
+    if tail:
+        return prefix + _rule_tail(body_width - prefix_width, fill=fill, tail=tail) + right
+    return prefix + cell_fill(body_width - prefix_width, fill) + right
+
+
+def divider_line(value: object = "", width: int = 78) -> str:
+    """Return a display-cell exact closed-box divider."""
+    return rule_line(value, width=width, left="├", right="┤")
+
+
+def bottom_rule(value: object = "", width: int = 78) -> str:
+    """Return a display-cell exact closed-box bottom rule."""
+    return rule_line(value, width=width, left="╰", right="╯")
+
+
+def frame_line(value: object = "", width: int = 78, left: str = "│", right: str = "│") -> str:
+    """Return a display-cell exact framed content row."""
+    content_width = width - cell_width(left) - cell_width(right) - 2
+    if content_width <= 0:
+        return cell_truncate(left + right, width, marker="")
+    return f"{left} {cell_fit(value, content_width)} {right}"
+
+
+def rail_line(value: object = "", width: int = 78, rail: str = "│") -> str:
+    """Return a display-cell exact open-card row with one left rail."""
+    content_width = width - cell_width(rail) - 1
+    if content_width <= 0:
+        return cell_truncate(rail, width, marker="")
+    return f"{rail} {cell_fit(value, content_width)}"
 
 
 def open_rule(value: object = "", width: int = 78, corner: str = "╭") -> str:
     """Return a cell-width exact open-card rule with a fading right edge."""
-    label = str(value)
-    left = f"{corner}─ {label} " if label else corner
-    left_width = cell_width(left)
-    if left_width > width:
-        return cell_truncate(left, width)
-    return left + _rule_tail(width - left_width)
+    return rule_line(value, width=width, left=corner, right="", tail="╌┄")
 
 
 def open_rule_divider(value: object = "", width: int = 78) -> str:
@@ -103,3 +156,11 @@ def open_rule_divider(value: object = "", width: int = 78) -> str:
 def open_rule_end(value: object = "", width: int = 78) -> str:
     """Return a cell-width exact open-card bottom rule."""
     return open_rule(value, width=width, corner="╰")
+
+
+def cell_meter(value: int, total: int, width: int = 10, filled: str = "█", empty: str = "░") -> str:
+    """Return a display-cell exact meter."""
+    if width <= 0:
+        return ""
+    fill_cells = 0 if total <= 0 else max(0, min(width, round((value / total) * width)))
+    return cell_fill(fill_cells, filled) + cell_fill(width - fill_cells, empty)

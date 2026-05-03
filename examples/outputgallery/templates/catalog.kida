@@ -1,11 +1,11 @@
 {% from "components/_defs.kida" import header %}
 {{ header(patterns.title, description=patterns.subtitle) }}
-{{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│ " }}{{ "Principles" | cell_fit(75) }}{{ "│" }}
+{{ "" | rule_line }}
+{{ "Principles" | frame_line }}
 {% for item in patterns.principles -%}
-{{ "│" }}  {{ "◆" }} {{ item.label | cell_fit(27) }} {{ item.value | cell_fit(44) }}{{ "│" }}
+{{ (" ◆ " ~ (item.label | cell_fit(27)) ~ " " ~ (item.value | cell_fit(43))) | frame_line }}
 {% endfor -%}
-{{ "╰" ~ ("─" * 76) ~ "╯" }}
+{{ "" | bottom_rule }}
 
 {{ "Pattern Library" | bold | cyan }}
 {% for pattern in patterns.patterns -%}

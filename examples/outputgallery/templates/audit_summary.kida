@@ -1,9 +1,9 @@
 {% from "components/_defs.kida" import header, next_steps %}
 {{ header(report.title, report.version, "summary view") }}
-{{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│ " }}{{ report.status.message | cell_fit(18) }} {{ report.status.detail | cell_fit(56) }}{{ "│" }}
-{{ "│ " }}{{ "severity" | cell_fit(10) }}{{ report.severity_rail | cell_fit(65) }}{{ "│" }}
-{{ "╰" ~ ("─" * 76) ~ "╯" }}
+{{ "" | rule_line }}
+{{ ((report.status.message | cell_fit(18)) ~ " " ~ (report.status.detail | cell_fit(56))) | frame_line }}
+{{ (("severity" | cell_fit(10)) ~ (report.severity_rail | cell_fit(65))) | frame_line }}
+{{ "" | bottom_rule }}
 
 {{ "Groups" | bold | cyan }}
 {% for section in report.sections -%}
