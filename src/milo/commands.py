@@ -488,7 +488,9 @@ class CLI:
         """
         from milo.groups import Group as GroupClass
 
-        grp = GroupClass(prefix, description=other.description, on_change=self._bump_command_version)
+        grp = GroupClass(
+            prefix, description=other.description, on_change=self._bump_command_version
+        )
 
         # Mount commands
         for cmd_name, cmd in other._commands.items():

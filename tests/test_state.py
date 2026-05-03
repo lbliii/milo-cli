@@ -102,7 +102,9 @@ class TestStore:
                 active -= 1
 
         store.subscribe(listener)
-        threads = [threading.Thread(target=store.dispatch, args=(Action("increment"),)) for _ in range(8)]
+        threads = [
+            threading.Thread(target=store.dispatch, args=(Action("increment"),)) for _ in range(8)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:

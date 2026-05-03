@@ -296,7 +296,9 @@ def _type_to_schema(
             schema["type"] = "boolean"
         elif values and all(isinstance(v, int) and not isinstance(v, bool) for v in values):
             schema["type"] = "integer"
-        elif values and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+        elif values and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in values
+        ):
             schema["type"] = "number"
         elif values and all(isinstance(v, str) for v in values):
             schema["type"] = "string"
