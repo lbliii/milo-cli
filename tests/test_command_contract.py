@@ -44,18 +44,24 @@ def test_command_result_matches_call_call_raw_invoke_and_mcp() -> None:
         "version": "2026.05",
     }
 
-    assert cli.call(
-        "deploy",
-        environment="staging",
-        service="api",
-        version="2026.05",
-    ) == expected
-    assert cli.call_raw(
-        "deploy",
-        environment="staging",
-        service="api",
-        version="2026.05",
-    ) == expected
+    assert (
+        cli.call(
+            "deploy",
+            environment="staging",
+            service="api",
+            version="2026.05",
+        )
+        == expected
+    )
+    assert (
+        cli.call_raw(
+            "deploy",
+            environment="staging",
+            service="api",
+            version="2026.05",
+        )
+        == expected
+    )
 
     invoked = cli.invoke(
         [
