@@ -1,1 +1,0 @@
-Added display-cell exact topology filters for terminal templates: `rule_line`, `divider_line`, `bottom_rule`, `frame_line`, `rail_line`, `cell_fill`, `cell_meter`, `open_rule`, `open_rule_divider`, and `open_rule_end`.
