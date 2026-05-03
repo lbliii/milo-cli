@@ -1,1 +1,0 @@
-Fixed command, MCP, schema, app runtime, flow, form, llms.txt, and docs regressions found in the project-wide bugbash, including Context injection parity, JSON-RPC invalid-request handling, gateway progress routing, Store shutdown/listener serialization, and CLI/schema contract drift.
