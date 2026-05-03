@@ -84,7 +84,7 @@ def test_milo_verify_passes():
 For interactive apps (forms, wizards, TUIs), use the helpers in
 [`milo.testing`](../src/milo/testing/). They let you feed actions to a reducer
 and snapshot-test the rendered output. These are for *interactive* state, not
-CLI dispatch — the three layers above cover dispatch.
+CLI dispatch — Layers 1-3 cover schema, direct dispatch, and MCP dispatch.
 
 ## Running tests
 
@@ -97,6 +97,9 @@ uv run pytest examples/greet/tests/ -v
 
 # Verify an agent-facing CLI
 uv run milo verify examples/greet/app.py
+
+# Verify built-in templates and tagged docs snippets
+make docs-test
 
 # With coverage (project enforces 80% floor)
 make test-cov

@@ -130,7 +130,7 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 | **ViewState** | Declarative terminal state (`cursor_visible`, `alt_screen`, `window_title`, `mouse_mode`) | [Commands →](https://lbliii.github.io/milo-cli/docs/usage/commands-effects/) |
 | **Flows** | Multi-screen state machines with `>>` operator and custom transitions | [Flows →](https://lbliii.github.io/milo-cli/docs/usage/flows/) |
 | **Forms** | Text, select, confirm, password fields with validation and TTY fallback | [Forms →](https://lbliii.github.io/milo-cli/docs/usage/forms/) |
-| **Input Handling** | Cross-platform key reader with full escape sequence support (arrows, F-keys, modifiers) | [Input →](https://lbliii.github.io/milo-cli/docs/usage/input/) |
+| **Input Handling** | Cross-platform key reader with VT100/xterm escape sequence support (arrows, F-keys, modifiers) | [Input →](https://lbliii.github.io/milo-cli/docs/usage/input/) |
 | **Templates** | Kida-powered terminal rendering with built-in form, field, help, and progress templates | [Templates →](https://lbliii.github.io/milo-cli/docs/usage/templates/) |
 | **Dev Server** | `milo dev` with filesystem polling and `@@HOT_RELOAD` dispatch | [Dev →](https://lbliii.github.io/milo-cli/docs/usage/dev/) |
 | **Session Recording** | JSONL action log with state hashes for debugging and regression testing | [Testing →](https://lbliii.github.io/milo-cli/docs/usage/testing/) |
@@ -146,7 +146,7 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 
 ## Examples Index
 
-Pick the example closest to your use case, copy its `app.py`, and adapt. Every directory below contains a runnable `app.py` plus a focused README.
+Pick the example closest to your use case, copy its `app.py`, and adapt. See [examples/README.md](examples/README.md) for run commands, copy paths, and tested starting points.
 
 **CLIs (typed function → CLI + MCP + llms.txt)**
 

@@ -13,6 +13,7 @@ uv run python examples/outputgallery/app.py audit --limit 0
 uv run python examples/outputgallery/app.py audit --depth summary
 uv run python examples/outputgallery/app.py audit --focus LNK001
 uv run python examples/outputgallery/app.py audit --style ascii
+uv run python examples/outputgallery/app.py audit --style ci
 uv run python examples/outputgallery/app.py audit --format json
 uv run python examples/outputgallery/app.py atlas
 uv run python examples/outputgallery/app.py catalog

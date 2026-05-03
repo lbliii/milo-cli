@@ -1,145 +1,214 @@
 ---
 title: Quickstart
-description: Build your first Milo app in 5 minutes.
+description: Build a typed CLI command that also works as an MCP tool.
 weight: 20
 draft: false
 lang: en
-tags: [onboarding, quickstart]
-keywords: [quickstart, tutorial, first app]
+tags: [onboarding, quickstart, cli, mcp]
+keywords: [quickstart, cli, mcp, llms-txt, verify]
 category: onboarding
 ---
 
-This guide walks you through building a simple counter app — the "hello world" of Milo.
+This guide starts with Milo's core contract: one typed Python function becomes a
+human CLI command, an MCP tool with a JSON Schema, and an llms.txt entry.
 
 :::{checklist} What You'll Learn
 :show-progress:
-- [ ] Write a pure reducer function
-- [ ] Create a Kida terminal template
-- [ ] Wire them together with `App`
-- [ ] Run with hot reload via `milo dev`
+- [ ] Scaffold a minimal Milo CLI
+- [ ] Run the command from argv
+- [ ] Inspect the generated help and llms.txt output
+- [ ] Run the generated contract tests
+- [ ] Verify the CLI as an agent-facing MCP server
 :::{/checklist}
 
-## Build the Counter
-
-:::{steps}
-:::{step} Create a reducer
-:description: A pure function that manages your state
-
-A reducer takes the current state and an action, and returns the next state. It never mutates — always return a new value.
-
-```python
-# app.py
-from milo import App, Action
-
-def reducer(state, action):
-    if state is None:
-        return {"count": 0}
-    if action.type == "@@KEY" and action.payload.char == " ":
-        return {**state, "count": state["count"] + 1}
-    if action.type == "@@KEY" and action.payload.char == "r":
-        return {**state, "count": 0}
-    return state
-```
-
-The reducer handles three cases:
-
-| Action | Condition | Result |
-|--------|-----------|--------|
-| `@@INIT` | `state is None` | Return default state `{"count": 0}` |
-| `@@KEY` | `char == " "` | Increment counter |
-| `@@KEY` | `char == "r"` | Reset counter to 0 |
-
-:::{/step}
-
-:::{step} Create a template
-:description: Render state to the terminal with Kida
-
-Milo uses [[ext:kida:|Kida]] templates for rendering. Create a template file:
-
-```kida
-{# counter.kida #}
-Count: {{ count }}
-
-[SPACE] Increment  [R] Reset  [Ctrl+C] Quit
-```
-
-Your state dict becomes the template context — `{{ count }}` renders the current value of `state["count"]`.
-
-:::{/step}
-
-:::{step} Wire it together
-:description: Create an App and run the event loop
-
-```python
-app = App(template="counter.kida", reducer=reducer, initial_state=None)
-final_state = app.run()
-print(f"Final count: {final_state['count']}")
-```
-
-`App` connects the pieces: it reads keyboard input, dispatches `@@KEY` actions to the reducer, re-renders the template on every state change, and returns the final state when the user quits.
-
-:::{/step}
-
-:::{step} Run it
-:description: Start your app with hot reload
+## Create a CLI
 
 ```bash
-milo dev app:app --watch .
+uv run milo new my_cli
+cd my_cli
 ```
 
-:::{/step}
-:::{/steps}
+The scaffold creates this small project:
 
-:::{tip}
-The `milo dev` command uses the `module:attribute` convention. `app:app` means "import `app` from `app.py` and look up the `app` attribute." The `--watch` flag enables hot reload — edit `counter.kida` and see changes instantly.
-:::
+```text
+my_cli/
+  app.py
+  conftest.py
+  README.md
+  tests/
+    __init__.py
+    test_app.py
+```
 
-## What just happened?
+The generated `app.py` contains one typed command:
+
+```python
+from milo import CLI
+
+cli = CLI(name="my_cli", description="What it does", version="0.1")
+
+
+@cli.command("greet", description="Return a greeting")
+def greet(name: str, loud: bool = False) -> str:
+    """Greet someone by name.
+
+    Args:
+        name: The person to greet.
+        loud: If true, SHOUT.
+    """
+    message = f"Hello, {name}!"
+    return message.upper() if loud else message
+
+
+if __name__ == "__main__":
+    cli.run()
+```
+
+The function signature is the contract. `name: str` becomes a required CLI
+option and MCP schema field. `loud: bool = False` becomes an optional flag with a
+default.
+
+## Run It
+
+```bash
+uv run python app.py greet --name Alice
+```
+
+Expected output:
+
+```text
+Hello, Alice!
+```
+
+Boolean defaults become flags:
+
+```bash
+uv run python app.py greet --name Alice --loud
+```
+
+Expected output:
+
+```text
+HELLO, ALICE!
+```
+
+## Inspect Help
+
+```bash
+uv run python app.py --help
+uv run python app.py greet --help
+```
+
+Milo generates help from the registered command, type annotations, defaults, and
+docstrings. Keep parameter descriptions in the `Args:` section so humans and
+agents see the same contract.
+
+## Inspect llms.txt
+
+```bash
+uv run python app.py --llms-txt
+```
+
+Look for the generated command entry:
+
+```text
+**greet**: Return a greeting
+  Parameters: `--name` (string, **required**), `--loud` (boolean, optional, default: False)
+```
+
+The llms.txt output is a readable catalog. MCP clients use the JSON Schema from
+`tools/list`; both are generated from the same Python function.
+
+## Test the Contract
+
+```bash
+uv run pytest tests/ -v
+```
+
+The generated tests cover four layers:
+
+| Layer | What it protects |
+|---|---|
+| Schema | `function_to_schema(greet)` matches the function signature |
+| Direct dispatch | `cli.invoke([...])` parses argv and returns the expected value |
+| MCP dispatch | `_call_tool(cli, {...})` returns content or structured `errorData` |
+| Verify | `milo verify app.py` passes import, schema, tools/list, and transport checks |
+
+## Verify for Agents
+
+```bash
+uv run milo verify app.py
+```
+
+A healthy scaffold reports six passing checks:
+
+```text
+✓ imports: loaded app.py
+✓ cli_located: found CLI instance (name='my_cli')
+✓ commands_registered: 1 command(s) registered
+✓ schemas_generate: 1 schema(s) generated; all params documented
+✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
+✓ mcp_transport: subprocess handshake succeeded; 1 tool(s) over JSON-RPC
+```
+
+Warnings tell you what to improve, such as missing parameter descriptions.
+Failures mean the CLI is not safe to register as an MCP tool yet.
+
+## Register with an MCP Host
+
+Claude Code and other MCP hosts can launch your CLI over stdin/stdout:
+
+```bash
+claude mcp add my_cli -- uv run python /absolute/path/to/my_cli/app.py --mcp
+```
+
+MCP uses stdout for JSON-RPC. Do not write progress logs with `print()` from
+library or handler code that may run under `--mcp`; use `Context` output helpers
+or stderr boundary code instead.
+
+## What Just Happened?
 
 ```mermaid
 flowchart LR
-    K[Keyboard] -->|"@@KEY"| R[Reducer]
-    R -->|new state| S[Store]
-    S -->|state dict| T[Kida Template]
-    T -->|ANSI output| Term[Terminal]
+    F["Typed Python function"] --> C["CLI command"]
+    F --> S["JSON Schema"]
+    S --> M["MCP tools/list"]
+    F --> L["llms.txt entry"]
+    C --> T["Generated tests"]
+    M --> T
 ```
 
-1. **KeyReader** captures raw terminal input and produces `Key` objects
-2. **Store** dispatches `@@KEY` actions to your reducer
-3. **Reducer** returns new state (immutable — no mutation)
-4. **Kida template** renders state to terminal output
-5. **LiveRenderer** diffs and redraws only changed lines
+Milo keeps command resolution, schema generation, programmatic calls, and MCP
+dispatch tied to one definition. That is the part to preserve as your CLI grows.
 
-This is the **Elm Architecture** — a unidirectional data flow where every state transition is explicit and testable.
-
-## Next steps
+## Next Steps
 
 :::{cards}
 :columns: 2
 :gap: medium
 
-:::{card} State Management
-:icon: database
-:link: ../usage/state
-:description: Store, middleware, combined reducers
+:::{card} CLI & Commands
+:icon: terminal
+:link: ../usage/cli
+:description: Typed commands, built-in flags, output formats, and completions
 :::{/card}
 
-:::{card} Multi-Screen Flows
-:icon: arrows-clockwise
-:link: ../usage/flows
-:description: Chain screens with the >> operator
+:::{card} MCP Server
+:icon: bot
+:link: ../usage/mcp
+:description: Expose commands as tools and use the Milo gateway
 :::{/card}
 
-:::{card} Interactive Forms
-:icon: textbox
-:link: ../usage/forms
-:description: Collect structured input with validation
+:::{card} Testing
+:icon: check-square
+:link: ../usage/testing
+:description: Schema, dispatch, MCP, verify, snapshots, and replay
 :::{/card}
 
-:::{card} Sagas
-:icon: arrows-split
-:link: ../usage/sagas
-:description: Side effects with generators
+:::{card} Interactive Apps
+:icon: layout
+:link: ../tutorials/build-a-counter
+:description: Build a reducer-driven terminal app with Kida templates
 :::{/card}
 
 :::{/cards}

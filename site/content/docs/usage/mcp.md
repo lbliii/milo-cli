@@ -219,7 +219,7 @@ Context parameters (`ctx: Context`) are excluded from schemas.
 
 Generated from handler return type annotations via `return_to_schema()`. If a handler declares `-> dict` or `-> list[str]`, the corresponding JSON Schema appears as `outputSchema` in `tools/list`.
 
-```python
+```python milo-docs:compile
 @cli.command("stats", description="Get task statistics")
 def stats() -> dict:
     return {"total": 10, "done": 7}

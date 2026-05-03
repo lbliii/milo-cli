@@ -42,17 +42,21 @@ The `help.kida` template receives:
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `prog` | `str` | Program name |
-| `description` | `str` | Parser description |
-| `usage` | `str` | Usage string |
-| `positionals` | `list` | Positional argument specs |
-| `optionals` | `list` | Optional argument specs |
-| `subcommands` | `list` | Subparser commands |
+| `state.prog` | `str` | Program name |
+| `state.description` | `str` | Parser description captured from argparse |
+| `state.epilog` | `str` | Parser epilog, when populated |
+| `state.usage` | `str` | Usage string, when populated |
+| `state.groups` | `tuple[dict]` | Captured argparse action groups |
+| `state.examples` | `tuple[dict]` | Optional examples supplied by `help_formatter_with_examples()` |
+| `state.commands` | `tuple[dict]` | Reserved for command summaries |
+| `state.options` | `tuple[dict]` | Reserved for option summaries |
 
 :::
 
 ## Fallback
 
 :::{note}
-If template rendering fails for any reason, `HelpRenderer` falls back to the default argparse formatting silently. Your CLI will always show help — it just won't be styled.
+If template rendering fails, `HelpRenderer` emits a `UserWarning` and falls
+back to argparse's default formatter. Your CLI will still show help, but it will
+not use the styled Kida template.
 :::

@@ -15,7 +15,7 @@ Milo's `CLI` class turns decorated Python functions into CLI commands, MCP tools
 
 ## Creating a CLI
 
-```python
+```python milo-docs:compile
 from milo import CLI
 
 cli = CLI(name="myapp", description="My tool", version="1.0.0")
@@ -27,7 +27,7 @@ The `CLI` is the entry point for your application. It manages commands, groups, 
 
 Use the `@cli.command` decorator to register functions as CLI subcommands:
 
-```python
+```python milo-docs:compile
 @cli.command("greet", description="Say hello")
 def greet(name: str, loud: bool = False) -> str:
     msg = f"Hello, {name}!"
@@ -47,7 +47,7 @@ myapp greet --name Alice --loud
 
 ## Command options
 
-```python
+```python milo-docs:compile
 @cli.command(
     "deploy",
     description="Deploy the application",
@@ -83,7 +83,7 @@ The handler's return value is serialized based on the chosen format. See [[docs/
 
 ## Running the CLI
 
-```python
+```python milo-docs:compile
 if __name__ == "__main__":
     cli.run()
 ```
@@ -107,7 +107,7 @@ Every CLI gets these flags automatically:
 
 Call commands directly without going through argparse:
 
-```python
+```python milo-docs:compile
 result = cli.call("greet", name="Alice")
 result = cli.call("site.build", output="_site")  # dotted paths for group commands
 ```
@@ -169,7 +169,7 @@ Or save to `~/.config/fish/completions/myapp.fish` for persistence.
 
 Programmatically, use `install_completions()`:
 
-```python
+```python milo-docs:compile
 from milo.completions import install_completions
 
 script = install_completions(cli, shell="zsh")  # or "bash", "fish"
@@ -181,7 +181,7 @@ If `shell` is omitted, it auto-detects from the `$SHELL` environment variable.
 
 The doctor system runs health checks against your CLI environment. Define what to verify, and `run_doctor` checks it all at once:
 
-```python
+```python milo-docs:compile
 from milo.doctor import run_doctor, format_doctor_report
 
 report = run_doctor(
@@ -211,7 +211,7 @@ Output:
 
 Built-in checks include Python version, Milo version, config file discovery, and registered command count. Add custom checks by passing callables that return a `Check`:
 
-```python
+```python milo-docs:compile
 from milo.doctor import Check
 
 def check_disk_space():
@@ -228,7 +228,7 @@ The `DoctorReport` dataclass tracks counts: `report.ok`, `report.warnings`, `rep
 
 Milo can check PyPI for newer versions of your package:
 
-```python
+```python milo-docs:compile
 from milo.version_check import check_version, format_version_notice
 
 info = check_version("myapp", current_version="1.0.0")
