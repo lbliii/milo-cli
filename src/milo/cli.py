@@ -72,6 +72,7 @@ def _cmd_new(args: argparse.Namespace) -> None:
         f"  cd {project_dir}\n"
         f"  uv run python app.py greet --name Alice\n"
         f"  uv run pytest tests/\n"
+        f"  uv run milo verify app.py\n"
     )
 
 

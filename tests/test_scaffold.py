@@ -100,7 +100,7 @@ class TestScaffoldRoundtrip:
         assert result.returncode == 0, (
             f"Scaffolded tests failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
-        assert "7 passed" in result.stdout
+        assert "8 passed" in result.stdout
 
 
 class TestMiloNewCommand:
@@ -117,6 +117,7 @@ class TestMiloNewCommand:
         assert "Next steps:" in result.stdout
         assert "cd " in result.stdout
         assert "uv run python app.py greet --name Alice" in result.stdout
+        assert "uv run milo verify app.py" in result.stdout
 
     def test_milo_new_invalid_name_exits_nonzero_with_error(self, tmp_path):
         result = subprocess.run(
