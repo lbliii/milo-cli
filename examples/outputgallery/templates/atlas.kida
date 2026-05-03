@@ -1,20 +1,20 @@
 {% from "components/_defs.kida" import header, next_steps %}
 {{ header(report.title, report.version, report.subtitle) }}
 {{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│" }} {{ "Legend" | bold | cyan }}{{ " " * 68 }}{{ "│" }}
+{{ "│ " }}{{ "Legend" | cell_fit(75) }}{{ "│" }}
 {% for item in report.legend -%}
-{{ "│" }}   {{ item.glyph }} {{ item.label | pad(68) }}{{ "│" }}
+{{ "│" }}   {{ item.glyph }} {{ item.label | cell_fit(71) }}{{ "│" }}
 {% endfor -%}
 {{ "╰" ~ ("─" * 76) ~ "╯" }}
 
 {{ "Signal Rings" | bold | cyan }}
 {% for ring in report.rings -%}
-  {{ ring.name | pad(9) }} {{ ring.map }}
+  {{ ring.name | cell_fit(9) }} {{ ring.map }}
 {% endfor %}
 
 {{ "Branch Map" | bold | cyan }}
 {% for row in report.tree -%}
-  {{ row.branch | pad(18) }} {{ row.shape | pad(14) }} {{ row.detail }}
+  {{ row.branch | cell_fit(18) }} {{ row.shape | cell_fit(14) }} {{ row.detail }}
 {% endfor %}
 
 {{ "Score Panels" | bold | cyan }}

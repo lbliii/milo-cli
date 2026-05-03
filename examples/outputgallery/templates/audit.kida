@@ -1,19 +1,19 @@
 {% from "components/_defs.kida" import header, status_line, next_steps %}
 {{ header(report.title, report.version, report.subtitle) }}
 {{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│ " }}{{ status_line(report.status.level, report.status.message, report.status.detail) }}{{ " " * 27 }}{{ "│" }}
+{{ "│ " }}{{ report.status.message | cell_fit(18) }} {{ report.status.detail | cell_fit(56) }}{{ "│" }}
 {{ "├" ~ ("─" * 76) ~ "┤" }}
-{{ "│" }} {{ "severity" | bold }} {{ report.severity_rail | pad(62) }} {{ "│" }}
+{{ "│ " }}{{ "severity" | cell_fit(10) }}{{ report.severity_rail | cell_fit(65) }}{{ "│" }}
 {{ "╰" ~ ("─" * 76) ~ "╯" }}
 
 {{ "Issue Mix" | bold | cyan }}
 {% for item in report.issue_mix -%}
-  {{ item.glyph }} {{ item.label | pad(11) }} {{ item.bar }} {{ item.count }}
+  {{ item.glyph }} {{ item.label | cell_fit(11) }} {{ item.bar }} {{ item.count }}
 {% endfor %}
 
 {{ "File Zones" | bold | cyan }}
 {% for zone in report.file_zones -%}
-  {{ zone.glyph }} {{ zone.label | pad(7) }} {{ zone.bar }} {{ zone.count }}
+  {{ zone.glyph }} {{ zone.label | cell_fit(7) }} {{ zone.bar }} {{ zone.count }}
 {% endfor %}
 
 {{ "Overview" | bold | cyan }}

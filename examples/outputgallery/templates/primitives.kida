@@ -4,7 +4,7 @@
 
 {{ "Available Defs" | bold | cyan }}
 {% for card in primitives.cards -%}
-  {{ card.name | pad(13) }} {{ card.sample | pad(32) }} {{ card.use }}
+  {{ card.name | cell_fit(13) }} {{ card.sample | cell_fit(32) }} {{ card.use }}
 {% endfor %}
 
 {{ "Meters" | bold | cyan }}

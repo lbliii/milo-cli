@@ -84,10 +84,16 @@ data structures. Keep command return values as plain dictionaries or lists so
 MCP and `--format json` stay useful. Only extract shared primitives after two or
 three downstream outputs use the same shape.
 
+For fixed-width topology, use Milo's display-cell filters (`cell_fit`,
+`cell_pad`, `cell_truncate`, and `cell_width`) instead of character-count
+padding. These filters ignore ANSI escape sequences and account for wide Unicode
+characters, so box edges and columns stay aligned in real terminals.
+
 ## Review Checklist
 
 - The first screen states the verdict.
 - Every blocker includes location, target, and repair hint.
+- Boxed or columnar output is asserted by display-cell width, not `len()`.
 - Default output hides low-value rows and says how to expand them.
 - CI and ASCII-safe modes preserve all required information.
 - JSON output stays structured and does not include progress chatter.

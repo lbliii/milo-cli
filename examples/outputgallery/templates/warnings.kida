@@ -1,7 +1,7 @@
 {% from "components/_defs.kida" import header %}
 {{ header(warnings.title, description=warnings.subtitle) }}
 {{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│" }} budget {{ warnings.budget.bar }} {{ warnings.budget.used }}/{{ warnings.budget.limit }}{{ " " * 53 }}{{ "│" }}
+{{ "│ " }}{{ ("budget " ~ warnings.budget.bar ~ " " ~ (warnings.budget.used | string) ~ "/" ~ (warnings.budget.limit | string)) | cell_fit(75) }}{{ "│" }}
 {{ "╰" ~ ("─" * 76) ~ "╯" }}
 
 {% for group in warnings.groups -%}

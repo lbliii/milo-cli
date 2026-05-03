@@ -7,12 +7,12 @@
 
 Issue Mix
 {% for item in report.issue_mix -%}
-  {{ item.glyph }} {{ item.label | pad(11) }} {{ item.bar }} {{ item.count }}
+  {{ item.glyph }} {{ item.label | cell_fit(11) }} {{ item.bar }} {{ item.count }}
 {% endfor %}
 
 File Zones
 {% for zone in report.file_zones -%}
-  {{ zone.glyph }} {{ zone.label | pad(7) }} {{ zone.bar }} {{ zone.count }}
+  {{ zone.glyph }} {{ zone.label | cell_fit(7) }} {{ zone.bar }} {{ zone.count }}
 {% endfor %}
 
 Overview

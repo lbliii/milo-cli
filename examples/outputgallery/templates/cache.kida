@@ -3,12 +3,12 @@
 
 {{ "Reuse" | bold | cyan }}
 {% for item in cache.summary -%}
-  {{ item.label | pad(16) }} {{ item.bar }} {{ item.value }}
+  {{ item.label | cell_fit(16) }} {{ item.bar }} {{ item.value }}
 {% endfor %}
 
 {{ "Invalidations" | bold | cyan }}
 {% for item in cache.invalidations -%}
-  {{ item.glyph }} {{ item.cause | pad(28) }} {{ item.count }}
+  {{ item.glyph }} {{ item.cause | cell_fit(28) }} {{ item.count }}
 {% endfor %}
 
 {{ "Next" | bold | cyan }}

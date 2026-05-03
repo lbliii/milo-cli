@@ -1,5 +1,5 @@
 {%- def meter_row(glyph, label, bar, value) -%}
-{{ glyph }} {{ label | pad(12) }} {{ bar }} {{ value }}
+{{ glyph }} {{ label | cell_fit(12) }} {{ bar }} {{ value }}
 {%- enddef -%}
 
 {%- def issue_card(glyph, code, location, message, fix) -%}

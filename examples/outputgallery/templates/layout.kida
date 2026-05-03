@@ -4,16 +4,16 @@
 ╭───────────────────────────────╮ ╭──────────────────────────────────────────╮
 │ Signals                       │ │ Capability Matrix                        │
 {% for signal in layout.signals -%}
-│ {{ signal.glyph }} {{ signal.name | pad(10) }} {{ signal.bar }} {{ signal.value | pad(3) }} │{% if loop.index0 < (layout.capabilities | length) %} │ {{ layout.capabilities[loop.index0].mode | pad(12) }} {{ layout.capabilities[loop.index0].style | pad(8) }} {{ layout.capabilities[loop.index0].shape | pad(17) }} │{% else %} │ {{ " " * 40 }} │{% endif %}
+│ {{ (signal.glyph ~ " " ~ signal.name ~ " " ~ signal.bar ~ " " ~ signal.value) | cell_fit(30) }}│{% if loop.index0 < (layout.capabilities | length) %} │ {{ (layout.capabilities[loop.index0].mode ~ " " ~ layout.capabilities[loop.index0].style ~ " " ~ layout.capabilities[loop.index0].shape) | cell_fit(40) }} │{% else %} │ {{ " " * 40 }} │{% endif %}
 {% endfor -%}
 {% for row in layout.capabilities[3:] -%}
-│ {{ " " * 29 }} │ │ {{ row.mode | pad(12) }} {{ row.style | pad(8) }} {{ row.shape | pad(17) }} │
+│ {{ " " * 30 }}│ │ {{ (row.mode ~ " " ~ row.style ~ " " ~ row.shape) | cell_fit(40) }} │
 {% endfor -%}
 ╰───────────────────────────────╯ ╰──────────────────────────────────────────╯
 {% else -%}
 {{ "Signals" | bold | cyan }}
 {% for signal in layout.signals -%}
-  {{ signal.glyph }} {{ signal.name | pad(10) }} {{ signal.value }}
+  {{ signal.glyph }} {{ signal.name | cell_fit(10) }} {{ signal.value }}
   {{ signal.bar }}
 {% endfor %}
 {{ "Capability Matrix" | bold | cyan }}

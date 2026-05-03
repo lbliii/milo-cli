@@ -1,7 +1,7 @@
 {% from "components/_defs.kida" import header, next_steps %}
 {{ header(graph.title, description=graph.subtitle) }}
 {{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│" }} status {{ graph.summary.status | pad(11) }} sources {{ graph.summary.sources }}  broken {{ graph.summary.broken }}  loops {{ graph.summary.loops }}{{ " " * 28 }}{{ "│" }}
+{{ "│ " }}{{ ("status " ~ graph.summary.status ~ "  sources " ~ (graph.summary.sources | string) ~ "  broken " ~ (graph.summary.broken | string) ~ "  loops " ~ (graph.summary.loops | string)) | cell_fit(75) }}{{ "│" }}
 {{ "╰" ~ ("─" * 76) ~ "╯" }}
 
 {{ "Topology" | bold | cyan }}

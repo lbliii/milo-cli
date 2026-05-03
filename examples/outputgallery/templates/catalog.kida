@@ -1,9 +1,9 @@
 {% from "components/_defs.kida" import header %}
 {{ header(patterns.title, description=patterns.subtitle) }}
 {{ "╭" ~ ("─" * 76) ~ "╮" }}
-{{ "│" }} {{ "Principles" | bold | cyan }}{{ " " * 64 }}{{ "│" }}
+{{ "│ " }}{{ "Principles" | cell_fit(75) }}{{ "│" }}
 {% for item in patterns.principles -%}
-{{ "│" }}  {{ "◆" }} {{ item.label | pad(27) }} {{ item.value | pad(41) }}{{ "│" }}
+{{ "│" }}  {{ "◆" }} {{ item.label | cell_fit(27) }} {{ item.value | cell_fit(44) }}{{ "│" }}
 {% endfor -%}
 {{ "╰" ~ ("─" * 76) ~ "╯" }}
 

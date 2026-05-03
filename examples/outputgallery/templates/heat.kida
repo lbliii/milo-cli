@@ -3,10 +3,10 @@
 
 {{ "Phase Heat" | bold | cyan }}
 {% for row in heat.rows -%}
-  {{ row.name | pad(9) }} {{ row.cells }}  {{ row.detail }}
+  {{ row.name | cell_fit(9) }} {{ row.cells }}  {{ row.detail }}
 {% endfor %}
 
 {{ "Issue Density" | bold | cyan }}
 {% for row in heat.matrix -%}
-  {{ row.zone | pad(7) }} {{ row.cells }}  {{ row.count }}
+  {{ row.zone | cell_fit(7) }} {{ row.cells }}  {{ row.count }}
 {% endfor %}

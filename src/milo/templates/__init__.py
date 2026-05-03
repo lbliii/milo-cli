@@ -69,6 +69,7 @@ def get_env(
 
     # Register theme system when in terminal mode
     if kwargs.get("autoescape", "terminal") == "terminal":
+        from milo._cells import cell_fit, cell_ljust, cell_rjust, cell_truncate, cell_width
         from milo.theme import DEFAULT_THEME, ThemeProxy, make_style_filter
 
         resolved_theme = theme if theme is not None else DEFAULT_THEME
@@ -78,6 +79,11 @@ def get_env(
 
         env.globals["theme"] = ThemeProxy(resolved_theme, color=color)
         env._filters["style"] = make_style_filter(resolved_theme, color=color)
+        env._filters["cell_width"] = cell_width
+        env._filters["cell_pad"] = cell_ljust
+        env._filters["cell_rpad"] = cell_rjust
+        env._filters["cell_truncate"] = cell_truncate
+        env._filters["cell_fit"] = cell_fit
 
     # Cache as default singleton when called with default args
     if is_default:

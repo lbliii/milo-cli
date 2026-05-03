@@ -7,6 +7,8 @@ import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
+from milo._cells import cell_width
+
 
 def _load_outputgallery():
     path = Path(__file__).resolve().parents[1] / "examples" / "outputgallery" / "app.py"
@@ -162,6 +164,19 @@ def test_layout_adaptation_views_render():
     assert narrow.exit_code == 0
     assert "narrow tty" in narrow.output
     assert "agent/pipe" in narrow.output
+
+
+def test_fixed_width_panels_use_display_cell_width():
+    for argv in (["grammar"], ["layout"], ["browser"]):
+        result = cli.invoke(argv)
+        assert result.exit_code == 0
+        boxed = [
+            line
+            for line in result.output.splitlines()
+            if any(ch in line for ch in "│╭╰├┤╮╯")
+        ]
+        assert boxed
+        assert {cell_width(line) for line in boxed} == {78}
 
 
 def test_live_interactive_showcase_views_render():

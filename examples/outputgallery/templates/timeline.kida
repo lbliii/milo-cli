@@ -8,13 +8,13 @@
 {% for phase in run.phases -%}
 {% match phase.status -%}
 {% case "success" -%}
-  ✓ {{ phase.name | pad(12) }} {{ phase.track }} {{ phase.duration | pad(7) }} {{ phase.detail }}
+  ✓ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
 {% case "warning" -%}
-  ▲ {{ phase.name | pad(12) }} {{ phase.track }} {{ phase.duration | pad(7) }} {{ phase.detail }}
+  ▲ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
 {% case "error" -%}
-  ✖ {{ phase.name | pad(12) }} {{ phase.track }} {{ phase.duration | pad(7) }} {{ phase.detail }}
+  ✖ {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
 {% case _ -%}
-  · {{ phase.name | pad(12) }} {{ phase.track }} {{ phase.duration | pad(7) }} {{ phase.detail }}
+  · {{ phase.name | cell_fit(12) }} {{ phase.track }} {{ phase.duration | cell_fit(7) }} {{ phase.detail }}
 {% endmatch -%}
 {% endfor %}
 

@@ -113,6 +113,18 @@ class TestGetEnv:
         # capture_context populated under enable_capture=True
         assert cap.context_keys.get("name") == "world"
 
+    def test_cell_width_filters_align_unicode_and_ansi(self):
+        from milo.templates import get_env
+
+        env = get_env()
+        tmpl = env.from_string(
+            "{{ '✖' | cell_fit(3) }}|{{ '界' | cell_fit(3) }}|"
+            "{{ '\x1b[31mred\x1b[0m' | cell_width }}|{{ 'abcdef' | cell_fit(4) }}",
+            name="cell_width_filters",
+        )
+        out = tmpl.render()
+        assert out == "✖  |界 |3|abc…"
+
 
 class TestComponentTemplatesIncluded:
     def test_components_directory_exists(self):
