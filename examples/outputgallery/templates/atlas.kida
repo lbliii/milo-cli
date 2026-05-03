@@ -1,0 +1,29 @@
+{% from "components/_defs.kida" import header, next_steps %}
+{{ header(report.title, report.version, report.subtitle) }}
+{{ "╭" ~ ("─" * 76) ~ "╮" }}
+{{ "│" }} {{ "Legend" | bold | cyan }}{{ " " * 68 }}{{ "│" }}
+{% for item in report.legend -%}
+{{ "│" }}   {{ item.glyph }} {{ item.label | pad(68) }}{{ "│" }}
+{% endfor -%}
+{{ "╰" ~ ("─" * 76) ~ "╯" }}
+
+{{ "Signal Rings" | bold | cyan }}
+{% for ring in report.rings -%}
+  {{ ring.name | pad(9) }} {{ ring.map }}
+{% endfor %}
+
+{{ "Branch Map" | bold | cyan }}
+{% for row in report.tree -%}
+  {{ row.branch | pad(18) }} {{ row.shape | pad(14) }} {{ row.detail }}
+{% endfor %}
+
+{{ "Score Panels" | bold | cyan }}
+{% for panel in report.panels -%}
+╭─ {{ panel.title | bold }} {{ "─" * 24 }}
+│ {{ panel.meter }} {{ panel.score }}/100
+│ {{ panel.note }}
+╰{{ "─" * 34 }}
+{% endfor %}
+
+{{ "Next" | bold | cyan }}
+{{ next_steps(report.next_steps) }}
