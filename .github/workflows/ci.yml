@@ -128,7 +128,8 @@ jobs:
           data-format: lcov
           post-to: pr-comment
           comment-header: coverage-report
-          token: ${{ secrets.GITHUB_TOKEN }}
+          app-id: ${{ secrets.KIDA_APP_ID }}
+          app-private-key: ${{ secrets.KIDA_APP_PRIVATE_KEY }}
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14t'
