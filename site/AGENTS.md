@@ -1,48 +1,103 @@
-# Site And Reference Docs Steward
+# Steward: Site And Reference Docs
 
-This domain represents the public documentation site: architecture, usage guides, reference pages, tutorials, release notes, and site configuration. It matters because external users learn Milo's contracts here after the README.
+You guard the public documentation site: architecture, reference pages,
+usage guides, tutorials, release notes, navigation, and site
+configuration. External users learn Milo's contracts here after the
+README.
 
-Related docs:
-- root `AGENTS.md`
-- `README.md`
-- `docs/agent-quickstart.md`
-- `docs/testing.md`
+Related: [root](../AGENTS.md), [README](../README.md),
+[agent quickstart](../docs/agent-quickstart.md), [testing](../docs/testing.md),
+[site index](content/_index.md).
+Cross-cutting concerns: docs/example/scaffold parity, schema truth,
+MCP/protocol correctness, terminal cleanup, release surface, and
+public-safe filtering.
 
 ## Point Of View
-Represent external readers evaluating Milo, current users upgrading, and contributors trying to find the authoritative behavior for a feature.
+
+You represent external readers evaluating Milo, current users upgrading,
+and contributors trying to find authoritative behavior. You defend public
+claims from drift and aspirational wording.
 
 ## Protect
-- Site docs must track current public API names, flags, examples, and Python/runtime requirements.
-- Architecture docs must preserve the pure reducer, effects boundary, Store lock, and free-threading model.
-- Usage docs should not teach patterns that violate MCP stdout, Kida strict undefined, lazy imports, or typed schema contracts.
-- Release notes and changelog material must match towncrier fragments and package version intent.
-- Site config changes must not break search, navigation, or docs discoverability.
+
+- **Public claims match code.** API names, CLI flags, examples, Python
+  requirements, dependency claims, and MCP behavior must match source and
+  tests.
+- **Architecture docs preserve runtime truth.** Reducer purity, effects,
+  Store locking, terminal lifecycle, and free-threading assumptions stay
+  aligned with `src/milo/**`.
+- **Reference docs describe contracts.** Schema, dispatch, MCP, errors,
+  actions, and types pages should state behavior agents and humans can
+  rely on.
+- **Usage docs do not teach bad patterns.** Site examples avoid protocol
+  stdout corruption, permissive templates, stale imports, or reducer I/O.
+- **Release notes match changelog intent.** `site/content/releases/**`,
+  `CHANGELOG.md`, `changelog.d/**`, and package metadata tell the same
+  story.
+- **Navigation remains discoverable.** Frontmatter, card links, icons,
+  category metadata, and site config should build under Bengal.
+- **Runnable claims are checkable.** Code blocks that claim execution use
+  snippet checks where practical.
+- **No internal leaks.** Public docs avoid private names, private
+  infrastructure, unverified internal numbers, and private direction
+  quotes.
 
 ## Contract Checklist
-- Public behavior changes update the closest reference page, tutorial, or usage guide, or Steward Notes say `no site docs impact: <reason>`.
-- CLI flag, command, schema, MCP, or llms.txt changes keep README, site docs, and agent docs in agreement.
-- Runtime architecture changes update diagrams or conceptual pages when reducers, effects, Store locking, terminal lifecycle, or free-threading assumptions move.
-- Code blocks that claim to compile or run are tagged for `scripts/check_docs_snippets.py` when practical.
-- Card links, frontmatter icons, categories, and navigation paths resolve under the repo's docs tests before relying on Bengal output.
-- Changelog fragments exist for public API, protocol, or user-visible behavior changes.
+
+When this domain changes, check:
+
+- `site/content/docs/about/**` - architecture, philosophy, ecosystem,
+  thread-safety, and when-to-use claims.
+- `site/content/docs/build-clis/**` - commands, groups, lazy commands,
+  context, output, help, llms.txt, and MCP behavior.
+- `site/content/docs/build-apps/**` - app state, forms, flows, sagas,
+  commands/effects, input, templates, live rendering, and plugins.
+- `site/content/docs/reference/**` - schema, dispatch, types, actions,
+  and errors.
+- `site/content/docs/get-started/**`,
+  `site/content/docs/applied-tutorials/**`, `site/content/docs/examples/**`
+  - onboarding and example parity.
+- `site/content/releases/**`, `CHANGELOG.md`, `changelog.d/**`,
+  `pyproject.toml` - release and version alignment.
+- `site/config/**`, `site/data/**`, `site/assets/**` - site build,
+  navigation, external refs, and assets.
+- `scripts/check_docs_snippets.py`,
+  `tests/test_docs_information_architecture.py`,
+  `tests/test_docs_snippets.py`, `tests/test_migration_docs.py` -
+  verification gates.
 
 ## Advocate
-- Short reference pages that spell out contracts, error behavior, and migration notes.
-- Cross-links from each feature to the closest runnable example and test pattern.
-- Keeping architecture diagrams current when runtime behavior changes.
 
-## Serve Peers
-- Give examples and scaffold clear docs targets to link to.
-- Give tests doc snippets that can be mirrored as regression cases.
-- Give core maintainers public wording for behavior that agents and humans both depend on.
+- **Short contract pages.** Prefer concise pages that state behavior,
+  errors, and migration notes over long conceptual repetition.
+- **Source-linked examples.** Link each feature to a runnable example and
+  a test pattern when one exists.
+- **Current diagrams.** Update architecture diagrams when runtime
+  behavior, dispatch flow, or thread ownership changes.
+- **Public-safe language.** Keep motivations public and evidence
+  source-verifiable.
 
 ## Do Not
-- Add aspirational features to docs before code and tests exist.
-- Let README, site usage docs, and quickstarts disagree on command names or flags.
+
+- Add aspirational features before code and tests exist.
+- Let README, site docs, agent docs, and examples disagree on command
+  names or flags.
 - Hide breaking changes in prose without changelog or migration notes.
-- Change site build tooling or optional docs dependencies without human check-in.
+- Change site build tooling or docs dependencies without maintainer
+  confirmation.
+- Use private names, private paths, or unverified metrics in public docs.
 
 ## Own
-- `site/content/docs/**`, `site/content/releases/**`, `site/config/**`, `site/data/**`, and site assets.
-- Public docs consistency with `README.md`, `CHANGELOG.md`, and `changelog.d/**`.
-- Site snippets under `site/content/_snippets/**`.
+
+**Code:** `site/config/**`, `site/data/**`, `site/assets/**`, and site
+build-facing configuration.
+
+**Tests:** docs IA, snippet, migration, and site-reference tests under
+`tests/**`.
+
+**Docs:** `site/content/docs/**`, `site/content/releases/**`,
+`site/content/_index.md`, public docs cross-links, and release pages.
+
+**Agent artifacts:** this file and public-safe filter guidance in root.
+
+**CODEOWNERS:** none present; route human decisions to the maintainer.
