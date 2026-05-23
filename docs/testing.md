@@ -101,9 +101,18 @@ uv run milo verify examples/greet/app.py
 # Verify built-in templates and tagged docs snippets
 make docs-test
 
+# Verify release version, tag, changelog, and release-note alignment
+make release-status
+
 # With coverage (project enforces 80% floor)
 make test-cov
 ```
+
+For normal `src/` changes, CI requires a new non-empty `changelog.d/*.md`
+fragment. For a release-cut PR, apply the `skip-changelog` label after
+fragments have been compiled into `CHANGELOG.md` and the new
+`site/content/releases/<version>.md` file. `make release-status` is the
+release-side guard that catches leftover or empty fragments before publishing.
 
 ## Free-threading (Python 3.14t)
 

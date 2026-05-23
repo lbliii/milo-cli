@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 
+import importlib.util
+from pathlib import Path
+
+
+def _load_check_templates_script():
+    script = Path(__file__).parent.parent / "scripts" / "check_templates.py"
+    spec = importlib.util.spec_from_file_location("check_templates", script)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 class TestGetEnv:
     def test_returns_environment(self):
@@ -203,3 +216,42 @@ class TestComponentTemplatesIncluded:
         except Exception:
             # If kida can't parse it, that's OK -- the point is the file is found
             pass
+
+
+class TestTemplateCheckScript:
+    def test_milo_aware_check_accepts_terminal_filters(self, tmp_path):
+        """The local checker uses Milo's terminal environment, not raw kida defaults."""
+        check_templates = _load_check_templates_script()
+        (tmp_path / "ok.kida").write_text('{{ "ok" | bold }}', encoding="utf-8")
+
+        errors = check_templates._check_root(tmp_path, "tmp")
+
+        assert errors == []
+
+    def test_milo_aware_check_flags_unified_end_tags(self, tmp_path):
+        check_templates = _load_check_templates_script()
+        (tmp_path / "bad.kida").write_text("{% if value %}ok{% end %}", encoding="utf-8")
+
+        errors = check_templates._check_root(tmp_path, "tmp")
+
+        assert len(errors) == 1
+        assert "bad.kida:1" in errors[0]
+        assert "strict: unified {% end %} closes 'if'" in errors[0]
+        assert "prefer {% endif %}" in errors[0]
+
+    def test_milo_aware_check_flags_fragile_same_folder_imports(self, tmp_path):
+        check_templates = _load_check_templates_script()
+        components = tmp_path / "components"
+        components.mkdir()
+        (components / "_defs.kida").write_text("{% def item() %}x{% enddef %}", encoding="utf-8")
+        (components / "page.kida").write_text(
+            '{% from "components/_defs.kida" import item %}{{ item() }}',
+            encoding="utf-8",
+        )
+
+        errors = check_templates._check_root(tmp_path, "tmp")
+
+        assert len(errors) == 1
+        assert "components/page.kida:1" in errors[0]
+        assert "lint/fragile-path" in errors[0]
+        assert 'prefer "./_defs.kida"' in errors[0]

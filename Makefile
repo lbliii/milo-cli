@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov lint format ty bench docs-test ci clean build gh-release changelog changelog-draft
+.PHONY: all help setup install test test-cov lint format ty bench docs-test ci clean build release-status gh-release changelog changelog-draft
 
 all: help
 
@@ -24,6 +24,7 @@ help:
 	@echo "  make docs-test - verify templates and tagged docs snippets"
 	@echo "  make clean     - remove build artifacts"
 	@echo "  make build     - uv build"
+	@echo "  make release-status - verify release version/tag/changelog alignment"
 	@echo "  make changelog  - compile changelog.d/ fragments into CHANGELOG.md"
 	@echo "  make changelog-draft - preview changelog without writing"
 	@echo "  make gh-release - create GitHub release → triggers PyPI publish"
@@ -68,6 +69,9 @@ clean:
 build:
 	uv build
 
+release-status:
+	uv run python scripts/release_status.py --remote
+
 changelog:
 	uv run towncrier build --yes
 
@@ -77,6 +81,7 @@ changelog-draft:
 # Create GitHub release from site release notes; triggers python-publish workflow → PyPI
 # Strips YAML frontmatter (--- ... ---) from notes before passing to gh
 gh-release:
+	uv run python scripts/release_status.py --remote --pypi
 	@VERSION=$$(grep -m1 '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
 	PROJECT=$$(grep -m1 '^name = ' pyproject.toml | sed 's/name = "\(.*\)"/\1/'); \
 	NOTES="site/content/releases/$$VERSION.md"; \
