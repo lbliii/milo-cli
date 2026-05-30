@@ -3,7 +3,8 @@
 Four layers cover the common regression surface:
   1. Schema    — `function_to_schema(greet)` matches the function signature.
   2. Direct    — `cli.invoke([...])` returns the expected output.
-  3. MCP       — `_call_tool(cli, {...})` returns the expected response and,
+  3. MCP       — `_call_tool(cli, {...})` returns the expected response and
+                 `server/discover` exposes the MCP version contract.
                  on error, structured `errorData` with `argument` context.
   4. Verify    — `milo verify` passes against the scaffolded app.
 """
@@ -17,7 +18,7 @@ import pytest
 
 from app import cli, greet
 
-from milo.mcp import _call_tool, _list_tools
+from milo.mcp import _CLIHandler, _call_tool, _list_tools
 from milo.schema import function_to_schema
 from milo.verify import verify
 
@@ -52,6 +53,11 @@ class TestDirectDispatch:
 
 
 class TestMCPDispatch:
+    def test_server_discover_exposes_supported_version(self):
+        result = _CLIHandler(cli).server_discover({})
+        assert "2025-11-25" in result["supportedVersions"]
+        assert result["serverInfo"]["name"] == "{{name}}"
+
     def test_call_tool_returns_content(self):
         result = _call_tool(cli, {"name": "greet", "arguments": {"name": "Agent"}})
         assert result["content"][0]["text"] == "Hello, Agent!"

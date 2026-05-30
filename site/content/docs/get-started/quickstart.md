@@ -131,8 +131,8 @@ The generated tests cover four layers:
 |---|---|
 | Schema | `function_to_schema(greet)` matches the function signature |
 | Direct dispatch | `cli.invoke([...])` parses argv and returns the expected value |
-| MCP dispatch | `_call_tool(cli, {...})` returns content or structured `errorData` |
-| Verify | `milo verify app.py` passes import, schema, tools/list, and transport checks |
+| MCP dispatch | `_call_tool(cli, {...})` returns content, structured `errorData`, and discovery metadata |
+| Verify | `milo verify app.py` passes import, schema, tools/list, discovery, and transport checks |
 
 ## Verify for Agents
 
@@ -140,7 +140,7 @@ The generated tests cover four layers:
 uv run milo verify app.py
 ```
 
-A healthy scaffold reports six passing checks:
+A healthy scaffold reports seven passing checks:
 
 ```text
 ✓ imports: loaded app.py
@@ -148,7 +148,8 @@ A healthy scaffold reports six passing checks:
 ✓ commands_registered: 1 command(s) registered
 ✓ schemas_generate: 1 schema(s) generated; all params documented
 ✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
-✓ mcp_transport: subprocess handshake succeeded; 1 tool(s) over JSON-RPC
+✓ mcp_discover: server/discover advertises 2025-11-25
+✓ mcp_transport: subprocess discovery and handshake succeeded; 1 tool(s) over JSON-RPC
 ```
 
 Warnings tell you what to improve, such as missing parameter descriptions.

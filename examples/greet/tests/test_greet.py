@@ -3,7 +3,7 @@
 Copy this file alongside your own CLI to verify:
   1. The generated JSON Schema matches your function signature.
   2. Direct invocation (via `cli.invoke`) returns the expected result.
-  3. MCP dispatch (via `tools/call`) returns the expected response.
+  3. MCP dispatch and discovery return the expected agent-facing contract.
 
 Run:
     uv run pytest examples/greet/tests/
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import cli, greet  # type: ignore[import-not-found]
 
-from milo.mcp import _call_tool, _list_tools
+from milo.mcp import _CLIHandler, _call_tool, _list_tools
 from milo.schema import function_to_schema
 
 
@@ -62,6 +62,11 @@ class TestDirectDispatch:
 
 
 class TestMCPDispatch:
+    def test_server_discover_exposes_supported_version(self):
+        result = _CLIHandler(cli).server_discover({})
+        assert "2025-11-25" in result["supportedVersions"]
+        assert result["serverInfo"]["name"] == "greet"
+
     def test_call_tool_returns_content(self):
         result = _call_tool(cli, {"name": "greet", "arguments": {"name": "Agent"}})
         assert result["content"][0]["text"] == "Hello, Agent!"
