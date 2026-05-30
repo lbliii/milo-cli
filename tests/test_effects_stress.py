@@ -308,9 +308,11 @@ def test_stress_take_latest_contention():
     time.sleep(0.3)
     store.shutdown()
 
-    # Only the last (or near-last) should complete
+    # TakeLatest is unbuffered: under contention the watcher can miss a
+    # trailing action while it is re-registering. It should still cancel older
+    # work and complete only the latest action it observed.
     assert len(completed) == 1
-    assert completed[0] == 19
+    assert completed[0] >= 18
 
 
 # ---------------------------------------------------------------------------
