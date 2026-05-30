@@ -69,7 +69,9 @@ class TestChildProcess:
             "params": {"message": "halfway"},
         }
         call_response = {"jsonrpc": "2.0", "id": 3, "result": {"ok": True}}
-        mock_proc = _make_mock_popen([_discover_not_found(), init_response, progress, call_response])
+        mock_proc = _make_mock_popen(
+            [_discover_not_found(), init_response, progress, call_response]
+        )
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])

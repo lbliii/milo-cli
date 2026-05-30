@@ -490,9 +490,8 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
 
         discover_resp, init_resp, tools_resp = responses[0], responses[1], responses[2]
         discover_result = discover_resp.get("result", {})
-        if (
-            "result" not in discover_resp
-            or _MCP_PROTOCOL_VERSION not in discover_result.get("supportedVersions", [])
+        if "result" not in discover_resp or _MCP_PROTOCOL_VERSION not in discover_result.get(
+            "supportedVersions", []
         ):
             return VerifyCheck(
                 name="mcp_transport",
@@ -520,8 +519,7 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
             name="mcp_transport",
             status="ok",
             message=(
-                f"subprocess discovery and handshake succeeded; "
-                f"{tool_count} tool(s) over JSON-RPC"
+                f"subprocess discovery and handshake succeeded; {tool_count} tool(s) over JSON-RPC"
             ),
         )
     finally:
