@@ -29,6 +29,9 @@ class TestChildProcess:
         child = ChildProcess("test", ["python", "-m", "test"])
         assert child.name == "test"
         assert child._proc is None
+        assert child.protocol_mode == "unknown"
+        assert child.protocol_version is None
+        assert child.last_error == ""
 
     @patch("milo._child.subprocess.Popen")
     def test_ensure_alive_spawns(self, mock_popen_cls: MagicMock) -> None:
@@ -42,6 +45,8 @@ class TestChildProcess:
         mock_popen_cls.assert_called_once()
         assert child._proc is mock_proc
         assert child._initialized is True
+        assert child.protocol_mode == "legacy"
+        assert child.protocol_version == "2025-11-25"
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call(self, mock_popen_cls: MagicMock) -> None:
@@ -101,10 +106,29 @@ class TestChildProcess:
         result = child.send_call("tools/list", {})
 
         assert result == {"tools": []}
+        assert child.protocol_mode == "stateless"
+        assert child.protocol_version == "2026-07-28"
         written = [call.args[0] for call in mock_proc.stdin.write.call_args_list]
         request = json.loads(written[-1].strip())
         assert request["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] == "2026-07-28"
         assert "io.modelcontextprotocol/clientCapabilities" in request["params"]["_meta"]
+
+    @patch("milo._child.subprocess.Popen")
+    def test_send_call_records_child_error(self, mock_popen_cls: MagicMock) -> None:
+        init_response = {"jsonrpc": "2.0", "id": 2, "result": {"protocolVersion": "2025-11-25"}}
+        call_response = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "error": {"code": -32601, "message": "Unknown tool"},
+        }
+        mock_proc = _make_mock_popen([_discover_not_found(), init_response, call_response])
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["python", "-m", "test"])
+        result = child.send_call("tools/call", {"name": "missing"})
+
+        assert result["error"] == {"code": -32601, "message": "Unknown tool"}
+        assert child.last_error == "-32601: Unknown tool"
 
     def test_is_idle_initially_false(self) -> None:
         child = ChildProcess("test", ["cmd"], idle_timeout=300.0)

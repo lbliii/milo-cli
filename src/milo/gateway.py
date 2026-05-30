@@ -114,6 +114,7 @@ def _print_status() -> None:
                 child = ChildProcess(name, command, request_timeout=5.0)
                 try:
                     result = child.send_call("resources/read", {"uri": "milo://stats"})
+                    _write_child_protocol_status(child)
                     contents = result.get("contents", [])
                     if contents:
                         import json as _json
@@ -148,6 +149,14 @@ def _print_status() -> None:
                 child.kill()
 
         sys.stdout.write("\n")
+
+
+def _write_child_protocol_status(child: ChildProcess) -> None:
+    mode = child.protocol_mode
+    version = child.protocol_version or "unknown"
+    sys.stdout.write(f"    protocol: {mode} ({version})\n")
+    if child.last_error:
+        sys.stdout.write(f"    last_error: {child.last_error}\n")
 
 
 def _run_gateway() -> None:

@@ -44,7 +44,10 @@ class ChildProcess:
         self._last_use = time.monotonic()
         self._request_id = 0
         self._initialized = False
+        self._protocol_mode = "unknown"
         self._stateless_protocol_version: str | None = None
+        self._protocol_version: str | None = None
+        self._last_error = ""
 
     def _spawn(self) -> None:
         """Start the child process with persistent pipes."""
@@ -57,7 +60,10 @@ class ChildProcess:
             bufsize=1,  # line-buffered
         )
         self._initialized = False
+        self._protocol_mode = "unknown"
         self._stateless_protocol_version = None
+        self._protocol_version = None
+        self._last_error = ""
         self._request_id = 0
 
     def _ensure_initialized(self) -> None:
@@ -77,7 +83,14 @@ class ChildProcess:
         if self._try_stateless_from_discover(probe):
             return
 
-        self._send_request("initialize", {})
+        response = self._send_request("initialize", {})
+        result = response.get("result")
+        if isinstance(result, dict):
+            protocol_version = result.get("protocolVersion")
+            self._protocol_version = str(protocol_version) if protocol_version else MCP_VERSION
+        else:
+            self._protocol_version = MCP_VERSION
+        self._protocol_mode = "legacy"
         # Send notifications/initialized
         notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
         self._write_line(json.dumps(notif))
@@ -89,7 +102,7 @@ class ChildProcess:
             data = error.get("data", {})
             supported = data.get("supported", []) if isinstance(data, dict) else []
             if supported:
-                self._stateless_protocol_version = str(supported[0])
+                self._set_stateless_protocol(str(supported[0]))
                 self._initialized = True
                 return True
             return False
@@ -102,9 +115,29 @@ class ChildProcess:
             return False
         if MCP_VERSION in supported:
             return False
-        self._stateless_protocol_version = str(supported[0])
+        self._set_stateless_protocol(str(supported[0]))
         self._initialized = True
         return True
+
+    def _set_stateless_protocol(self, protocol_version: str) -> None:
+        self._protocol_mode = "stateless"
+        self._protocol_version = protocol_version
+        self._stateless_protocol_version = protocol_version
+
+    @property
+    def protocol_mode(self) -> str:
+        """Return the negotiated child protocol mode for diagnostics."""
+        return self._protocol_mode
+
+    @property
+    def protocol_version(self) -> str | None:
+        """Return the negotiated child protocol version, if known."""
+        return self._protocol_version
+
+    @property
+    def last_error(self) -> str:
+        """Return the last child JSON-RPC or transport error seen by the gateway."""
+        return self._last_error
 
     def ensure_alive(self) -> None:
         """Spawn or reconnect if the child process is dead."""
@@ -133,7 +166,9 @@ class ChildProcess:
             self._last_use = time.monotonic()
 
             if "error" in response:
+                self._record_error_response(response)
                 return response
+            self._last_error = ""
             return response.get("result", {})
 
     def _send_request(
@@ -154,6 +189,16 @@ class ChildProcess:
         self._write_line(json.dumps(request))
         effective_timeout = timeout if timeout is not None else self.request_timeout
         return self._read_response(req_id, timeout=effective_timeout)
+
+    def _record_error_response(self, response: dict[str, Any]) -> None:
+        error = response.get("error", {})
+        if isinstance(error, dict):
+            message = error.get("message")
+            code = error.get("code")
+            if message:
+                self._last_error = f"{code}: {message}" if code is not None else str(message)
+                return
+        self._last_error = "Unknown child error"
 
     def fetch_tools(self) -> list[dict[str, Any]]:
         """Fetch tools/list from the child process."""
