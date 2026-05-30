@@ -94,6 +94,16 @@ unsupported protocol version, Milo returns JSON-RPC error `-32004` with
 the supported versions instead of silently treating the request as
 2025-11-25.
 
+### Compatibility matrix
+
+| Scenario | Expected behavior |
+|---|---|
+| Legacy MCP client → Milo server | Client sends `initialize`, then `notifications/initialized`, then normal requests. Milo responds as MCP `2025-11-25`. |
+| Probe-first client → Milo server | Client sends `server/discover`. Milo returns `supportedVersions: ["2025-11-25"]`; the client can then use the legacy handshake. |
+| Client sends unsupported `_meta` protocol version | Milo returns JSON-RPC `-32004` with `data.supported` and `data.requested` repair fields. |
+| Milo gateway → legacy child CLI | Gateway probes `server/discover`, falls back to `initialize` on method-not-found, and records child protocol mode as `legacy`. |
+| Milo gateway → stateless-only child CLI | Gateway uses the discovered protocol version and includes per-request `_meta` on child calls. |
+
 The server handles these methods:
 
 ### server/discover
