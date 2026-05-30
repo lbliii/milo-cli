@@ -7,6 +7,9 @@ import sys
 from typing import Any
 
 MCP_VERSION = "2025-11-25"
+SUPPORTED_MCP_VERSIONS = (MCP_VERSION,)
+MCP_PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
+UNSUPPORTED_PROTOCOL_VERSION = -32004
 
 
 def _parse_request(line: str) -> tuple[Any, str, dict[str, Any], bool] | None:

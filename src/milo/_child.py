@@ -9,6 +9,16 @@ import threading
 import time
 from typing import Any
 
+from milo._jsonrpc import MCP_PROTOCOL_VERSION_META_KEY, MCP_VERSION, UNSUPPORTED_PROTOCOL_VERSION
+
+
+def _client_meta(protocol_version: str) -> dict[str, Any]:
+    return {
+        MCP_PROTOCOL_VERSION_META_KEY: protocol_version,
+        "io.modelcontextprotocol/clientInfo": {"name": "milo-gateway", "version": "unknown"},
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+
 
 class ChildProcess:
     """A persistent child process that speaks JSON-RPC on stdin/stdout.
@@ -34,6 +44,10 @@ class ChildProcess:
         self._last_use = time.monotonic()
         self._request_id = 0
         self._initialized = False
+        self._protocol_mode = "unknown"
+        self._stateless_protocol_version: str | None = None
+        self._protocol_version: str | None = None
+        self._last_error = ""
 
     def _spawn(self) -> None:
         """Start the child process with persistent pipes."""
@@ -46,24 +60,84 @@ class ChildProcess:
             bufsize=1,  # line-buffered
         )
         self._initialized = False
+        self._protocol_mode = "unknown"
+        self._stateless_protocol_version = None
+        self._protocol_version = None
+        self._last_error = ""
         self._request_id = 0
 
     def _ensure_initialized(self) -> None:
-        """Send initialize if not already done."""
+        """Negotiate enough protocol context for child calls.
+
+        Milo still speaks the initialization-based 2025-11-25 protocol, but
+        newer MCP revisions probe with ``server/discover`` and may omit
+        ``initialize`` entirely. The gateway can therefore talk to both eras.
+        """
         if self._initialized:
             return
-        self._request_id += 1
-        req = {
-            "jsonrpc": "2.0",
-            "id": self._request_id,
-            "method": "initialize",
-        }
-        self._write_line(json.dumps(req))
-        self._read_response(self._request_id)  # consume initialize response
+
+        probe = self._send_request(
+            "server/discover",
+            {"_meta": _client_meta(MCP_VERSION)},
+        )
+        if self._try_stateless_from_discover(probe):
+            return
+
+        response = self._send_request("initialize", {})
+        result = response.get("result")
+        if isinstance(result, dict):
+            protocol_version = result.get("protocolVersion")
+            self._protocol_version = str(protocol_version) if protocol_version else MCP_VERSION
+        else:
+            self._protocol_version = MCP_VERSION
+        self._protocol_mode = "legacy"
         # Send notifications/initialized
         notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
         self._write_line(json.dumps(notif))
         self._initialized = True
+
+    def _try_stateless_from_discover(self, response: dict[str, Any]) -> bool:
+        error = response.get("error")
+        if isinstance(error, dict) and error.get("code") == UNSUPPORTED_PROTOCOL_VERSION:
+            data = error.get("data", {})
+            supported = data.get("supported", []) if isinstance(data, dict) else []
+            if supported:
+                self._set_stateless_protocol(str(supported[0]))
+                self._initialized = True
+                return True
+            return False
+
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return False
+        supported = result.get("supportedVersions")
+        if not isinstance(supported, list) or not supported:
+            return False
+        if MCP_VERSION in supported:
+            return False
+        self._set_stateless_protocol(str(supported[0]))
+        self._initialized = True
+        return True
+
+    def _set_stateless_protocol(self, protocol_version: str) -> None:
+        self._protocol_mode = "stateless"
+        self._protocol_version = protocol_version
+        self._stateless_protocol_version = protocol_version
+
+    @property
+    def protocol_mode(self) -> str:
+        """Return the negotiated child protocol mode for diagnostics."""
+        return self._protocol_mode
+
+    @property
+    def protocol_version(self) -> str | None:
+        """Return the negotiated child protocol version, if known."""
+        return self._protocol_version
+
+    @property
+    def last_error(self) -> str:
+        """Return the last child JSON-RPC or transport error seen by the gateway."""
+        return self._last_error
 
     def ensure_alive(self) -> None:
         """Spawn or reconnect if the child process is dead."""
@@ -84,22 +158,47 @@ class ChildProcess:
                 self._spawn()
                 self._ensure_initialized()
 
-            self._request_id += 1
-            req_id = self._request_id
-            request = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "method": method,
-                "params": params,
-            }
-            self._write_line(json.dumps(request))
-            effective_timeout = timeout if timeout is not None else self.request_timeout
-            response = self._read_response(req_id, timeout=effective_timeout)
+            request_params = params
+            if self._stateless_protocol_version is not None:
+                request_params = dict(params)
+                request_params.setdefault("_meta", _client_meta(self._stateless_protocol_version))
+            response = self._send_request(method, request_params, timeout=timeout)
             self._last_use = time.monotonic()
 
             if "error" in response:
+                self._record_error_response(response)
                 return response
+            self._last_error = ""
             return response.get("result", {})
+
+    def _send_request(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        self._request_id += 1
+        req_id = self._request_id
+        request = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+            "params": params,
+        }
+        self._write_line(json.dumps(request))
+        effective_timeout = timeout if timeout is not None else self.request_timeout
+        return self._read_response(req_id, timeout=effective_timeout)
+
+    def _record_error_response(self, response: dict[str, Any]) -> None:
+        error = response.get("error", {})
+        if isinstance(error, dict):
+            message = error.get("message")
+            code = error.get("code")
+            if message:
+                self._last_error = f"{code}: {message}" if code is not None else str(message)
+                return
+        self._last_error = "Unknown child error"
 
     def fetch_tools(self) -> list[dict[str, Any]]:
         """Fetch tools/list from the child process."""

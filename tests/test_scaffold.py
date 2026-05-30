@@ -100,7 +100,7 @@ class TestScaffoldRoundtrip:
         assert result.returncode == 0, (
             f"Scaffolded tests failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
-        assert "8 passed" in result.stdout
+        assert "9 passed" in result.stdout
 
 
 class TestMiloNewCommand:

@@ -10,14 +10,27 @@ from typing import TYPE_CHECKING, Any
 
 from milo import __version__ as _server_version
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
+from milo._jsonrpc import SUPPORTED_MCP_VERSIONS as _SUPPORTED_MCP_VERSIONS
 from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_notification, _write_result
-from milo._mcp_router import MethodNotFoundError, dispatch
+from milo._mcp_router import MethodNotFoundError, UnsupportedProtocolVersionError, dispatch
 from milo.observability import RequestLogger, log_request, new_correlation_id
 
 if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef
 
 _SERVER_NAME = "milo"
+
+
+def _server_capabilities() -> dict[str, Any]:
+    return {"tools": {}, "resources": {}, "prompts": {}}
+
+
+def _server_info(cli: CLI) -> dict[str, Any]:
+    return {
+        "name": cli.name or _SERVER_NAME,
+        "version": cli.version or _server_version,
+        "title": cli.description,
+    }
 
 
 def _to_text(result: Any) -> str:
@@ -37,12 +50,16 @@ class _CLIHandler:
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         return {
             "protocolVersion": _MCP_VERSION,
-            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-            "serverInfo": {
-                "name": self._cli.name or _SERVER_NAME,
-                "version": self._cli.version or _server_version,
-                "title": self._cli.description,
-            },
+            "capabilities": _server_capabilities(),
+            "serverInfo": _server_info(self._cli),
+            "instructions": self._cli.description,
+        }
+
+    def server_discover(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "supportedVersions": list(_SUPPORTED_MCP_VERSIONS),
+            "capabilities": _server_capabilities(),
+            "serverInfo": _server_info(self._cli),
             "instructions": self._cli.description,
         }
 
@@ -204,6 +221,13 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
 
     if isinstance(exc, MethodNotFoundError):
         return -32601, {"type": type(exc).__name__}
+
+    if isinstance(exc, UnsupportedProtocolVersionError):
+        return exc.code, {
+            "type": type(exc).__name__,
+            "supported": exc.supported,
+            "requested": exc.requested,
+        }
 
     # Unknown exceptions -> Internal error with traceback
     return -32603, {

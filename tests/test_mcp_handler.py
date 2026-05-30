@@ -304,6 +304,14 @@ class TestCLIHandler:
         assert result["serverInfo"]["name"] == "testapp"
         assert result["serverInfo"]["version"] == "1.0.0"
 
+    def test_server_discover(self) -> None:
+        cli = _make_cli()
+        handler = _CLIHandler(cli)
+        result = handler.server_discover({})
+        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["serverInfo"]["name"] == "testapp"
+        assert result["capabilities"]["tools"] == {}
+
     def test_list_tools(self) -> None:
         cli = _make_cli()
         handler = _CLIHandler(cli)

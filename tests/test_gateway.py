@@ -350,6 +350,13 @@ class TestGatewayHandler:
         assert result["serverInfo"]["name"] == "milo-gateway"
         assert "taskman" in result["instructions"]
 
+    def test_server_discover(self):
+        handler, _ = self._make_handler()
+        result = handler.server_discover({})
+        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["serverInfo"]["name"] == "milo-gateway"
+        assert "taskman" in result["instructions"]
+
     def test_list_tools(self):
         handler, _ = self._make_handler()
         result = handler.list_tools({})
@@ -543,3 +550,28 @@ class TestPrintStatus:
             _print_status()
         captured = capsys.readouterr()
         assert "placeholder" not in captured.out.lower()
+
+    def test_shows_child_protocol_status(self, capsys):
+        """Status output includes negotiated child protocol mode and version."""
+        clis = {
+            "myapp": {
+                "version": "0.1",
+                "description": "Test",
+                "command": ["myapp", "--mcp"],
+            }
+        }
+        child = MagicMock()
+        child.protocol_mode = "stateless"
+        child.protocol_version = "2026-07-28"
+        child.last_error = ""
+        child.send_call.return_value = {"contents": []}
+
+        with (
+            patch("milo.gateway.list_clis", return_value=clis),
+            patch("milo.gateway.ChildProcess", return_value=child),
+        ):
+            _print_status()
+
+        captured = capsys.readouterr()
+        assert "protocol: stateless (2026-07-28)" in captured.out
+        child.kill.assert_called_once()

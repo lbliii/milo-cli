@@ -133,7 +133,7 @@ Before registering with Claude (or any time you break something), run:
 uv run milo verify my_cli/app.py
 ```
 
-All six checks should pass:
+All seven checks should pass:
 
 ```
 ✓ imports: loaded app.py
@@ -141,7 +141,8 @@ All six checks should pass:
 ✓ commands_registered: 1 command(s) registered
 ✓ schemas_generate: 1 schema(s) generated; all params documented
 ✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
-✓ mcp_transport: subprocess handshake succeeded; 1 tool(s) over JSON-RPC
+✓ mcp_discover: server/discover advertises 2025-11-25
+✓ mcp_transport: subprocess discovery and handshake succeeded; 1 tool(s) over JSON-RPC
 ```
 
 A `⚠ schemas_generate` row listing `parameter 'X' has no description` means a
@@ -160,6 +161,7 @@ A `✗` row is a failure — read the details and fix before continuing.
 | `print()` breaks the protocol | MCP uses stdout for JSON-RPC; any other stdout write corrupts the stream | Use the provided `Context` (`ctx.info`, `ctx.error`) or write to stderr. |
 | Schema is missing a parameter | Parameter is typed as `Context` (or named `ctx`) | Correct — these are injected at dispatch time and intentionally excluded from the schema. See `function_to_schema` in `src/milo/schema.py`. |
 | Non-serializable return type | Return value can't be JSON-encoded | Return `dict`, `list`, `str`, `int`, `float`, `bool`, `None`, or a `@dataclass`. |
+| Client gets JSON-RPC `-32004` | The request declared an unsupported MCP protocol version in `_meta` | Retry with one of `error.data.supported`, or use the legacy `initialize` handshake for `2025-11-25`. |
 
 ## Error data contract (important for agents)
 
