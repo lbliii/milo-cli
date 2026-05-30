@@ -13,6 +13,7 @@ class TestDispatch:
     def _make_handler(self):
         handler = MagicMock()
         handler.initialize.return_value = {"protocolVersion": "2025-11-25"}
+        handler.server_discover.return_value = {"supportedVersions": ["2025-11-25"]}
         handler.list_tools.return_value = {"tools": []}
         handler.call_tool.return_value = {"content": []}
         handler.list_resources.return_value = {"resources": []}
@@ -34,6 +35,20 @@ class TestDispatch:
         result = dispatch(handler, "tools/list", params)
         handler.list_tools.assert_called_once_with(params)
         assert result == {"tools": []}
+
+    def test_server_discover(self):
+        handler = self._make_handler()
+        params = {}
+        result = dispatch(handler, "server/discover", params)
+        handler.server_discover.assert_called_once_with(params)
+        assert result == {"supportedVersions": ["2025-11-25"]}
+
+    def test_explicit_unsupported_protocol_version(self):
+        handler = self._make_handler()
+        params = {"_meta": {"io.modelcontextprotocol/protocolVersion": "1900-01-01"}}
+        with pytest.raises(ValueError, match="Unsupported protocol version"):
+            dispatch(handler, "tools/list", params)
+        handler.list_tools.assert_not_called()
 
     def test_tools_call(self):
         handler = self._make_handler()

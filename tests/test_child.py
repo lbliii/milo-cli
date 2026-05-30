@@ -20,6 +20,10 @@ def _make_mock_popen(responses: list[dict]) -> MagicMock:
     return mock
 
 
+def _discover_not_found() -> dict:
+    return {"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}}
+
+
 class TestChildProcess:
     def test_init(self) -> None:
         child = ChildProcess("test", ["python", "-m", "test"])
@@ -28,8 +32,8 @@ class TestChildProcess:
 
     @patch("milo._child.subprocess.Popen")
     def test_ensure_alive_spawns(self, mock_popen_cls: MagicMock) -> None:
-        init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
-        mock_proc = _make_mock_popen([init_response])
+        init_response = {"jsonrpc": "2.0", "id": 2, "result": {"protocolVersion": "2025-11-25"}}
+        mock_proc = _make_mock_popen([_discover_not_found(), init_response])
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])
@@ -41,9 +45,9 @@ class TestChildProcess:
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call(self, mock_popen_cls: MagicMock) -> None:
-        init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
-        call_response = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "greet"}]}}
-        mock_proc = _make_mock_popen([init_response, call_response])
+        init_response = {"jsonrpc": "2.0", "id": 2, "result": {"protocolVersion": "2025-11-25"}}
+        call_response = {"jsonrpc": "2.0", "id": 3, "result": {"tools": [{"name": "greet"}]}}
+        mock_proc = _make_mock_popen([_discover_not_found(), init_response, call_response])
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])
@@ -53,14 +57,14 @@ class TestChildProcess:
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call_skips_progress_notifications(self, mock_popen_cls: MagicMock) -> None:
-        init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
+        init_response = {"jsonrpc": "2.0", "id": 2, "result": {"protocolVersion": "2025-11-25"}}
         progress = {
             "jsonrpc": "2.0",
             "method": "notifications/progress",
             "params": {"message": "halfway"},
         }
-        call_response = {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
-        mock_proc = _make_mock_popen([init_response, progress, call_response])
+        call_response = {"jsonrpc": "2.0", "id": 3, "result": {"ok": True}}
+        mock_proc = _make_mock_popen([_discover_not_found(), init_response, progress, call_response])
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])
@@ -70,15 +74,37 @@ class TestChildProcess:
 
     @patch("milo._child.subprocess.Popen")
     def test_fetch_tools(self, mock_popen_cls: MagicMock) -> None:
-        init_response = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
-        tools_response = {"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "add"}]}}
-        mock_proc = _make_mock_popen([init_response, tools_response])
+        init_response = {"jsonrpc": "2.0", "id": 2, "result": {"protocolVersion": "2025-11-25"}}
+        tools_response = {"jsonrpc": "2.0", "id": 3, "result": {"tools": [{"name": "add"}]}}
+        mock_proc = _make_mock_popen([_discover_not_found(), init_response, tools_response])
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])
         tools = child.fetch_tools()
 
         assert tools == [{"name": "add"}]
+
+    @patch("milo._child.subprocess.Popen")
+    def test_send_call_to_stateless_child_includes_request_meta(
+        self, mock_popen_cls: MagicMock
+    ) -> None:
+        discover_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"supportedVersions": ["2026-07-28"]},
+        }
+        call_response = {"jsonrpc": "2.0", "id": 2, "result": {"tools": []}}
+        mock_proc = _make_mock_popen([discover_response, call_response])
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["python", "-m", "test"])
+        result = child.send_call("tools/list", {})
+
+        assert result == {"tools": []}
+        written = [call.args[0] for call in mock_proc.stdin.write.call_args_list]
+        request = json.loads(written[-1].strip())
+        assert request["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] == "2026-07-28"
+        assert "io.modelcontextprotocol/clientCapabilities" in request["params"]["_meta"]
 
     def test_is_idle_initially_false(self) -> None:
         child = ChildProcess("test", ["cmd"], idle_timeout=300.0)
@@ -94,8 +120,12 @@ class TestChildProcess:
         mock_proc.poll.return_value = None
         mock_proc.stdin = MagicMock()
         mock_proc.stdout = MagicMock()
-        init_response = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_response) + "\n")
+        discover_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"supportedVersions": ["2026-07-28"]},
+        }
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(discover_response) + "\n")
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["cmd"])
@@ -107,11 +137,11 @@ class TestChildProcess:
 
     @patch("milo._child.subprocess.Popen")
     def test_auto_reconnect_on_dead_process(self, mock_popen_cls: MagicMock) -> None:
-        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        call_resp = {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
+        init_resp = {"jsonrpc": "2.0", "id": 2, "result": {}}
+        call_resp = {"jsonrpc": "2.0", "id": 3, "result": {"ok": True}}
 
-        mock_proc1 = _make_mock_popen([init_resp])
-        mock_proc2 = _make_mock_popen([init_resp, call_resp])
+        mock_proc1 = _make_mock_popen([_discover_not_found(), init_resp])
+        mock_proc2 = _make_mock_popen([_discover_not_found(), init_resp, call_resp])
 
         mock_popen_cls.side_effect = [mock_proc1, mock_proc2]
 
@@ -138,9 +168,9 @@ class TestRequestTimeout:
     @patch("milo._child.subprocess.Popen")
     def test_per_call_timeout_override(self, mock_popen_cls: MagicMock) -> None:
         """Per-call timeout is passed through to _read_line."""
-        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        call_resp = {"jsonrpc": "2.0", "id": 2, "result": {"ok": True}}
-        mock_proc = _make_mock_popen([init_resp, call_resp])
+        init_resp = {"jsonrpc": "2.0", "id": 2, "result": {}}
+        call_resp = {"jsonrpc": "2.0", "id": 3, "result": {"ok": True}}
+        mock_proc = _make_mock_popen([_discover_not_found(), init_resp, call_resp])
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["cmd"], request_timeout=30.0)
@@ -157,8 +187,12 @@ class TestGracefulKill:
         mock_proc.poll.return_value = None
         mock_proc.stdin = MagicMock()
         mock_proc.stdout = MagicMock()
-        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        discover_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"supportedVersions": ["2026-07-28"]},
+        }
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(discover_response) + "\n")
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["cmd"])
@@ -180,8 +214,12 @@ class TestGracefulKill:
         mock_proc.poll.return_value = None
         mock_proc.stdin = MagicMock()
         mock_proc.stdout = MagicMock()
-        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        discover_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"supportedVersions": ["2026-07-28"]},
+        }
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(discover_response) + "\n")
         # Simulate: terminate works but wait times out
         mock_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=5)
         mock_popen_cls.return_value = mock_proc
@@ -201,8 +239,12 @@ class TestGracefulKill:
         mock_proc.poll.return_value = None
         mock_proc.stdin = MagicMock()
         mock_proc.stdout = MagicMock()
-        init_resp = {"jsonrpc": "2.0", "id": 1, "result": {}}
-        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(init_resp) + "\n")
+        discover_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"supportedVersions": ["2026-07-28"]},
+        }
+        mock_proc.stdout.readline = MagicMock(return_value=json.dumps(discover_response) + "\n")
         mock_proc.terminate.side_effect = ProcessLookupError
         mock_popen_cls.return_value = mock_proc
 

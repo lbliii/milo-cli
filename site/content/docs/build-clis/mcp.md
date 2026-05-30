@@ -83,7 +83,40 @@ Press Ctrl+C to stop.
 
 ## Protocol support
 
-Milo implements the MCP 2025-11-25 specification. The server handles these methods:
+Milo implements the MCP 2025-11-25 specification and keeps the
+initialization handshake for current clients. It also exposes
+`server/discover` so clients preparing for stateless MCP revisions can
+detect the supported protocol version before deciding whether to use the
+legacy handshake.
+
+When a request includes explicit per-request MCP metadata with an
+unsupported protocol version, Milo returns JSON-RPC error `-32004` with
+the supported versions instead of silently treating the request as
+2025-11-25.
+
+The server handles these methods:
+
+### server/discover
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "server/discover"}
+```
+
+Returns supported protocol versions, server info, capabilities, and
+instructions:
+
+```json
+{
+  "supportedVersions": ["2025-11-25"],
+  "capabilities": {"tools": {}},
+  "serverInfo": {
+    "name": "myapp",
+    "version": "1.0.0",
+    "title": "My CLI application"
+  },
+  "instructions": "My CLI application"
+}
+```
 
 ### initialize
 

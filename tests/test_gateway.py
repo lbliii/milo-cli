@@ -350,6 +350,13 @@ class TestGatewayHandler:
         assert result["serverInfo"]["name"] == "milo-gateway"
         assert "taskman" in result["instructions"]
 
+    def test_server_discover(self):
+        handler, _ = self._make_handler()
+        result = handler.server_discover({})
+        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["serverInfo"]["name"] == "milo-gateway"
+        assert "taskman" in result["instructions"]
+
     def test_list_tools(self):
         handler, _ = self._make_handler()
         result = handler.list_tools({})

@@ -279,6 +279,12 @@ class TestMCP:
         assert result["protocolVersion"] == "2025-11-25"
         assert result["capabilities"]["tools"] == {}
 
+    def test_server_discover(self):
+        cli = self._make_cli()
+        result = _mcp_dispatch(_CLIHandler(cli), "server/discover", {})
+        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["capabilities"]["tools"] == {}
+
     def test_list_tools(self):
         cli = self._make_cli()
         tools = _list_tools(cli)
@@ -493,6 +499,14 @@ class TestMCPExtended:
         assert result["serverInfo"]["title"] == "Test CLI"
         assert result["instructions"] == "Test CLI"
 
+    def test_server_discover_includes_server_info(self):
+        cli = self._make_cli()
+        result = _mcp_dispatch(_CLIHandler(cli), "server/discover", {})
+        assert result["serverInfo"]["name"] == "test"
+        assert result["serverInfo"]["version"] == "1.0"
+        assert result["serverInfo"]["title"] == "Test CLI"
+        assert result["instructions"] == "Test CLI"
+
     def test_mcp_banner(self):
         """run_mcp_server writes banner to stderr."""
         cli = self._make_cli()
@@ -642,6 +656,15 @@ class TestGateway:
         handler = _GatewayHandler({}, state, {})
         result = _mcp_dispatch(handler, "tools/list", {})
         assert result["tools"] == tools
+
+    def test_handle_method_server_discover(self):
+        from milo.gateway import GatewayState, _GatewayHandler
+
+        state = GatewayState([], {}, [], {}, [], {})
+        handler = _GatewayHandler({}, state, {})
+        result = _mcp_dispatch(handler, "server/discover", {})
+        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["serverInfo"]["name"] == "milo-gateway"
 
     def test_handle_method_notifications_initialized(self):
         from milo.gateway import GatewayState, _GatewayHandler

@@ -27,11 +27,24 @@ from typing import Any
 from milo import __version__ as _server_version
 from milo._child import ChildProcess
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
+from milo._jsonrpc import SUPPORTED_MCP_VERSIONS as _SUPPORTED_MCP_VERSIONS
 from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_result
-from milo._mcp_router import MethodNotFoundError, dispatch
+from milo._mcp_router import MethodNotFoundError, UnsupportedProtocolVersionError, dispatch
 from milo.registry import list_clis
 
 _logger = logging.getLogger("milo.gateway")
+
+
+def _gateway_capabilities() -> dict[str, Any]:
+    return {"tools": {}, "resources": {}, "prompts": {}}
+
+
+def _gateway_server_info() -> dict[str, Any]:
+    return {
+        "name": "milo-gateway",
+        "version": _server_version,
+        "title": "Milo Gateway",
+    }
 
 
 def main() -> None:
@@ -190,8 +203,8 @@ def _run_gateway() -> None:
             except Exception as e:
                 if is_notification:
                     continue  # silent: JSON-RPC notifications do not receive responses
-                code = -32601 if isinstance(e, MethodNotFoundError) else -32603
-                _write_error(req_id, code, str(e))
+                code, data = _classify_gateway_exception(e)
+                _write_error(req_id, code, str(e), data=data)
     finally:
         # Clean up children on exit
         for child in children.values():
@@ -206,6 +219,18 @@ def _idle_reaper(children: dict[str, ChildProcess]) -> None:
             if child.is_idle():
                 _stderr(f"  Reaping idle child: {child.name}")
                 child.kill()
+
+
+def _classify_gateway_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
+    if isinstance(exc, MethodNotFoundError):
+        return -32601, {"type": type(exc).__name__}
+    if isinstance(exc, UnsupportedProtocolVersionError):
+        return exc.code, {
+            "type": type(exc).__name__,
+            "supported": exc.supported,
+            "requested": exc.requested,
+        }
+    return -32603, {"type": type(exc).__name__}
 
 
 @dataclass
@@ -335,20 +360,27 @@ class _GatewayHandler:
         self._children = children
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
-        cli_names = list(self._clis.keys())
         return {
             "protocolVersion": _MCP_VERSION,
-            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-            "serverInfo": {
-                "name": "milo-gateway",
-                "version": _server_version,
-                "title": "Milo Gateway",
-            },
-            "instructions": (
-                f"Gateway to {len(self._clis)} milo CLIs: {', '.join(cli_names)}. "
-                "Tools are namespaced as cli_name.command_name."
-            ),
+            "capabilities": _gateway_capabilities(),
+            "serverInfo": _gateway_server_info(),
+            "instructions": self._instructions(),
         }
+
+    def server_discover(self, params: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "supportedVersions": list(_SUPPORTED_MCP_VERSIONS),
+            "capabilities": _gateway_capabilities(),
+            "serverInfo": _gateway_server_info(),
+            "instructions": self._instructions(),
+        }
+
+    def _instructions(self) -> str:
+        cli_names = list(self._clis.keys())
+        return (
+            f"Gateway to {len(self._clis)} milo CLIs: {', '.join(cli_names)}. "
+            "Tools are namespaced as cli_name.command_name."
+        )
 
     def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
         return {"tools": self._state.tools}
