@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Any
 
-from milo._jsonrpc import MCP_PROTOCOL_VERSION_META_KEY, MCP_VERSION
+from milo._jsonrpc import MCP_PROTOCOL_VERSION_META_KEY, MCP_VERSION, UNSUPPORTED_PROTOCOL_VERSION
 
 
 def _client_meta(protocol_version: str) -> dict[str, Any]:
@@ -98,7 +98,7 @@ class ChildProcess:
 
     def _try_stateless_from_discover(self, response: dict[str, Any]) -> bool:
         error = response.get("error")
-        if isinstance(error, dict) and error.get("code") == -32004:
+        if isinstance(error, dict) and error.get("code") == UNSUPPORTED_PROTOCOL_VERSION:
             data = error.get("data", {})
             supported = data.get("supported", []) if isinstance(data, dict) else []
             if supported:
