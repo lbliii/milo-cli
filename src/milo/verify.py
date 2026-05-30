@@ -1,6 +1,6 @@
 """Self-diagnosis for agent-built milo CLIs (`milo verify`).
 
-Answers "is this CLI correctly built?" via six checks:
+Answers "is this CLI correctly built?" via seven checks:
 
 1. **Imports** — the file (or module) loads without error.
 2. **CLI located** — a ``milo.CLI`` instance is reachable in the module.
@@ -9,9 +9,12 @@ Answers "is this CLI correctly built?" via six checks:
    missing docstring ``Args:`` sections surface as warnings.
 5. **In-process MCP list** — ``_list_tools(cli)`` returns a well-formed list
    with one entry per command.
-6. **Subprocess MCP transport** — running ``python <file> --mcp`` responds to
-   ``initialize`` and ``tools/list`` over JSON-RPC. (Skipped for module:attr
-   inputs since there's no standalone entry point.)
+6. **MCP discovery** — ``server/discover`` reports the supported protocol
+   versions, capabilities, and server info used by stateless MCP clients.
+7. **Subprocess MCP transport** — running ``python <file> --mcp`` responds to
+   ``server/discover``, then the legacy ``initialize`` handshake, and
+   ``tools/list`` over JSON-RPC. (Skipped for module:attr inputs since there's
+   no standalone entry point.)
 
 The report distinguishes pass/warn/fail; `milo verify` exits non-zero only on
 failures, not warnings.
@@ -29,12 +32,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from milo._jsonrpc import MCP_VERSION as _MCP_PROTOCOL_VERSION
+
 if TYPE_CHECKING:
     from types import ModuleType
 
     from milo.commands import CLI
 
-_MCP_PROTOCOL_VERSION = "2025-06-18"
 _ICONS = {"ok": "✓", "warn": "⚠", "fail": "✗", "skip": "∙"}
 
 
@@ -156,7 +160,10 @@ def verify(target: str, *, timeout: float = 5.0) -> VerifyReport:
     expected_visible = sum(1 for _, cmd in command_list if not getattr(cmd, "hidden", False))
     checks.append(_check_in_process_mcp(cli, expected_visible))
 
-    # --- Check 6: subprocess MCP transport ---
+    # --- Check 6: MCP discovery ---
+    checks.append(_check_mcp_discovery(cli))
+
+    # --- Check 7: subprocess MCP transport ---
     if file_path is None:
         checks.append(
             VerifyCheck(
@@ -388,8 +395,51 @@ def _check_in_process_mcp(cli: CLI, expected_count: int) -> VerifyCheck:
     )
 
 
+def _check_mcp_discovery(cli: CLI) -> VerifyCheck:
+    """Verify ``server/discover`` advertises the active MCP contract."""
+    from milo.mcp import _CLIHandler
+
+    try:
+        result = _CLIHandler(cli).server_discover({})
+    except Exception as e:
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message=f"server/discover raised: {type(e).__name__}: {e}",
+        )
+
+    supported = result.get("supportedVersions")
+    if not isinstance(supported, list) or _MCP_PROTOCOL_VERSION not in supported:
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message="server/discover missing active protocol version",
+            details=json.dumps(result)[:300],
+        )
+    if not isinstance(result.get("capabilities"), dict):
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message="server/discover missing capabilities object",
+            details=json.dumps(result)[:300],
+        )
+    server_info = result.get("serverInfo")
+    if not isinstance(server_info, dict) or not server_info.get("name"):
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message="server/discover missing serverInfo.name",
+            details=json.dumps(result)[:300],
+        )
+    return VerifyCheck(
+        name="mcp_discover",
+        status="ok",
+        message=f"server/discover advertises {_MCP_PROTOCOL_VERSION}",
+    )
+
+
 def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
-    """Start `python <path> --mcp`, handshake, verify tools/list response."""
+    """Start `python <path> --mcp`, discover, handshake, verify tools/list."""
     proc = subprocess.Popen(
         [sys.executable, str(path), "--mcp"],
         stdin=subprocess.PIPE,
@@ -400,13 +450,14 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
     )
     try:
         requests = [
+            {"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": 2,
                 "method": "initialize",
                 "params": {"protocolVersion": _MCP_PROTOCOL_VERSION, "capabilities": {}},
             },
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/list"},
         ]
         payload = "\n".join(json.dumps(r) for r in requests) + "\n"
         try:
@@ -429,15 +480,26 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
             with contextlib.suppress(json.JSONDecodeError):
                 responses.append(json.loads(line))
 
-        if len(responses) < 2:
+        if len(responses) < 3:
             return VerifyCheck(
                 name="mcp_transport",
                 status="fail",
-                message=f"expected 2 JSON-RPC responses, got {len(responses)}",
+                message=f"expected 3 JSON-RPC responses, got {len(responses)}",
                 details=(stderr or "no stderr").strip()[:500],
             )
 
-        init_resp, tools_resp = responses[0], responses[1]
+        discover_resp, init_resp, tools_resp = responses[0], responses[1], responses[2]
+        discover_result = discover_resp.get("result", {})
+        if (
+            "result" not in discover_resp
+            or _MCP_PROTOCOL_VERSION not in discover_result.get("supportedVersions", [])
+        ):
+            return VerifyCheck(
+                name="mcp_transport",
+                status="fail",
+                message="server/discover response missing active protocol version",
+                details=json.dumps(discover_resp)[:300],
+            )
         if "result" not in init_resp or "protocolVersion" not in init_resp.get("result", {}):
             return VerifyCheck(
                 name="mcp_transport",
@@ -457,7 +519,10 @@ def _check_subprocess_mcp(path: Path, *, timeout: float) -> VerifyCheck:
         return VerifyCheck(
             name="mcp_transport",
             status="ok",
-            message=f"subprocess handshake succeeded; {tool_count} tool(s) over JSON-RPC",
+            message=(
+                f"subprocess discovery and handshake succeeded; "
+                f"{tool_count} tool(s) over JSON-RPC"
+            ),
         )
     finally:
         if proc.poll() is None:
