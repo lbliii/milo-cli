@@ -96,6 +96,10 @@ Constructor fields:
 | `M-CMD-002` | `CMD_AMBIGUOUS` | Command resolution was ambiguous |
 | `M-CMD-003` | `CMD_HOOK` | A before-command hook failed |
 | `M-CMD-004` | `CMD_IMPORT` | A lazy command module or attribute failed to import |
+| `M-UI-001` | `UI_INVALID_RESOURCE` | A UI resource URI or returned content is invalid |
+| `M-UI-002` | `UI_RESOURCE_NOT_FOUND` | A linked or requested `ui://` resource is missing |
+| `M-UI-003` | `UI_UNSUPPORTED` | MCP Apps support was not negotiated for the connection |
+| `M-UI-004` | `UI_RESOURCE_READ` | A UI resource handler failed while producing content |
 
 ## Terminal Formatting
 

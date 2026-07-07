@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from milo import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE, MCPAppToolMeta
 from milo.commands import CLI
 from milo.testing._mcp import CallResult, MCPClient, ToolInfo
 
@@ -55,6 +56,7 @@ class TestToolInfo:
         )
         assert info.name == "greet"
         assert info.output_schema == {"type": "string"}
+        assert info.meta is None
 
 
 class TestCallResult:
@@ -87,6 +89,38 @@ class TestMCPClient:
         for t in tools:
             assert isinstance(t, ToolInfo)
             assert isinstance(t.input_schema, dict)
+
+    def test_list_tools_respects_mcp_apps_negotiation(self) -> None:
+        cli = CLI(name="ui-test")
+
+        @cli.ui_resource("ui://ui-test/view")
+        def view() -> str:
+            return "<!doctype html><html></html>"
+
+        @cli.command("show", ui=MCPAppToolMeta("ui://ui-test/view"))
+        def show() -> str:
+            return "fallback"
+
+        client = MCPClient(cli)
+        assert client.list_tools()[0].meta is None
+
+        client.initialize(
+            {
+                "capabilities": {
+                    "extensions": {
+                        MCP_APPS_EXTENSION_ID: {
+                            "mimeTypes": [MCP_APPS_MIME_TYPE],
+                        }
+                    }
+                }
+            }
+        )
+        assert client.list_tools()[0].meta == {
+            "ui": {
+                "resourceUri": "ui://ui-test/view",
+                "visibility": ["model", "app"],
+            }
+        }
 
     def test_call_success(self, cli: CLI) -> None:
         client = MCPClient(cli)

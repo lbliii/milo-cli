@@ -8,6 +8,7 @@ These examples are copy paths, not side demos. Every example directory has a run
 |---|---|---|
 | The smallest typed CLI | [greet](greet) | One command, tests for schema, CLI dispatch, llms.txt, and MCP dispatch |
 | A human CLI that is also an MCP tool | [deploy](deploy) | Typed constraints, destructive tool annotations, progress, resources, prompts, and interactive confirmation |
+| A tool with an optional MCP Apps view | [mcp_app](mcp_app) | Stable `ui://` resource, nested tool metadata, and structured fallback |
 | An agent-readable task CLI | [taskman](taskman) | Commands plus MCP resources over application state |
 | Polished terminal output patterns | [outputgallery](outputgallery) | Human summaries, CI-safe output, JSON mode, and Kida output primitives |
 
@@ -25,7 +26,7 @@ uv run milo verify examples/greet/app.py
 
 | Category | Examples |
 |---|---|
-| Typed CLI and MCP | [greet](greet), [deploy](deploy), [ctxdemo](ctxdemo), [groups](groups), [lazyapp](lazyapp), [devtool](devtool), [taskman](taskman), [outputgallery](outputgallery) |
+| Typed CLI and MCP | [greet](greet), [deploy](deploy), [mcp_app](mcp_app), [ctxdemo](ctxdemo), [groups](groups), [lazyapp](lazyapp), [devtool](devtool), [taskman](taskman), [outputgallery](outputgallery) |
 | Configuration, plugins, pipelines | [configapp](configapp), [pluggable](pluggable), [buildpipe](buildpipe) |
 | Interactive apps | [counter](counter), [todo](todo), [stopwatch](stopwatch), [filepicker](filepicker), [wizard](wizard) |
 | Async work | [fetcher](fetcher), [downloader](downloader), [spinner](spinner), [liverender](liverender) |

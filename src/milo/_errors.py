@@ -62,6 +62,12 @@ class ErrorCode(Enum):
     CMD_HOOK = "M-CMD-003"
     CMD_IMPORT = "M-CMD-004"
 
+    # MCP Apps errors
+    UI_INVALID_RESOURCE = "M-UI-001"
+    UI_RESOURCE_NOT_FOUND = "M-UI-002"
+    UI_UNSUPPORTED = "M-UI-003"
+    UI_RESOURCE_READ = "M-UI-004"
+
 
 class MiloError(Exception):
     """Base error for all milo errors."""
@@ -138,6 +144,10 @@ class PipelineError(MiloError):
 
 class PluginError(MiloError):
     """Plugin system errors (load, hook)."""
+
+
+class MCPAppError(MiloError):
+    """MCP Apps resource, capability, or tool-link error."""
 
 
 def format_error(error: Exception) -> str:

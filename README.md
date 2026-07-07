@@ -102,6 +102,7 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 | `--llms-txt` | Generate AI discovery doc |
 | `--mcp-install` | Register in gateway |
 | `annotations={...}` | MCP behavioral hints |
+| `ui=MCPAppToolMeta("ui://...")` | Link a tool to an MCP Apps UI resource |
 | `Annotated[str, MinLen(1)]` | Schema constraints |
 | `Annotated[str, Positional("NAME")]` | Positional CLI presentation |
 | `Option(aliases=("-n",))` | Compatible option aliases |
@@ -167,6 +168,7 @@ Pick the example closest to your use case, copy its `app.py`, and adapt. See [ex
 |---|---|---|
 | The simplest possible CLI | [examples/greet](examples/greet) | `CLI`, `@cli.command` |
 | Dual-mode CLI ↔ MCP server (flagship) | [examples/deploy](examples/deploy) | `Annotated`, `MinLen`, `Context`, `Progress`, `--mcp` |
+| MCP tool with a negotiated UI resource | [examples/mcp_app](examples/mcp_app) | `ui_resource`, `MCPAppToolMeta`, structured fallback |
 | Context injection, logging, progress, confirms | [examples/ctxdemo](examples/ctxdemo) | `Context`, `ctx.info`, `ctx.progress`, `ctx.confirm` |
 | Nested command groups (`app repo list`) | [examples/groups](examples/groups) | `cli.group()`, `walk_commands` |
 | Fast startup via deferred imports | [examples/lazyapp](examples/lazyapp) | `cli.lazy_command()` |

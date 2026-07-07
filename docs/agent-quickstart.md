@@ -232,6 +232,8 @@ uv run milo verify my_cli/app.py
 - Rich schema constraints: `Annotated[str, MinLen(1), MaxLen(100)]`. See `AGENTS.md`.
 - Streaming progress: yield `Progress(step, total, status)` from a generator command.
 - Tool annotations: `@cli.command("deploy", annotations={"destructiveHint": True})`.
+- Optional embedded UI: pair `@cli.ui_resource("ui://...")` with
+  `ui=MCPAppToolMeta("ui://...")`; keep the command's text/structured fallback.
 - Groups and subcommands: `cli.group("db")` + `@db.command("migrate")`.
 - Middleware: `cli.before_command(hook)` / `cli.after_command(hook)`.
 

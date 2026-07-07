@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from milo._command_defs import CommandSurface
     from milo.context import Context
+    from milo.mcp_apps import MCPAppToolMeta
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,7 @@ class Group:
         surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
         terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Callable:
@@ -91,6 +93,7 @@ class Group:
                 surfaces=tuple(surfaces),
                 examples=tuple(examples),
                 confirm=confirm,
+                ui=ui,
                 display_result=display_result,
                 terminal_renderer=terminal_renderer,
             )
@@ -117,6 +120,7 @@ class Group:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
         terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Any:
@@ -138,6 +142,7 @@ class Group:
             examples=examples,
             confirm=confirm,
             annotations=annotations,
+            ui=ui,
             display_result=display_result,
             terminal_renderer=terminal_renderer,
         )

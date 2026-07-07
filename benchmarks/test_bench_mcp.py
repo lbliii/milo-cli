@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from conftest import _build_cli
 
 from milo._mcp_router import dispatch
+from milo.commands import CLI
 from milo.mcp import _CLIHandler, _list_tools
+from milo.mcp_apps import MCPAppToolMeta
 
 # ---------------------------------------------------------------------------
 # JSON serialization/deserialization
@@ -96,6 +99,28 @@ def test_bench_list_tools_20(benchmark) -> None:
 def test_bench_list_tools_50(benchmark) -> None:
     """Generate tools/list for 50 commands."""
     cli = _build_cli(50)
+    benchmark(_list_tools, cli)
+
+
+def test_bench_list_tools_mcp_apps_20(benchmark) -> None:
+    """Generate linked MCP Apps tool metadata for 20 commands."""
+    cli = CLI(name="ui-bench")
+
+    @cli.ui_resource("ui://bench/view")
+    def view() -> str:
+        return "<!doctype html><html></html>"
+
+    def make_handler(command_index: int) -> Callable[..., str]:
+        def handler(value: str = "default") -> str:
+            return f"{command_index}:{value}"
+
+        return handler
+
+    for index in range(20):
+        cli.command(
+            f"cmd-{index}",
+            ui=MCPAppToolMeta("ui://bench/view"),
+        )(make_handler(index))
     benchmark(_list_tools, cli)
 
 

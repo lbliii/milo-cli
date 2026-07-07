@@ -22,6 +22,17 @@ def test_agent_quickstart_documents_discovery_and_version_repair() -> None:
     assert "error.data.supported" in text
 
 
+def test_mcp_reference_documents_stable_apps_contract() -> None:
+    text = (_ROOT / "site/content/docs/build-clis/mcp.md").read_text(encoding="utf-8")
+    assert "MCP Apps 2026-01-26" in text
+    assert "io.modelcontextprotocol/ui" in text
+    assert "text/html;profile=mcp-app" in text
+    assert "_meta.ui.resourceUri" in text
+    assert "deprecated flat" in text
+    assert '`_meta["ui/resourceUri"]`' in text
+    assert "does not render HTML" in text
+
+
 def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:
     text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
     assert 'Use the `greet` tool to greet "Bob"' in text

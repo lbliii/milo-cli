@@ -255,6 +255,98 @@ value that fails these checks.
 
 ---
 
+## MCP Apps UI resources
+
+Milo implements the stable
+[MCP Apps 2026-01-26 extension](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)
+as an optional layer over normal tools and resources. A linked command must
+still return useful text and structured data for clients that do not support
+embedded UIs.
+
+```python milo-docs:compile
+from milo import (
+    CLI,
+    MCPAppCSP,
+    MCPAppResourceMeta,
+    MCPAppToolMeta,
+)
+
+cli = CLI(name="weather")
+
+
+@cli.ui_resource(
+    "ui://weather/forecast",
+    name="Weather forecast",
+    meta=MCPAppResourceMeta(
+        csp=MCPAppCSP(connect_domains=("https://api.weather.example",)),
+        prefers_border=True,
+    ),
+)
+def forecast_view() -> str:
+    return "<!doctype html><html><body><main id='forecast'></main></body></html>"
+
+
+@cli.command("forecast", ui=MCPAppToolMeta("ui://weather/forecast"))
+def forecast(city: str) -> dict[str, str]:
+    return {"city": city, "condition": "sunny"}
+```
+
+`ui_resource()` reserves the `ui://` scheme and the exact
+`text/html;profile=mcp-app` MIME profile. Its handler returns a valid HTML5
+document as `str`, or bytes that Milo serializes as a deterministic base64
+`blob`. Normal `resource()` registrations cannot claim the reserved scheme.
+
+### Capability negotiation
+
+The host opts in during `initialize`:
+
+```json
+{
+  "capabilities": {
+    "extensions": {
+      "io.modelcontextprotocol/ui": {
+        "mimeTypes": ["text/html;profile=mcp-app"]
+      }
+    }
+  }
+}
+```
+
+When negotiated, Milo returns the same extension capability, adds nested
+`_meta.ui.resourceUri` metadata to linked tools, and exposes UI resources from
+`resources/list` and `resources/read`. Without negotiation, model-visible tools
+remain ordinary text/structured tools, UI metadata is omitted, and UI resources
+are not advertised. Reading a `ui://` resource without negotiation returns the
+structured `M-UI-003` error.
+
+Milo emits only the stable nested `_meta.ui` form. The deprecated flat
+`_meta["ui/resourceUri"]` key is intentionally unsupported.
+
+### Visibility and link integrity
+
+`MCPAppToolMeta` defaults to `visibility=("model", "app")`. Use
+`visibility=("app",)` for implementation tools that an embedded app knows by
+name but the model must not see. Milo omits app-only tools from its model-facing
+`tools/list`; hosts remain responsible for origin-sensitive app call policy
+because core `tools/call` does not identify the iframe caller to the server.
+
+Every advertised tool link must resolve to a resource registered on the same
+server. Missing links fail discovery with `M-UI-002` and include `tool` and
+`resourceUri` repair fields instead of advertising a broken UI.
+
+### Security metadata and ownership
+
+`MCPAppResourceMeta` serializes CSP domains, requested browser permissions, an
+optional host-specific domain, and the border preference deterministically.
+Milo transports this declaration but does not render HTML, create iframes,
+grant permissions, validate a host-specific domain, or enforce browser CSP.
+Those are MCP Apps host responsibilities. Resource handlers should return
+static, reviewable HTML and avoid embedding secrets.
+
+See the runnable [minimal MCP Apps example](https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app).
+
+---
+
 ## Schema generation
 
 Schemas are generated automatically from function type annotations.

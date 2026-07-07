@@ -589,6 +589,49 @@ Resolution: Fixed on 2026-07-06. Form and template docs now describe the
 theme check icon and dimmed alternatives rendered by the bundled Kida
 templates.
 
+## Steward Notes — MCP Apps UI Primitives (#79)
+
+- Consulted stewards: Milo Core, MCP And Protocol Correctness, Schema Truth,
+  Tests, Agent Docs, Site And Reference Docs, Examples, and Benchmarks.
+- Source contract: stable MCP Apps 2026-01-26 specification, extension
+  `io.modelcontextprotocol/ui`, exact MIME type
+  `text/html;profile=mcp-app`, and nested `_meta.ui` metadata. The deprecated
+  flat `ui/resourceUri` shape is intentionally not emitted.
+- Accepted public API: frozen/slotted `MCPAppCSP`, `MCPAppPermissions`,
+  `MCPAppResourceMeta`, `MCPAppToolMeta`, `MCPAppVisibility`, and
+  `MCPAppResourceDef`; public constants; `CLI.ui_resource()`; and `ui=` on
+  eager, lazy, and grouped commands.
+- Compatibility: clients without negotiated UI support receive the existing
+  text/structured tool contract with no UI metadata. Existing non-UI resources,
+  tools, prompts, protocol versions, and command schemas are unchanged.
+- Security boundary: Milo transports declared resource metadata and HTML but
+  does not render it, validate host-specific domains, create iframes, grant
+  permissions, or enforce browser CSP. Hosts own those controls.
+- Concurrency: definitions are immutable. Negotiation state and tool cache are
+  owned by one `_CLIHandler` connection; the stdio loop remains serialized. No
+  global mutable state or new lock ordering was introduced.
+- Performance: `benchmarks/test_bench_mcp.py` includes a 20-tool linked UI
+  metadata workload. A local Python 3.14.2 free-threading run with the GIL
+  disabled measured a 402 microsecond median; no speed claim is made.
+- Verification: `make ci` passed 1,538 tests with one skip and 82.30% branch
+  coverage under `PYTHON_GIL=0`; all 37 tagged docs snippets passed; and Bengal
+  built 165 pages with the repository's known autodoc, link, and config
+  warnings. The four existing `ty` diagnostics remain unchanged.
+- Collateral: public exports, command/group registration, MCP wire behavior,
+  test-client negotiation, errors, docs, a minimal static UI-resource example,
+  tests, benchmark, and changelog move together. Gateway rewriting is deferred
+  to #80.
+
+### #79 Parity Matrix
+
+| Contract | API | Initialize | tools/list | resources/list/read | Existing client |
+| --- | --- | --- | --- | --- | --- |
+| UI resource | frozen definition | negotiated MIME | linked URI | exact MIME + metadata | omitted |
+| Tool link | `ui=MCPAppToolMeta(...)` | extension response | nested `_meta.ui` | URI resolves locally | plain tool fallback |
+| Missing link | registration order independent | not applicable | structured `M-UI-002` | not advertised | plain fallback |
+| App-only tool | typed visibility | negotiated | omitted from model list | resource remains readable | omitted |
+| Invalid read | typed URI/content boundary | capability required | not applicable | `M-UI-001`–`004` repair data | non-UI unchanged |
+
 ## Steward Notes — Dispatch Trust Hardening
 
 - Consulted stewards: Milo Core, Tests, Agent Docs, Site And Reference

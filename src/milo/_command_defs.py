@@ -7,7 +7,10 @@ import inspect
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from milo.mcp_apps import MCPAppToolMeta
 
 CommandSurface = Literal["cli", "mcp", "llms"]
 _VALID_COMMAND_SURFACES = frozenset({"cli", "mcp", "llms"})
@@ -79,6 +82,8 @@ class CommandDef:
     """If False, suppress plain-format output (return value still available for --format json)."""
     terminal_renderer: Callable[[Any, Any], str] | None = None
     """Optional plain-terminal renderer; protocol and programmatic calls keep structured values."""
+    ui: MCPAppToolMeta | None = None
+    """Optional stable MCP Apps metadata linking this tool to a UI resource."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "surfaces", _normalize_surfaces(self.surfaces))
@@ -111,6 +116,7 @@ class LazyCommandDef:
         "surfaces",
         "tags",
         "terminal_renderer",
+        "ui",
     )
 
     def __init__(
@@ -129,6 +135,7 @@ class LazyCommandDef:
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
         terminal_renderer: Callable[[Any, Any], str] | None = None,
+        ui: MCPAppToolMeta | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -142,6 +149,7 @@ class LazyCommandDef:
         self.annotations = annotations or {}
         self.display_result = display_result
         self.terminal_renderer = terminal_renderer
+        self.ui = ui
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -199,6 +207,7 @@ class LazyCommandDef:
                 examples=self.examples,
                 confirm=self.confirm,
                 annotations=self.annotations,
+                ui=self.ui,
                 display_result=self.display_result,
                 terminal_renderer=self.terminal_renderer,
             )
@@ -244,6 +253,7 @@ def _make_command_def(
     annotations: dict[str, Any] | None = None,
     display_result: bool = True,
     terminal_renderer: Callable[[Any, Any], str] | None = None,
+    ui: MCPAppToolMeta | None = None,
 ) -> CommandDef:
     """Build a CommandDef from a function and decorator kwargs."""
     from milo.schema import function_to_schema
@@ -266,6 +276,7 @@ def _make_command_def(
         annotations=annotations or {},
         display_result=display_result,
         terminal_renderer=terminal_renderer,
+        ui=ui,
     )
 
 

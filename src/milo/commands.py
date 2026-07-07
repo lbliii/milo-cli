@@ -30,6 +30,7 @@ from milo.output import format_output, write_output
 if TYPE_CHECKING:
     from milo.context import Context
     from milo.groups import Group
+    from milo.mcp_apps import MCPAppResourceDef, MCPAppResourceMeta, MCPAppToolMeta
     from milo.middleware import MiddlewareStack
 
 # Re-export for backward compatibility
@@ -196,6 +197,7 @@ class CLI:
         self._group_alias_map: dict[str, str] = {}
         self._global_options: list[GlobalOption] = []
         self._resources: dict[str, ResourceDef] = {}
+        self._ui_resources: dict[str, MCPAppResourceDef] = {}
         self._prompts: dict[str, PromptDef] = {}
         self._middleware: MiddlewareStack | None = None
         self._before_command: list[Callable] = []
@@ -288,6 +290,7 @@ class CLI:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
         terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Callable:
@@ -302,6 +305,7 @@ class CLI:
             confirm: If set, prompt user with this message before executing.
             annotations: MCP tool annotations (readOnlyHint, destructiveHint,
                 idempotentHint, openWorldHint).
+            ui: Stable MCP Apps metadata linking this tool to a ``ui://`` resource.
             display_result: If False, suppress plain-format output while still
                 returning data for ``--format json`` or ``--output-file``.
             surfaces: Discovery and invocation surfaces where the command is visible.
@@ -329,6 +333,7 @@ class CLI:
                 examples=tuple(examples),
                 confirm=confirm,
                 annotations=annotations,
+                ui=ui,
                 display_result=display_result,
                 terminal_renderer=terminal_renderer,
             )
@@ -355,6 +360,7 @@ class CLI:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
         terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> LazyCommandDef:
@@ -379,6 +385,7 @@ class CLI:
             examples=examples,
             confirm=confirm,
             annotations=annotations,
+            ui=ui,
             display_result=display_result,
             terminal_renderer=terminal_renderer,
         )
@@ -403,6 +410,8 @@ class CLI:
             @cli.resource("config://app", description="App config")
             def get_config() -> dict: ...
         """
+        if uri.startswith("ui://"):
+            raise ValueError("Use cli.ui_resource() for reserved 'ui://' resources")
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             resource_name = name or getattr(func, "__name__", repr(func))
@@ -414,6 +423,34 @@ class CLI:
                 mime_type=mime_type,
             )
             self._resources[uri] = res
+            return func
+
+        return decorator
+
+    def ui_resource(
+        self,
+        uri: str,
+        *,
+        name: str = "",
+        description: str = "",
+        meta: MCPAppResourceMeta | None = None,
+    ) -> Callable:
+        """Register an HTML resource for the stable MCP Apps extension."""
+        from milo.mcp_apps import MCPAppResourceDef, MCPAppResourceMeta
+
+        if uri in self._resources or uri in self._ui_resources:
+            raise ValueError(f"Resource URI {uri!r} is already registered")
+
+        def decorator(func: Callable[..., str | bytes]) -> Callable[..., str | bytes]:
+            resource_name = name or getattr(func, "__name__", repr(func))
+            self._ui_resources[uri] = MCPAppResourceDef(
+                uri=uri,
+                name=resource_name,
+                description=description,
+                handler=func,
+                meta=meta or MCPAppResourceMeta(),
+            )
+            self._bump_command_version()
             return func
 
         return decorator
@@ -528,6 +565,11 @@ class CLI:
         """
         from milo.groups import Group as GroupClass
 
+        ui_collisions = set(other._ui_resources) & (set(self._ui_resources) | set(self._resources))
+        if ui_collisions:
+            collision = sorted(ui_collisions)[0]
+            raise ValueError(f"Mounted MCP Apps resource URI collision: {collision!r}")
+
         grp = GroupClass(
             prefix, description=other.description, on_change=self._bump_command_version
         )
@@ -558,6 +600,10 @@ class CLI:
                 handler=res.handler,
                 mime_type=res.mime_type,
             )
+
+        # MCP Apps resource URIs are stable protocol identifiers and are not rewritten.
+        for uri, res in other._ui_resources.items():
+            self._ui_resources[uri] = res
 
         # Mount prompts with prefix
         for pname, p in other._prompts.items():
@@ -635,6 +681,10 @@ class CLI:
     def walk_resources(self) -> list[tuple[str, ResourceDef]]:
         """Walk all registered resources."""
         return list(self._resources.items())
+
+    def walk_ui_resources(self) -> list[tuple[str, MCPAppResourceDef]]:
+        """Walk registered MCP Apps UI resources in registration order."""
+        return list(self._ui_resources.items())
 
     def walk_prompts(self) -> list[tuple[str, PromptDef]]:
         """Walk all registered prompts."""
