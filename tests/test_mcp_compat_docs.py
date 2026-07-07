@@ -16,8 +16,11 @@ def test_mcp_reference_documents_compatibility_matrix() -> None:
 
 def test_agent_quickstart_documents_discovery_and_version_repair() -> None:
     text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
-    assert "All seven checks should pass" in text
+    assert "All ten checks should pass" in text
     assert "mcp_discover" in text
+    assert "mcp_apps_in_process" in text
+    assert "mcp_apps_gateway" in text
+    assert "mcp_apps_transport" in text
     assert "JSON-RPC `-32004`" in text
     assert "error.data.supported" in text
 
@@ -40,6 +43,10 @@ def test_mcp_reference_documents_gateway_ui_contract() -> None:
     assert "deterministic first-wins" in text
     assert "disconnect, timeout, parse, or unavailable" in text
     assert "M-UI-004" in text
+    assert "mcp_apps_in_process" in text
+    assert "mcp_apps_gateway" in text
+    assert "mcp_apps_transport" in text
+    assert "does not parse" in text
 
 
 def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:

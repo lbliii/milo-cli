@@ -54,6 +54,7 @@ class TestScaffoldFunction:
         assert "--with milo-cli --with pytest pytest tests/" in readme
         assert "--with milo-cli milo verify app.py" in readme
         assert "claude mcp add --transport stdio my_cli" in readme
+        assert "MCP Apps link/resource/gateway checks" in readme
 
     @pytest.mark.parametrize(
         "bad_name",

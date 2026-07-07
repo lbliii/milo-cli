@@ -143,7 +143,7 @@ Before registering with Claude (or any time you break something), run:
 uv run milo verify my_cli/app.py
 ```
 
-All seven checks should pass:
+All ten checks should pass:
 
 ```
 ✓ imports: loaded app.py
@@ -152,12 +152,21 @@ All seven checks should pass:
 ✓ schemas_generate: 1 schema(s) generated; all params documented
 ✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
 ✓ mcp_discover: server/discover advertises 2025-11-25
+✓ mcp_apps_in_process: 0 tool link(s) and 0 UI resource(s) agree; 0 resource(s) readable
+✓ mcp_apps_gateway: gateway preserves 0 tool link(s) and 0 UI resource(s)
 ✓ mcp_transport: subprocess discovery and handshake succeeded; 1 tool(s) over JSON-RPC
+✓ mcp_apps_transport: 0 tool link(s) and 0 UI resource(s) agree over JSON-RPC; 0 resource(s) readable
 ```
 
 A `⚠ schemas_generate` row listing `parameter 'X' has no description` means a
 typed parameter is missing an `Args:` entry (or `Annotated[..., Description(...)]`).
 A `✗` row is a failure — read the details and fix before continuing.
+
+The three `mcp_apps_*` identities are stable CI diagnostics. They negotiate the
+extension, compare tool/resource/gateway links, and read each registered UI
+resource in-process and over subprocess JSON-RPC. Milo validates the URI,
+MIME/profile, metadata, and `str`/base64 payload shape; it never parses or
+interprets application HTML.
 
 `milo verify` exits 0 on warnings, nonzero on failures. Wire it into CI.
 

@@ -132,7 +132,7 @@ The generated tests cover four layers:
 | Schema | `function_to_schema(greet)` matches the function signature |
 | Direct dispatch | `cli.invoke([...])` parses argv and returns the expected value |
 | MCP dispatch | `_call_tool(cli, {...})` returns content, structured `errorData`, and discovery metadata |
-| Verify | `milo verify app.py` passes import, schema, tools/list, discovery, and transport checks |
+| Verify | `milo verify app.py` passes import, schema, discovery, MCP Apps link/resource/gateway checks, and transport reads |
 
 ## Verify for Agents
 
@@ -140,7 +140,7 @@ The generated tests cover four layers:
 uv run milo verify app.py
 ```
 
-A healthy scaffold reports seven passing checks:
+A healthy scaffold reports ten passing checks:
 
 ```text
 ✓ imports: loaded app.py
@@ -149,10 +149,16 @@ A healthy scaffold reports seven passing checks:
 ✓ schemas_generate: 1 schema(s) generated; all params documented
 ✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
 ✓ mcp_discover: server/discover advertises 2025-11-25
+✓ mcp_apps_in_process: 0 tool link(s) and 0 UI resource(s) agree; 0 resource(s) readable
+✓ mcp_apps_gateway: gateway preserves 0 tool link(s) and 0 UI resource(s)
 ✓ mcp_transport: subprocess discovery and handshake succeeded; 1 tool(s) over JSON-RPC
+✓ mcp_apps_transport: 0 tool link(s) and 0 UI resource(s) agree over JSON-RPC; 0 resource(s) readable
 ```
 
 Warnings tell you what to improve, such as missing parameter descriptions.
+The stable `mcp_apps_*` rows validate negotiated tool/resource links, gateway
+rewriting, and resource reads without interpreting application HTML. A failed
+row exits 1 and includes a concrete repair action.
 Failures mean the CLI is not safe to register as an MCP tool yet.
 
 ## Register with an MCP Host

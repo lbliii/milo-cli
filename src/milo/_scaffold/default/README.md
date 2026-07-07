@@ -76,7 +76,7 @@ The generated test file covers four layers:
 | Schema | `function_to_schema(greet)` matches the function signature |
 | Direct dispatch | `cli.invoke([...])` parses argv and returns expected output |
 | MCP dispatch | `_call_tool(cli, {...})` returns content, structured `errorData`, and `server/discover` metadata |
-| Verify | `milo verify app.py` passes import, schema, tools/list, discovery, and transport checks |
+| Verify | `milo verify app.py` passes import, schema, discovery, MCP Apps link/resource/gateway checks, and transport reads |
 
 `milo verify` exits 0 when checks pass or only warnings are present. It exits
 nonzero on failures that would make the CLI unsafe to register as an MCP tool.

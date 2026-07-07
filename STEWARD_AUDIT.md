@@ -890,3 +890,74 @@ under `PYTHON_GIL=0`.
 | `resources/read` | UI read rejected with `M-UI-003` | URI/content/metadata round trip | serialized child call under one lock |
 | `tools/call` | existing result | structured result unchanged | original child tool name |
 | child failure | non-UI behavior unchanged | `M-UI-004` repair data | timeout/disconnect/parse reason retained |
+
+## Steward Notes — MCP Apps Verifier Conformance (#81)
+
+- Consulted stewards: Scaffold And Verify Onboarding, Milo Core, MCP And
+  Protocol Correctness, Tests, Agent Docs, Site And Reference Docs, Release And
+  Dependency Surface, Security And Subprocess Boundaries, and Performance And
+  Startup Cost.
+- Approval: the maintainer approved the three stable verifier identities and
+  their fail/exit semantics on 2026-07-07.
+- Accepted contract: `mcp_apps_in_process` negotiates the extension and checks
+  linked tool/resource/read views; `mcp_apps_gateway` runs the real single-child
+  gateway projection and compares rewritten links and preserved metadata; and
+  `mcp_apps_transport` repeats capability, list, link, and read validation over
+  the existing subprocess JSON-RPC boundary.
+- Payload boundary: verification accepts application-owned `str` content or a
+  valid base64 blob and compares URI, MIME/profile, and metadata. It never
+  parses, sanitizes, renders, or interprets application HTML.
+- Exit behavior: all malformed URI, MIME/profile, metadata, missing-link,
+  capability, render, payload-type, non-JSON stdout, or transport findings are
+  failures with a stable check name and concrete repair action. Existing schema
+  documentation warnings remain warnings and exit zero.
+- Compatibility: non-UI CLIs receive three successful zero-resource rows. No
+  public Python export, command flag, config field, runtime dependency, MCP
+  method, error code, scaffold shape, or protocol version changed.
+- Concurrency: the gateway check uses the existing deterministic one-child
+  discovery worker and immutable local result values. It introduces no shared
+  state, lock, listener, cancellation, or shutdown behavior; subprocess cleanup
+  remains the existing `communicate`/timeout/kill/finally path.
+- Performance: `milo verify` is an explicit diagnostic boundary rather than a
+  runtime or startup hot path. The gateway view performs one local discovery,
+  and each UI resource is read once in-process and once over the already-spawned
+  subprocess. No speed claim is made and no benchmark is required.
+- Collateral: scaffolded tests and README, root README, agent quickstart,
+  testing guide, public quickstart, testing/reference pages, docs drift tests,
+  malformed fixture coverage, and a towncrier fragment move together.
+- Verification: `make ci` passed 1,636 tests with one skip and 82.80% branch
+  coverage under `PYTHON_GIL=0`; the same four pre-existing `ty` warnings remain.
+  `make docs-test` passed strict template compilation and all 61 tagged docs
+  snippets. Bengal built the production site with its existing autodoc,
+  internal-link, and analytics diagnostics.
+
+### #81 Verifier Parity Matrix
+
+| Contract | In-process | Gateway projection | Subprocess JSON-RPC |
+| --- | --- | --- | --- |
+| capability | discover + negotiated initialize | discover + negotiated initialize | discover + negotiated initialize responses |
+| tool link | nested `_meta.ui.resourceUri` + visibility | child metadata preserved; URI rewritten | negotiated `tools/list` metadata |
+| resource list | `ui://`, MIME/profile, name, metadata | resource fields preserved; URI rewritten | negotiated `resources/list` shape |
+| resource read | exact URI/MIME/meta; text or base64 | #80 routing contract exercised by projection tests | one `resources/read` per registered or linked URI |
+| malformed input | stable failed check + repair | omission/drift becomes failed parity check | JSON-RPC error/data becomes failed check + repair |
+| no UI resources | zero-count success | zero-count success | zero-count success |
+
+Steward: Scaffold And Verify Onboarding
+Area: MCP Apps conformance before host registration
+Severity: P1
+Invariant: A linked interactive tool must not pass `milo verify` unless its
+capability declaration, resource list/read views, gateway projection, and
+subprocess transport agree.
+Evidence: `src/milo/verify.py`; `tests/test_verify_mcp_apps.py`; generated
+`src/milo/_scaffold/default/tests/test_app.py`.
+User Impact: Broken links, malformed resource metadata, and render failures now
+fail before an MCP host attempts to open the UI and name the next repair.
+Required Fix: Keep the three stable check identities and validate protocol
+shape without interpreting application HTML.
+Required Proof: Good text/blob fixtures; URI, MIME, metadata, missing-link,
+payload, render, capability, gateway, and subprocess failure fixtures; full
+free-threaded CI and docs/scaffold gates.
+Collateral: README, agent/testing docs, scaffold guidance, public site,
+towncrier fragment, and Steward Notes.
+Confidence: high
+Verification Status: machine-verified

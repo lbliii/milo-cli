@@ -21,7 +21,7 @@ Use four small layers:
 1. **Schema** — `function_to_schema(command)` matches the function signature.
 2. **Direct dispatch** — `cli.invoke([...])` parses argv and returns the expected `InvokeResult`.
 3. **MCP dispatch** — `_call_tool(cli, {...})` returns the same content and structured `errorData` on malformed input.
-4. **Verify** — `milo.verify.verify("app.py")` passes the same import, discovery, schema, `tools/list`, and subprocess handshake checks as `milo verify`.
+4. **Verify** — `milo.verify.verify("app.py")` passes the same import, discovery, schema, `tools/list`, MCP Apps link/resource/gateway, and subprocess read checks as `milo verify`.
 
 ```python
 from pathlib import Path
@@ -59,6 +59,13 @@ def test_milo_verify_passes():
 Scaffolded projects from `milo new` include these layers in `tests/test_app.py`.
 Use the reducer, render, saga, and replay helpers below for interactive app
 behavior.
+
+The stable `mcp_apps_in_process`, `mcp_apps_gateway`, and
+`mcp_apps_transport` checks negotiate the extension, compare every linked
+`ui://` resource, and read payloads in-process and over JSON-RPC. They validate
+URI, MIME/profile, metadata, and text/base64 shape without parsing application
+HTML. Warnings keep exit code 0; any failed conformance check exits 1 with the
+next repair action.
 
 ## Docs and example drift
 

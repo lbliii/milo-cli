@@ -6,7 +6,7 @@ Four layers cover the common regression surface:
   3. MCP       — `_call_tool(cli, {...})` returns the expected response and
                  `server/discover` exposes the MCP version contract.
                  on error, structured `errorData` with `argument` context.
-  4. Verify    — `milo verify` passes against the scaffolded app.
+  4. Verify    — `milo verify` passes base and MCP Apps conformance checks.
 """
 
 from __future__ import annotations
@@ -76,6 +76,13 @@ class TestVerify:
         report = verify(str(app_path))
         assert report.exit_code == 0, report.format()
         assert report.failures == 0
+        checks = {check.name: check for check in report.checks}
+        for name in (
+            "mcp_apps_in_process",
+            "mcp_apps_gateway",
+            "mcp_apps_transport",
+        ):
+            assert checks[name].status == "ok"
 
 
 if __name__ == "__main__":

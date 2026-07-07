@@ -65,7 +65,14 @@ response so agents can repair the call automatically.
 
 Run the same self-diagnosis that agent quickstarts and scaffolded projects use.
 This checks imports, CLI discovery, schema generation, MCP `tools/list`, and a
-subprocess MCP handshake.
+subprocess MCP handshake. It also negotiates MCP Apps in-process and over
+JSON-RPC, reads every `ui://` resource, and proves tool/resource links survive
+the gateway projection. Failures use the stable `mcp_apps_in_process`,
+`mcp_apps_gateway`, and `mcp_apps_transport` check names.
+
+Milo validates MCP Apps URI, MIME/profile, metadata, and text/base64 transport
+shape. It does not parse application HTML. A warning still exits 0; any failed
+conformance check exits 1 and includes the next repair action.
 
 ```python milo-docs:compile
 from pathlib import Path
