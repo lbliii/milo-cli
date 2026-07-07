@@ -423,6 +423,12 @@ def _proxy_call(
         return {
             "content": [{"type": "text", "text": f"Unknown tool: {tool_name!r}"}],
             "isError": True,
+            "errorData": {
+                "tool": tool_name,
+                "errorCode": "M-CMD-001",
+                "reason": "unknown_tool",
+                "suggestion": "Call tools/list and use one of the advertised tool names.",
+            },
         }
 
     cli_name, original_name = tool_routing[tool_name]
@@ -431,13 +437,21 @@ def _proxy_call(
         return {
             "content": [{"type": "text", "text": f"CLI {cli_name!r} not available"}],
             "isError": True,
+            "errorData": {
+                "tool": tool_name,
+                "errorCode": "M-CMD-001",
+                "reason": "cli_unavailable",
+                "suggestion": "Restart the gateway or repair the registered CLI command.",
+            },
         }
 
     result = child.send_call("tools/call", {"name": original_name, "arguments": arguments})
     if "error" in result:
+        error = result["error"]
         return {
-            "content": [{"type": "text", "text": result["error"].get("message", "Unknown error")}],
+            "content": [{"type": "text", "text": error.get("message", "Unknown error")}],
             "isError": True,
+            "errorData": error.get("data", {}),
         }
     return result
 

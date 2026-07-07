@@ -6,7 +6,16 @@ from typing import Annotated, Any
 
 from conftest import complex_func, simple_func
 
-from milo.schema import Description, Ge, Le, MaxLen, MinLen, Pattern, function_to_schema
+from milo.schema import (
+    Description,
+    Ge,
+    Le,
+    MaxLen,
+    MinLen,
+    Pattern,
+    function_to_schema,
+    validate_arguments,
+)
 
 # ---------------------------------------------------------------------------
 # Test functions of increasing complexity
@@ -80,3 +89,15 @@ def test_bench_schema_annotated(benchmark) -> None:
 def test_bench_schema_nested_types(benchmark) -> None:
     """Schema generation for nested generics (list[dict[str, Any]], dict[str, list[int]])."""
     benchmark(function_to_schema, _nested_types)
+
+
+def test_bench_validate_annotated_arguments(benchmark) -> None:
+    """Runtime validation for a representative constrained command call."""
+    schema = function_to_schema(_annotated_func)
+    arguments = {
+        "name": "Ada",
+        "age": "37",
+        "email": "ada@example.com",
+        "score": "98.5",
+    }
+    benchmark(validate_arguments, schema, arguments)

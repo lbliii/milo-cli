@@ -241,3 +241,22 @@ class TestHelpRendererTemplateRendering:
             cli.run(["--version"])
         out = capsys.readouterr().out.strip()
         assert out == "myapp 2.3.4"
+
+    def test_custom_version_report_is_lazy_and_supports_aliases(self):
+        calls = 0
+
+        def report() -> str:
+            nonlocal calls
+            calls += 1
+            return "myapp 2.3.4\ntemplate-engine 1.0"
+
+        cli = CLI(
+            name="myapp",
+            version_flags=("-V", "--version"),
+            version_report=report,
+        )
+        assert cli.invoke([]).exit_code == 0
+        assert calls == 0
+        result = cli.invoke(["-V"])
+        assert result.output == "myapp 2.3.4\ntemplate-engine 1.0\n"
+        assert calls == 1

@@ -14,7 +14,7 @@ If something in this doc no longer works, that's the bug — open an issue.
 
 ## Step 0 — Scaffold (optional; skip if writing manually)
 
-```bash
+```bash milo-docs:skip reason=creates-local-project
 uv run milo new my_cli
 ```
 
@@ -25,7 +25,7 @@ refuses to overwrite; pick another name or delete the old one.
 
 ## Step 1 — Write the function
 
-```python
+```python milo-docs:compile
 # my_cli/app.py
 from milo import CLI
 
@@ -57,10 +57,16 @@ Rules you can rely on:
   `structuredContent`; string results are returned as text content.
 - Add `annotations={"readOnlyHint": True}` etc. in the `@cli.command` decorator
   to set MCP behavioral hints. See `AGENTS.md`.
+- Use `Annotated[T, Positional("NAME")]` or `Option(aliases=("-n",))` to
+  preserve established terminal syntax without changing MCP parameter names.
+- Use `surfaces=("cli",)` for long-running human commands that agents must not
+  discover or call.
+- Return structured values; use `terminal_renderer=` for plain human output
+  instead of printing from a reusable handler.
 
 ## Step 2 — Run the CLI
 
-```bash
+```bash milo-docs:skip reason=requires-prior-scaffold
 uv run python my_cli/app.py greet --name Alice
 # → Hello, Alice!
 
@@ -75,7 +81,7 @@ If `--help` lists your command, `@cli.command` is wired correctly.
 
 ## Step 3 — Verify the MCP tool schema
 
-```bash
+```bash milo-docs:skip reason=requires-prior-scaffold
 uv run python my_cli/app.py --llms-txt
 ```
 
@@ -93,8 +99,9 @@ is correct. If not, check that type hints are on both parameters.
 
 Use the `claude` CLI (part of Claude Code) to register your CLI as an MCP server:
 
-```bash
-claude mcp add my_cli -- uv run python /absolute/path/to/my_cli/app.py --mcp
+```bash milo-docs:skip reason=requires-claude-cli-and-user-registration
+claude mcp add --transport stdio my_cli -- \
+  uv run python /absolute/path/to/my_cli/app.py --mcp
 ```
 
 The flag after `--` tells milo to speak JSON-RPC on stdin/stdout instead of
@@ -103,9 +110,9 @@ parsing argv. Nothing else changes about your code.
 Alternative — register in the **milo gateway** (useful when you have several
 CLIs and want a single MCP entrypoint):
 
-```bash
+```bash milo-docs:skip reason=mutates-user-mcp-registry
 uv run python /absolute/path/to/my_cli/app.py --mcp-install
-claude mcp add milo -- uv run python -m milo.gateway --mcp
+claude mcp add --transport stdio milo -- uv run python -m milo.gateway --mcp
 ```
 
 The gateway namespaces tools: your `greet` becomes `my_cli.greet`.
@@ -120,7 +127,10 @@ In a fresh Claude Code session, run:
 
 You should see `my_cli` listed with `greet` as a tool. Call it:
 
-> Use the `my_cli.greet` tool to greet "Bob"
+> Use the `greet` tool to greet "Bob"
+
+If you registered the milo gateway alternative, use the namespaced
+`my_cli.greet` tool instead.
 
 Expected result: Claude calls the tool, the tool returns `"Hello, Bob!"`,
 Claude echoes it back.
@@ -129,7 +139,7 @@ Claude echoes it back.
 
 Before registering with Claude (or any time you break something), run:
 
-```bash
+```bash milo-docs:skip reason=requires-prior-scaffold
 uv run milo verify my_cli/app.py
 ```
 
@@ -160,6 +170,7 @@ A `✗` row is a failure — read the details and fix before continuing.
 | Tool returns `isError: True` with no `errorData.argument` | User code raised a plain exception | Raise `milo.MiloError(ErrorCode.INP_*, "…", argument="name", constraint={…})` so error data is structured. |
 | `print()` breaks the protocol | MCP uses stdout for JSON-RPC; any other stdout write corrupts the stream | Use the provided `Context` (`ctx.info`, `ctx.error`) or write to stderr. |
 | Schema is missing a parameter | Parameter is typed as `Context` (or named `ctx`) | Correct — these are injected at dispatch time and intentionally excluded from the schema. See `function_to_schema` in `src/milo/schema.py`. |
+| Lazy command exits with `M-CMD-004` | Its module or named attribute could not import | Use `errorData.importPath` or the terminal hint to fix the dotted path or installation. |
 | Non-serializable return type | Return value can't be JSON-encoded | Return `dict`, `list`, `str`, `int`, `float`, `bool`, `None`, or a `@dataclass`. |
 | Client gets JSON-RPC `-32004` | The request declared an unsupported MCP protocol version in `_meta` | Retry with one of `error.data.supported`, or use the legacy `initialize` handshake for `2025-11-25`. |
 
@@ -182,16 +193,21 @@ parse to repair the call without guessing:
 }
 ```
 
-For validation failures raised via `MiloError(argument="env", constraint={"minLength": 1})`:
+Milo enforces requiredness, types, enums, lengths, item counts, patterns, and
+numeric bounds before command handlers run. The same generated schema governs
+`cli.invoke()`, `cli.call()`, `cli.call_raw()`, and MCP `tools/call`; loose
+string inputs are coerced when the declared type is numeric, boolean, array, or
+object. Constraint failures include stable `M-INP-*` repair data:
 
 ```json
 {
   "errorData": {
-    "errorCode": "M-INP-001",
+    "errorCode": "M-INP-007",
     "argument": "env",
+    "reason": "constraint_violation",
     "constraint": {"minLength": 1},
     "example": "x",
-    "suggestion": "..."
+    "suggestion": "Use at least 1 character(s)."
   }
 }
 ```
@@ -200,13 +216,13 @@ Parse these fields. Don't rely on the error message string.
 
 ## Test your CLI
 
-Copy `examples/greet/tests/test_greet.py` next to your `app.py`, rename the
-imports, and edit the assertions. The command-level layers (schema, direct
+Copy `examples/greet/tests/test_greet.py` to `my_cli/tests/test_greet.py`,
+rename the imports, and edit the assertions. The command-level layers (schema, direct
 dispatch, MCP dispatch) cover the common regression surface; `milo new` also
 adds a `milo verify` test for the full agent-facing CLI. See
 [`testing.md`](./testing.md) for the full testing story.
 
-```bash
+```bash milo-docs:skip reason=requires-prior-scaffold
 uv run pytest my_cli/tests/ -v
 uv run milo verify my_cli/app.py
 ```

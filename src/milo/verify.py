@@ -157,7 +157,9 @@ def verify(target: str, *, timeout: float = 5.0) -> VerifyReport:
     checks.append(_check_schemas(command_list))
 
     # --- Check 5: in-process MCP list ---
-    expected_visible = sum(1 for _, cmd in command_list if not getattr(cmd, "hidden", False))
+    expected_visible = sum(
+        1 for _, cmd in command_list if not getattr(cmd, "hidden", False) and "mcp" in cmd.surfaces
+    )
     checks.append(_check_in_process_mcp(cli, expected_visible))
 
     # --- Check 6: MCP discovery ---

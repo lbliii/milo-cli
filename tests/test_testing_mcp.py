@@ -149,4 +149,15 @@ class TestMCPClient:
         client = MCPClient(cli)
         result = client.call("nonexistent")
         assert result.is_error is True
-        assert "Unknown command" in result.text
+        assert "Unknown tool" in result.text
+        assert result.error_data is not None
+        assert result.error_data["errorCode"] == "M-CMD-001"
+        assert result.error_data["reason"] == "unknown_tool"
+
+    def test_call_error_exposes_structured_repair_data(self, cli: CLI) -> None:
+        client = MCPClient(cli)
+        result = client.call("greet")
+        assert result.is_error is True
+        assert result.error_data is not None
+        assert result.error_data["argument"] == "name"
+        assert result.error_data["reason"] == "missing_required_argument"

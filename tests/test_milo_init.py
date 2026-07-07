@@ -274,6 +274,11 @@ class TestLazyImports:
         assert "App" in milo.__all__
         assert "Store" in milo.__all__
 
+    def test_lazy_import_manifest_matches_all_exports(self):
+        import milo
+
+        assert set(milo._LAZY_IMPORTS) == set(milo.__all__)
+
 
 class TestNewExports:
     def test_retry_export(self):

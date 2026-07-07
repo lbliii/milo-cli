@@ -132,6 +132,16 @@ class TestCommandRow:
         assert "(i, new)" in out
         assert "[core]" in out
 
+    def test_description_column_uses_display_cell_width(self, env):
+        out = _render(
+            env,
+            '{{ command_row("abc", "ASCII-DESC") }}\n{{ command_row("界界", "WIDE-DESC") }}',
+        )
+        lines = [line for line in out.splitlines() if line]
+        ascii_prefix = next(line for line in lines if "ASCII-DESC" in line).split("ASCII-DESC")[0]
+        wide_prefix = next(line for line in lines if "WIDE-DESC" in line).split("WIDE-DESC")[0]
+        assert cell_width(ascii_prefix) == cell_width(wide_prefix)
+
 
 class TestHeader:
     def test_name_only(self, env):
@@ -171,6 +181,35 @@ class TestHeaderBox:
         )
         out = tmpl.render()
         boxed = [line for line in out.splitlines() if line]
+        assert len({cell_width(line) for line in boxed}) == 1
+
+    def test_box_preserves_long_wide_title(self, env):
+        name = "界" * 25
+        out = _render(env, "{{ header_box(name) }}", name=name)
+        boxed = [line for line in out.splitlines() if line]
+        assert name in out
+        assert len({cell_width(line) for line in boxed}) == 1
+
+
+class TestPanel:
+    @pytest.mark.parametrize("border", ["ascii", "double", "heavy", "light", "round"])
+    def test_supported_border_styles_render(self, env, border):
+        tmpl = env.from_string(
+            '{% from "components/_defs.kida" import panel %}'
+            "{{ panel('content', border=border) }}",
+            name="component_panel_border_styles",
+        )
+        assert "content" in tmpl.render(border=border)
+
+    def test_content_width_uses_display_cells_without_truncation(self, env):
+        content = "界" * 15
+        tmpl = env.from_string(
+            '{% from "components/_defs.kida" import panel %}{{ panel(content, title="結果") }}',
+            name="component_panel_wide_content",
+        )
+        out = tmpl.render(content=content)
+        boxed = [line for line in out.splitlines() if line]
+        assert content in out
         assert len({cell_width(line) for line in boxed}) == 1
 
 
@@ -316,6 +355,23 @@ class TestPipelineProgress:
         assert "boom" in out
         assert "failed" in out
 
+    def test_phase_columns_use_display_cell_width(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState
+
+        state = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="ascii", status="completed", elapsed=0.1),
+                PhaseStatus(name="界界", status="completed", elapsed=0.1),
+            ),
+            status="completed",
+        )
+        lines = [
+            line for line in self._render_pipeline(env, state).splitlines() if "00:00.10" in line
+        ]
+        assert len(lines) == 2
+        assert len({cell_width(line.split("00:00.10")[0]) for line in lines}) == 1
+
 
 class TestCompositeTemplates:
     def test_command_list(self, env):
@@ -388,6 +444,13 @@ class TestPhaseDetail:
         assert "starting..." in out
         assert "boom" in out
         assert "FAILED" in out
+
+    def test_wide_title_keeps_border_width(self, env):
+        from milo.pipeline import PhaseStatus
+
+        phase = PhaseStatus(name="界" * 20, status="completed")
+        boxed = [line for line in self._render_detail(env, phase).splitlines() if line]
+        assert len({cell_width(line) for line in boxed}) == 1
 
     def test_scrolling_overflow_indicators(self, env):
         from milo.pipeline import PhaseLog, PhaseStatus
@@ -464,6 +527,27 @@ class TestPipelineDetail:
         assert "c" in out
         assert "expand" in out  # key hints
         assert "select" in out
+
+    def test_phase_columns_use_display_cell_width(self, env):
+        from milo.pipeline import PhaseStatus, PipelineState, PipelineViewState
+
+        ps = PipelineState(
+            name="build",
+            phases=(
+                PhaseStatus(name="ascii", status="completed", elapsed=0.1),
+                PhaseStatus(name="界界", status="completed", elapsed=0.1),
+            ),
+            status="completed",
+        )
+        lines = [
+            line
+            for line in self._render_detail(
+                env, PipelineViewState(pipeline=ps, selected_phase=-1)
+            ).splitlines()
+            if "00:00.10" in line
+        ]
+        assert len(lines) == 2
+        assert len({cell_width(line.split("00:00.10")[0]) for line in lines}) == 1
 
     def test_detail_mode_key_hints(self, env):
         from milo.pipeline import PhaseStatus, PipelineState, PipelineViewState

@@ -74,6 +74,27 @@ class TestAssertSaga:
         with pytest.raises(AssertionError):
             assert_saga(gen, [(Put(Action("b")), None)])
 
+    def test_fails_when_saga_stops_before_expected_steps_are_consumed(self):
+        def my_saga():
+            yield Put(Action("a"))
+
+        with pytest.raises(AssertionError, match="Saga stopped after step 1"):
+            assert_saga(
+                my_saga(),
+                [
+                    (Put(Action("a")), None),
+                    (Put(Action("b")), None),
+                ],
+            )
+
+    def test_fails_when_saga_yields_an_unexpected_extra_effect(self):
+        def my_saga():
+            yield Put(Action("a"))
+            yield Put(Action("b"))
+
+        with pytest.raises(AssertionError, match="unexpected extra effect"):
+            assert_saga(my_saga(), [(Put(Action("a")), None)])
+
 
 class TestStateHash:
     def test_deterministic(self):
@@ -217,6 +238,11 @@ class TestAssertRenders:
         result = assert_renders("5", "t.kida", env=env)
         env.get_template.assert_called_with("t.kida")
         assert result == "t=5"
+
+    def test_width_is_available_to_the_template(self):
+        env, tmpl = self._make_env("{{ width }}:{{ state }}")
+        result = assert_renders("content", tmpl, width=42, env=env)
+        assert result == "42:content"
 
     def test_no_env_creates_default(self):
         """When env=None, assert_renders fetches one from milo.templates."""

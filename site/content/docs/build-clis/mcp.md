@@ -11,7 +11,13 @@ category: build-clis
 icon: cpu
 ---
 
-Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing all registered commands as tools that AI agents can discover and invoke. Milo implements the **MCP 2025-11-25** specification.
+Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing eligible registered commands as tools that AI agents can discover and invoke. Milo implements the **MCP 2025-11-25** specification.
+
+Commands registered with `surfaces` that omit `"mcp"` are neither advertised
+by `tools/list` nor callable through `tools/call`. This is appropriate for
+long-running server commands; for example,
+`@cli.command("serve", surfaces=("cli",))`. The same command remains available
+to terminal and programmatic callers.
 
 ```mermaid
 flowchart LR
@@ -36,7 +42,8 @@ The server prints a startup banner to stderr with available tools and example re
 Claude Code, Cursor, and other MCP hosts can connect directly:
 
 ```bash
-claude mcp add myapp -- uv run python examples/taskman/app.py --mcp
+claude mcp add --transport stdio myapp -- \
+  uv run python /absolute/path/to/examples/taskman/app.py --mcp
 ```
 
 ### Gateway for multiple CLIs
@@ -163,7 +170,7 @@ Client confirmation after `initialize`. No response is sent (per MCP spec).
 {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
 ```
 
-Returns all registered commands as MCP tools with full schemas:
+Returns commands whose `surfaces` include `"mcp"` as tools with full schemas:
 
 ```json
 {
@@ -235,6 +242,16 @@ When a handler returns structured data (dict, list, number, bool), the response 
 ```
 
 This lets MCP clients consume typed data directly instead of parsing text.
+
+Before middleware reaches a handler, Milo validates tool arguments against the
+same `inputSchema` returned by `tools/list`. Required and unexpected arguments,
+primitive types, enums, string and array lengths, regex patterns, uniqueness,
+and inclusive or exclusive numeric bounds are enforced. String-sourced
+numbers, booleans, JSON arrays, and JSON objects are coerced when valid.
+Failures return `isError: true` with `M-INP-004` through `M-INP-007`, the
+affected `argument`, a machine-readable `reason` and `constraint`, a repair
+`suggestion`, and the advertised schema. The handler is never called with a
+value that fails these checks.
 
 ---
 
@@ -374,7 +391,10 @@ For projects with multiple Milo CLIs, the registry and gateway let you expose al
 myapp --mcp-install
 ```
 
-This writes an entry to `~/.milo/registry.json` with the CLI's name, command, description, and version. The registry is a simple JSON file:
+This writes the CLI's name, command, description, and version to Milo's
+platform registry: `~/.milo/registry.json` on Unix or
+`%LOCALAPPDATA%\milo\registry.json` on Windows. The registry is a simple JSON
+file:
 
 ```json
 {
@@ -405,7 +425,7 @@ uv run python -m milo.gateway --mcp
 
 On startup, the gateway:
 
-1. Reads `~/.milo/registry.json`
+1. Reads `registry.json` from Milo's platform data directory
 2. Spawns each registered CLI and calls `tools/list` to discover its tools
 3. Namespaces all tools as `cli_name.tool_name`
 4. Listens on stdin/stdout for MCP requests
@@ -435,7 +455,7 @@ uv run python -m milo.gateway --list
 Register the gateway once:
 
 ```bash
-claude mcp add milo -- uv run python -m milo.gateway --mcp
+claude mcp add --transport stdio milo -- uv run python -m milo.gateway --mcp
 ```
 
 Now every CLI registered via `--mcp-install` is discoverable through the single `milo` MCP server. Tools are namespaced: `taskman.add`, `ghub.repo.list`, etc.
@@ -444,7 +464,12 @@ Now every CLI registered via `--mcp-install` is discoverable through the single 
 
 ## Hidden commands
 
-Commands marked `hidden=True` are excluded from `tools/list` but can still be called via `tools/call` if you know the name.
+Commands marked `hidden=True`, including commands beneath hidden groups, are
+excluded from `tools/list` and rejected by `tools/call` with structured
+`M-CMD-001` repair data. The gateway routes only names returned by discovery,
+so hidden tools cannot be reached through a namespaced gateway call either.
+Commands whose `surfaces` omit `"mcp"` follow the same list/call enforcement
+without being hidden from their other selected surfaces.
 
 ## Lazy commands and MCP
 
@@ -453,8 +478,7 @@ Lazy commands with pre-computed schemas appear in `tools/list` without importing
 ```python
 cli.lazy_command(
     "deploy",
-    module="myapp.deploy",
-    handler="run_deploy",
+    "myapp.deploy:run_deploy",
     description="Deploy to production",
     schema={
         "type": "object",

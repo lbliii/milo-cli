@@ -31,3 +31,9 @@ def test_mcp_reference_documents_stable_apps_contract() -> None:
     assert "deprecated flat" in text
     assert '`_meta["ui/resourceUri"]`' in text
     assert "does not render HTML" in text
+
+
+def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:
+    text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
+    assert 'Use the `greet` tool to greet "Bob"' in text
+    assert "`my_cli.greet` tool instead" in text

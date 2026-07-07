@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from milo._errors import InputError
 from milo._mcp_router import dispatch as _mcp_dispatch
 from milo.commands import CLI, CommandDef, InvokeResult
 from milo.context import Context
@@ -216,10 +217,12 @@ class TestCLI:
         cli = self._make_cli()
         assert cli.call("add", a=3, b=4) == 7
 
-    def test_call_filters_extra_kwargs(self):
+    def test_call_rejects_extra_kwargs(self):
         cli = self._make_cli()
-        # Extra kwargs should be ignored
-        assert cli.call("greet", name="Hi", extra="ignored") == "Hello, Hi!"
+        with pytest.raises(InputError) as exc_info:
+            cli.call("greet", name="Hi", extra="ignored")
+        assert exc_info.value.context["reason"] == "unexpected_argument"
+        assert exc_info.value.argument == "extra"
 
     def test_run_dispatches(self):
         cli = self._make_cli()
@@ -322,11 +325,10 @@ class TestMCP:
     def test_call_tool_unexpected_arg_reports_argument(self):
         cli = self._make_cli()
         result = _call_tool(cli, {"name": "greet", "arguments": {"name": "A", "bogus": 1}})
-        # Note: _filter_call_kwargs strips unknown args before calling. To exercise
-        # the unexpected-argument path we call the tool via _call_tool directly;
-        # because filtering drops 'bogus' this call succeeds. Skip assertion
-        # about unexpected when filtering protects us.
-        assert result.get("isError") is not True
+        assert result["isError"] is True
+        assert result["errorData"]["argument"] == "bogus"
+        assert result["errorData"]["reason"] == "unexpected_argument"
+        assert result["errorData"]["errorCode"] == "M-INP-005"
 
     def test_call_tool_milo_error_surfaces_argument_context(self):
         from milo._errors import ErrorCode, MiloError

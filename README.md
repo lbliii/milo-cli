@@ -5,33 +5,42 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://pypi.org/project/milo-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-**Build CLIs that humans and AI agents both use natively**
+**One typed Python function becomes a human CLI command, an MCP tool, and an
+agent-readable discovery entry.**
 
-```python
-from milo import CLI
+<!--
+Launch video: replace this comment with the final 60–90 second recording.
+The verified shot list and clean-machine commands live in docs/launch-demo-script.md.
+-->
 
-cli = CLI(name="deployer", description="Deploy services to environments")
+## Prove It in 60 Seconds
 
-@cli.command("deploy", description="Deploy a service", annotations={"destructiveHint": True})
-def deploy(environment: str, service: str, version: str = "latest") -> dict:
-    """Deploy a service to the specified environment."""
-    return {"status": "deployed", "environment": environment, "service": service, "version": version}
+With [`uv`](https://docs.astral.sh/uv/) installed, paste this into a clean
+directory. `uv` downloads Python 3.14 and Milo when they are not already
+available:
 
-cli.run()
+```bash milo-docs:skip reason=downloads-package-and-creates-project
+uvx --python 3.14 --from milo-cli milo new hello_milo
+uv run --python 3.14 --with milo-cli python hello_milo/app.py greet --name World
+uv run --python 3.14 --with milo-cli milo verify hello_milo/app.py
 ```
 
-Three protocols from one decorator:
+The second command prints `Hello, World!`. The verifier then exercises import,
+schema generation, MCP discovery, and a real subprocess JSON-RPC handshake. Do
+not register a new tool until it reports zero failures.
 
-```bash
-# Human CLI
-deployer deploy --environment production --service api
+Now give Claude Code the same file as a local stdio MCP server:
 
-# MCP tool (AI agent calls this via JSON-RPC)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"deploy","arguments":{"environment":"staging","service":"api"}}}' \
-  | deployer --mcp
+```bash milo-docs:skip reason=requires-claude-cli-and-user-registration
+claude mcp add --transport stdio hello_milo -- \
+  uv run --python 3.14 --with milo-cli python "$PWD/hello_milo/app.py" --mcp
+```
 
-# AI-readable discovery document
-deployer --llms-txt
+Ask Claude to “use the `greet` tool to greet Ada,” or call the same function by
+hand:
+
+```bash milo-docs:skip reason=requires-prior-scaffold
+uv run --python 3.14 --with milo-cli python hello_milo/app.py greet --name Ada
 ```
 
 ---
@@ -44,7 +53,7 @@ Milo is a Python framework where every CLI is simultaneously a terminal app, a c
 
 - **Every CLI is an MCP server** — `@cli.command` produces an argparse subcommand, MCP tool, and llms.txt entry from one function. AI agents discover and call your tools with zero extra code.
 - **Dual-mode commands** — The same command shows an interactive UI when a human runs it, and returns structured JSON when an AI calls it via MCP.
-- **Annotated schemas** — Type hints + `Annotated` constraints generate rich JSON Schema. Agents validate inputs before calling.
+- **Annotated schemas** — Type hints + `Annotated` constraints generate rich JSON Schema, and Milo enforces it before handlers run.
 - **Streaming progress** — Commands that yield `Progress` objects stream notifications to MCP clients in real time.
 - **Elm Architecture** — Immutable state, pure reducers, declarative views. Every state transition is explicit and testable.
 - **Free-threading ready** — Built for Python 3.14t (PEP 703). Sagas run on `ThreadPoolExecutor` with no GIL contention.
@@ -95,6 +104,10 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 | `annotations={...}` | MCP behavioral hints |
 | `ui=MCPAppToolMeta("ui://...")` | Link a tool to an MCP Apps UI resource |
 | `Annotated[str, MinLen(1)]` | Schema constraints |
+| `Annotated[str, Positional("NAME")]` | Positional CLI presentation |
+| `Option(aliases=("-n",))` | Compatible option aliases |
+| `surfaces=("cli",)` | Keep long-running commands out of agent discovery |
+| `terminal_renderer=...` | Human output over structured command results |
 
 ### Interactive Apps
 
@@ -121,7 +134,7 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 | **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
 | **Tool Annotations** | Declare `readOnlyHint`, `destructiveHint`, `idempotentHint` per MCP spec | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
 | **Streaming Progress** | Commands yield `Progress` objects; MCP clients receive real-time notifications | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
-| **Schema Constraints** | `Annotated[str, MinLen(1), MaxLen(100)]` generates rich JSON Schema | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
+| **Schema Constraints** | `Annotated[str, MinLen(1), MaxLen(100)]` generates and enforces rich JSON Schema | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
 | **llms.txt** | Generate AI-readable discovery documents from CLI command definitions | [llms.txt →](https://lbliii.github.io/milo-cli/docs/build-clis/llms/) |
 | **Middleware** | Intercept MCP calls and CLI commands for logging, auth, and transformation | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
 | **Observability** | Built-in request logging with latency stats (`milo://stats` resource) | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
@@ -159,8 +172,8 @@ Pick the example closest to your use case, copy its `app.py`, and adapt. See [ex
 | Context injection, logging, progress, confirms | [examples/ctxdemo](examples/ctxdemo) | `Context`, `ctx.info`, `ctx.progress`, `ctx.confirm` |
 | Nested command groups (`app repo list`) | [examples/groups](examples/groups) | `cli.group()`, `walk_commands` |
 | Fast startup via deferred imports | [examples/lazyapp](examples/lazyapp) | `cli.lazy_command()` |
-| Production CLI with hooks, completions, doctor | [examples/devtool](examples/devtool) | `run_doctor`, `before_run`/`after_run`, did-you-mean, completions |
-| AI-native CLI surfacing tools + resources | [examples/taskman](examples/taskman) | `@command`, `@resource`, `--format`, `--llms-txt`, `--mcp` |
+| Production CLI with hooks, completions, doctor | [examples/devtool](examples/devtool) | `run_doctor`, `before_command`/`after_command`, did-you-mean, completions |
+| AI-native CLI surfacing tools + resources | [examples/taskman](examples/taskman) | `@cli.command`, `@cli.resource`, `--format`, `--llms-txt`, `--mcp` |
 | Advanced terminal reports and diagnostics | [examples/outputgallery](examples/outputgallery) | `Context.render`, Kida templates, character maps, JSON output |
 
 **Configuration, plugins, pipelines**
@@ -241,7 +254,8 @@ Every Milo CLI is automatically an MCP server:
 myapp --mcp
 
 # Register with an AI host directly
-claude mcp add myapp -- uv run python examples/deploy/app.py --mcp
+claude mcp add --transport stdio myapp -- \
+  uv run python "$PWD/examples/deploy/app.py" --mcp
 ```
 
 For multiple CLIs, register them and run a single gateway:
@@ -255,7 +269,7 @@ deployer --mcp-install
 uv run python -m milo.gateway --mcp
 
 # Or register the gateway with your AI host
-claude mcp add milo -- uv run python -m milo.gateway --mcp
+claude mcp add --transport stdio milo -- uv run python -m milo.gateway --mcp
 ```
 
 The gateway namespaces tools automatically: `taskman.add`, `deployer.deploy`, etc. Implements MCP 2025-11-25 with `outputSchema`, `structuredContent`, tool `annotations`, and streaming `Progress` notifications.

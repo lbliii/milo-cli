@@ -360,7 +360,7 @@ def _list_tools(cli: CLI, *, include_ui: bool = True) -> list[dict[str, Any]]:
 
     tools = []
     for dotted_name, cmd in cli.walk_commands():
-        if cmd.hidden:
+        if _tool_is_hidden(cli, dotted_name, cmd):
             continue
         ui = getattr(cmd, "ui", None)
         if ui is not None and "model" not in ui.visibility:
@@ -418,6 +418,46 @@ def _validate_ui_link(cli: CLI, tool_name: str, resource_uri: str) -> None:
     )
 
 
+def _tool_is_hidden(
+    cli: CLI,
+    dotted_name: str,
+    command: CommandDef | LazyCommandDef,
+) -> bool:
+    """Return whether a tool or any group in its dotted path is hidden."""
+    if command.hidden or "mcp" not in command.surfaces:
+        return True
+
+    parts = dotted_name.split(".")[:-1]
+    groups = cli._groups
+    aliases = cli._group_alias_map
+    for part in parts:
+        resolved = aliases.get(part, part)
+        group = groups.get(resolved)
+        if group is None:
+            return False
+        if group.hidden:
+            return True
+        groups = group._groups
+        aliases = group._group_alias_map
+    return False
+
+
+def _ensure_public_tool(cli: CLI, tool_name: str) -> None:
+    """Reject unknown or hidden tools before MCP dispatch resolves handlers."""
+    from milo._errors import ErrorCode, MiloError
+
+    command = cli.get_command(tool_name)
+    hidden = command is not None and _tool_is_hidden(cli, tool_name, command)
+    if command is None or hidden:
+        reason = "hidden_command" if hidden else "unknown_tool"
+        raise MiloError(
+            ErrorCode.CMD_NOT_FOUND,
+            f"Unknown tool: {tool_name!r}.",
+            context={"reason": reason},
+            suggestion="Call tools/list and use one of the advertised tool names.",
+        )
+
+
 def _tool_title(cmd: CommandDef | LazyCommandDef) -> str:
     """Derive a human-readable title for a tool.
 
@@ -468,6 +508,7 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
     arguments = params.get("arguments", {})
 
     try:
+        _ensure_public_tool(cli, tool_name)
         result = cli.call_raw(tool_name, **arguments)
 
         # Stream progress notifications for generator results
@@ -557,11 +598,13 @@ def _tool_error_response(exc: Exception, tool_name: str, cli: CLI) -> dict[str, 
 
 def _tool_schema(cli: CLI, tool_name: str) -> dict[str, Any] | None:
     """Return the input schema for a named tool, if known."""
-    try:
-        _, cmd = cli._get_resolved_command(tool_name)
-    except Exception:
+    cmd = cli.get_command(tool_name)
+    if cmd is None or _tool_is_hidden(cli, tool_name, cmd):
         return None
-    schema = getattr(cmd, "schema", None)
+    try:
+        schema = cmd.schema
+    except Exception:  # silent: error enrichment must not mask the original tool failure
+        return None
     return schema if isinstance(schema, dict) else None
 
 

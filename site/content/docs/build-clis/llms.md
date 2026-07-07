@@ -99,7 +99,8 @@ text = generate_llms_txt(cli)
 
 ## Hidden commands
 
-Commands with `hidden=True` are excluded from the output.
+Commands with `hidden=True`, or whose `surfaces` omit `"llms"`, are excluded
+from the output.
 
 ## Aliases
 

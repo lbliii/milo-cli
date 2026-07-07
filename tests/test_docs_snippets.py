@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_docs_snippets.py"
 _SPEC = importlib.util.spec_from_file_location("check_docs_snippets", _SCRIPT)
@@ -13,6 +15,20 @@ assert _SPEC.loader is not None
 sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 check_paths = _MODULE.check_paths
+FENCE_RE = _MODULE.FENCE_RE
+_parse_info = _MODULE._parse_info
+
+
+@pytest.mark.parametrize("relative_path", ["docs/agent-quickstart.md", "docs/testing.md"])
+def test_agent_docs_tag_typed_fences(relative_path: str):
+    path = _REPO_ROOT / relative_path
+    text = path.read_text(encoding="utf-8")
+
+    for match in FENCE_RE.finditer(text):
+        language, directive, _options = _parse_info(match.group("info"))
+        if language in {"bash", "sh", "shell", "python"}:
+            line = text.count("\n", 0, match.start()) + 1
+            assert directive is not None, f"{path}:{line} has no milo-docs directive"
 
 
 def test_tagged_shell_snippet_runs(tmp_path: Path):

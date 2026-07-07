@@ -3,15 +3,15 @@
 A milo CLI has four test layers, each short. The template at
 [`examples/greet/tests/test_greet.py`](../examples/greet/tests/test_greet.py)
 shows the command-level layers. New projects from `milo new` include all four.
-Copy the file next to your own CLI and edit the assertions —
-the structure is the same for every CLI.
+Copy the file into your CLI's `tests/` directory and edit the imports and
+assertions — the structure is the same for every CLI.
 
 ## Layer 1 — Schema
 
 The JSON Schema generated from your function's type hints must match what MCP
 clients will see. Most schema drift is caught here.
 
-```python
+```python milo-docs:compile
 from milo.schema import function_to_schema
 
 def test_schema_matches_signature():
@@ -29,7 +29,7 @@ Verify that the function runs correctly when invoked through the CLI argv parser
 Use `cli.invoke(argv)` — it returns an `InvokeResult` with `output`, `exit_code`,
 `result`, `stderr`, and `exception`. This is the test your CI should rely on most.
 
-```python
+```python milo-docs:compile
 def test_greet_argv():
     result = cli.invoke(["greet", "--name", "Alice"])
     assert result.exit_code == 0
@@ -43,7 +43,7 @@ For direct calls that bypass argv parsing, use `cli.call_raw(name, **kwargs)`.
 Verify that the JSON-RPC `tools/call` path returns what agents expect, including
 error data when a required argument is missing.
 
-```python
+```python milo-docs:compile
 from milo.mcp import _call_tool
 
 def test_mcp_dispatch():
@@ -67,7 +67,7 @@ Run the same self-diagnosis that agent quickstarts and scaffolded projects use.
 This checks imports, CLI discovery, schema generation, MCP `tools/list`, and a
 subprocess MCP handshake.
 
-```python
+```python milo-docs:compile
 from pathlib import Path
 
 from milo.verify import verify
@@ -88,7 +88,7 @@ CLI dispatch — Layers 1-3 cover schema, direct dispatch, and MCP dispatch.
 
 ## Running tests
 
-```bash
+```bash milo-docs:skip reason=includes-full-ci-and-recursive-docs-check
 # Full suite
 make test
 

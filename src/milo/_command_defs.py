@@ -7,10 +7,25 @@ import inspect
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from milo.mcp_apps import MCPAppToolMeta
+
+CommandSurface = Literal["cli", "mcp", "llms"]
+_VALID_COMMAND_SURFACES = frozenset({"cli", "mcp", "llms"})
+
+
+def _normalize_surfaces(
+    surfaces: tuple[CommandSurface, ...] | list[CommandSurface],
+) -> tuple[CommandSurface, ...]:
+    """Validate and de-duplicate command discovery surfaces."""
+    normalized = tuple(dict.fromkeys(surfaces))
+    invalid = set(normalized) - _VALID_COMMAND_SURFACES
+    if invalid:
+        msg = f"Unknown command surface(s): {', '.join(sorted(invalid))}"
+        raise ValueError(msg)
+    return normalized
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +72,7 @@ class CommandDef:
     aliases: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     hidden: bool = False
+    surfaces: tuple[CommandSurface, ...] = ("cli", "mcp", "llms")
     examples: tuple[dict[str, Any], ...] = ()
     confirm: str = ""
     """If non-empty, prompt for confirmation before running."""
@@ -64,8 +80,13 @@ class CommandDef:
     """MCP tool annotations (readOnlyHint, destructiveHint, etc.)."""
     display_result: bool = True
     """If False, suppress plain-format output (return value still available for --format json)."""
+    terminal_renderer: Callable[[Any, Any], str] | None = None
+    """Optional plain-terminal renderer; protocol and programmatic calls keep structured values."""
     ui: MCPAppToolMeta | None = None
     """Optional stable MCP Apps metadata linking this tool to a UI resource."""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "surfaces", _normalize_surfaces(self.surfaces))
 
 
 class LazyCommandDef:
@@ -92,7 +113,9 @@ class LazyCommandDef:
         "hidden",
         "import_path",
         "name",
+        "surfaces",
         "tags",
+        "terminal_renderer",
         "ui",
     )
 
@@ -106,10 +129,12 @@ class LazyCommandDef:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
+        terminal_renderer: Callable[[Any, Any], str] | None = None,
         ui: MCPAppToolMeta | None = None,
     ) -> None:
         self.name = name
@@ -118,10 +143,12 @@ class LazyCommandDef:
         self.aliases = tuple(aliases)
         self.tags = tuple(tags)
         self.hidden = hidden
+        self.surfaces = _normalize_surfaces(surfaces)
         self.examples = tuple(examples)
         self.confirm = confirm
         self.annotations = annotations or {}
         self.display_result = display_result
+        self.terminal_renderer = terminal_renderer
         self.ui = ui
         self._schema = schema
         self._resolved: CommandDef | None = None
@@ -176,11 +203,13 @@ class LazyCommandDef:
                 aliases=self.aliases,
                 tags=self.tags,
                 hidden=self.hidden,
+                surfaces=self.surfaces,
                 examples=self.examples,
                 confirm=self.confirm,
                 annotations=self.annotations,
                 ui=self.ui,
                 display_result=self.display_result,
+                terminal_renderer=self.terminal_renderer,
             )
             return self._resolved
 
@@ -218,10 +247,12 @@ def _make_command_def(
     aliases: tuple[str, ...] = (),
     tags: tuple[str, ...] = (),
     hidden: bool = False,
+    surfaces: tuple[CommandSurface, ...] = ("cli", "mcp", "llms"),
     examples: tuple[dict[str, Any], ...] = (),
     confirm: str = "",
     annotations: dict[str, Any] | None = None,
     display_result: bool = True,
+    terminal_renderer: Callable[[Any, Any], str] | None = None,
     ui: MCPAppToolMeta | None = None,
 ) -> CommandDef:
     """Build a CommandDef from a function and decorator kwargs."""
@@ -239,10 +270,12 @@ def _make_command_def(
         aliases=aliases,
         tags=tags,
         hidden=hidden,
+        surfaces=_normalize_surfaces(surfaces),
         examples=examples,
         confirm=confirm,
         annotations=annotations or {},
         display_result=display_result,
+        terminal_renderer=terminal_renderer,
         ui=ui,
     )
 

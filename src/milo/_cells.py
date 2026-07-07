@@ -35,6 +35,11 @@ def cell_width(value: object) -> int:
     return width
 
 
+def max_cell_width(value: object) -> int:
+    """Return the widest display-cell width among the text's lines."""
+    return max((cell_width(line) for line in str(value).splitlines()), default=0)
+
+
 def cell_ljust(value: object, width: int, fill: str = " ") -> str:
     """Left-justify *value* to display-cell *width*."""
     text = str(value)
