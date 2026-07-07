@@ -71,7 +71,7 @@ class TestVerifyScaffold:
         report = verify(str(project / "app.py"))
         assert report.exit_code == 0, report.format()
         assert report.failures == 0
-        assert report.passed >= 7
+        assert report.passed == 10
         # Confirm every expected check is present and passed
         check_names = {c.name for c in report.checks}
         for expected in {
@@ -81,7 +81,10 @@ class TestVerifyScaffold:
             "schemas_generate",
             "mcp_list_tools",
             "mcp_discover",
+            "mcp_apps_in_process",
+            "mcp_apps_gateway",
             "mcp_transport",
+            "mcp_apps_transport",
         }:
             assert expected in check_names
 
@@ -186,8 +189,14 @@ class TestVerifyModuleAttrForm:
         report = verify("mypkg:cli")
         discover_check = next(c for c in report.checks if c.name == "mcp_discover")
         assert discover_check.status == "ok"
+        in_process_check = next(c for c in report.checks if c.name == "mcp_apps_in_process")
+        assert in_process_check.status == "ok"
+        gateway_check = next(c for c in report.checks if c.name == "mcp_apps_gateway")
+        assert gateway_check.status == "ok"
         transport_check = next(c for c in report.checks if c.name == "mcp_transport")
         assert transport_check.status == "skip"
+        apps_transport_check = next(c for c in report.checks if c.name == "mcp_apps_transport")
+        assert apps_transport_check.status == "skip"
         assert report.exit_code == 0
 
 
@@ -229,7 +238,7 @@ class TestMiloVerifyCommand:
             check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "7 passed" in result.stdout
+        assert "10 passed" in result.stdout
 
     def test_milo_verify_exits_nonzero_on_missing_file(self, tmp_path):
         result = subprocess.run(

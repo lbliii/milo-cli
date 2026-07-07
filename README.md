@@ -26,8 +26,9 @@ uv run --python 3.14 --with milo-cli milo verify hello_milo/app.py
 ```
 
 The second command prints `Hello, World!`. The verifier then exercises import,
-schema generation, MCP discovery, and a real subprocess JSON-RPC handshake. Do
-not register a new tool until it reports zero failures.
+schema generation, MCP discovery, MCP Apps tool/resource/gateway conformance,
+and a real subprocess JSON-RPC handshake with resource reads. Do not register a
+new tool until it reports zero failures.
 
 Now give Claude Code the same file as a local stdio MCP server:
 

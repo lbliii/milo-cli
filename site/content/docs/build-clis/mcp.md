@@ -370,6 +370,21 @@ URIs return `M-UI-002`; unnegotiated reads return `M-UI-003`; and child
 disconnect, timeout, parse, or unavailable errors return `M-UI-004` with
 `child`, `reason`, and resource URI repair fields.
 
+### Verify conformance before registration
+
+Run `milo verify app.py` before an MCP host opens a linked UI. Three stable
+check identities isolate the broken view:
+
+| Check | Contract |
+|---|---|
+| `mcp_apps_in_process` | Discovery and negotiated capabilities agree; tool links resolve; listed resources have valid URI, MIME/profile, metadata, and readable text/base64 payloads |
+| `mcp_apps_gateway` | A real single-child gateway projection rewrites each link and preserves resource/tool metadata |
+| `mcp_apps_transport` | The same capability, list, link, and resource-read checks pass over subprocess JSON-RPC |
+
+These failures exit 1 and include the next repair action. Schema documentation
+warnings still exit 0. Milo validates transport shape only: it does not parse,
+sanitize, render, or otherwise interpret the application HTML.
+
 See the runnable [minimal MCP Apps example](https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app).
 
 ---
