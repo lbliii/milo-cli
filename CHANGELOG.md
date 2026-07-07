@@ -1,3 +1,10 @@
+## 0.4.1 — 2026-07-07
+
+### Changed
+
+- Raised the runtime dependency range to `kida-templates>=0.11.0,<0.12.0`, the API-compatible framework-integration checkpoint required by downstream Chirp releases.
+
+
 # Changelog
 
 All notable changes to Milo are documented here.
