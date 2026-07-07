@@ -45,3 +45,40 @@ def test_bench_chirp_shaped_parser_construction(benchmark) -> None:
     """Build a parser with positionals, aliases, surfaces, and lazy schemas."""
     cli = _make_chirp_shaped_cli()
     benchmark(cli.build_parser)
+
+
+def _make_large_lazy_cli(size: int = 100) -> CLI:
+    cli = CLI(name="large")
+    for index in range(size):
+        cli.lazy_command(
+            f"command-{index}",
+            "json:dumps",
+            description=f"Command {index}",
+            schema={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+            },
+        )
+    return cli
+
+
+def test_bench_large_lazy_navigation_parser(benchmark) -> None:
+    """Build metadata-only navigation for a large lazy command registry."""
+    cli = _make_large_lazy_cli()
+    benchmark(cli._build_navigation_parser)
+
+
+def test_bench_large_lazy_full_parser(benchmark) -> None:
+    """Retain the explicit full-tree parser baseline for conflict/tooling work."""
+    cli = _make_large_lazy_cli()
+    benchmark(cli.build_parser)
+
+
+def test_bench_large_lazy_selected_parser(benchmark) -> None:
+    """Build only one selected leaf parser in a large lazy registry."""
+    cli = _make_large_lazy_cli()
+    navigation = cli._build_navigation_parser()
+    args, _ = navigation.parse_known_args(["command-50", "--value", "ok"])
+    selected = cli._selected_command_path(args)
+    assert selected is not None
+    benchmark(cli._build_selected_parser, *selected)

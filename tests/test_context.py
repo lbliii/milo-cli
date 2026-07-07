@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from unittest.mock import patch
@@ -108,6 +109,48 @@ class TestGlobalOptions:
         parser = cli.build_parser()
         args = parser.parse_args(["-e", "production", "build"])
         assert args.environment == "production"
+
+    def test_root_option_specs_cover_parser_flags_and_user_options(self):
+        cli = CLI(name="app", version="1.2.3")
+        cli.global_option(
+            "environment",
+            short="-e",
+            default="local",
+            description="Config environment",
+        )
+
+        specs = cli.root_option_specs()
+        spec_flags = {flag for spec in specs for flag in spec.flags}
+        parser = cli.build_parser()
+        parser_flags = {
+            flag
+            for action in parser._actions
+            if not isinstance(action, argparse._SubParsersAction)
+            for flag in action.option_strings
+        }
+
+        assert spec_flags == parser_flags
+        environment = next(spec for spec in specs if spec.dest == "environment")
+        assert environment.flags == ("-e", "--environment")
+        assert environment.default == "local"
+        assert environment.option_type is str
+
+    def test_full_parser_reports_root_option_conflicts_explicitly(self):
+        cli = CLI(name="app")
+        cli.global_option("force", is_flag=True)
+
+        with pytest.raises(argparse.ArgumentError, match="conflicting option string"):
+            cli.build_parser()
+
+    def test_full_parser_reports_command_envelope_conflicts_explicitly(self):
+        cli = CLI(name="app")
+
+        @cli.command("render")
+        def render(format: str = "html") -> str:  # noqa: A002 - exercise --format collision
+            return format
+
+        with pytest.raises(argparse.ArgumentError, match="conflicting option string: --format"):
+            cli.build_parser()
 
     def test_verbose_flag(self):
         cli = CLI(name="app")

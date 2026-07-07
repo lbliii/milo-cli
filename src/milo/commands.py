@@ -21,6 +21,7 @@ from milo._command_defs import (
     LazyImportError,
     PromptDef,
     ResourceDef,
+    RootOptionSpec,
     _is_context_param,
     _make_command_def,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "LazyImportError",
     "PromptDef",
     "ResourceDef",
+    "RootOptionSpec",
 ]
 
 
@@ -101,6 +103,7 @@ class _MiloArgumentParser(argparse.ArgumentParser):
     """ArgumentParser subclass that provides did-you-mean suggestions."""
 
     _cli_ref: CLI | None = None
+    _milo_help_report: Callable[[], Any] = lambda: None
     _milo_version_report: Callable[[], str] = lambda: ""
 
     def error(self, message: str) -> NoReturn:  # type: ignore[override]
@@ -139,6 +142,25 @@ class _VersionReportAction(argparse.Action):
         del namespace, values, option_string
         report = cast("_MiloArgumentParser", parser)._milo_version_report()
         parser._print_message(f"{report.rstrip()}\n", sys.stdout)
+        parser.exit()
+
+
+class _MetadataHelpAction(argparse.Action):
+    """Render registry-backed help without requiring a full parser tree."""
+
+    def __init__(self, option_strings: list[str], dest: str, **kwargs: Any) -> None:
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        del namespace, values, option_string
+        reporter = cast("_MiloArgumentParser", parser)._milo_help_report
+        reporter()
         parser.exit()
 
 
@@ -248,6 +270,123 @@ class CLI:
                 is_flag=is_flag,
             )
         )
+
+    def root_option_specs(self) -> tuple[RootOptionSpec, ...]:
+        """Return immutable metadata for built-in and user-defined root options."""
+        specs = [
+            RootOptionSpec(
+                flags=("-h", "--help"),
+                dest="help",
+                description="show this help message and exit",
+                action="help",
+            )
+        ]
+        if self.version or self.version_report:
+            specs.append(
+                RootOptionSpec(
+                    flags=self.version_flags,
+                    dest="version",
+                    description="show program's version number and exit",
+                    action="version_report",
+                )
+            )
+        specs.extend(
+            (
+                RootOptionSpec(
+                    flags=("--llms-txt",),
+                    dest="llms_txt",
+                    description="Output llms.txt for AI agent discovery",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--mcp",),
+                    dest="mcp",
+                    description="Run as MCP server (JSON-RPC on stdin/stdout)",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--mcp-install",),
+                    dest="mcp_install",
+                    description="Register this CLI in the milo gateway for AI agent discovery",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--mcp-uninstall",),
+                    dest="mcp_uninstall",
+                    description="Remove this CLI from the milo gateway",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--completions",),
+                    dest="completions",
+                    description="Output shell completion script (bash, zsh, fish, powershell)",
+                    choices=("bash", "zsh", "fish", "powershell"),
+                    metavar="SHELL",
+                ),
+                RootOptionSpec(
+                    flags=("-v", "--verbose"),
+                    dest="verbose",
+                    description="Increase verbosity (-v verbose, -vv debug)",
+                    action="count",
+                    default=0,
+                ),
+                RootOptionSpec(
+                    flags=("-q", "--quiet"),
+                    dest="quiet",
+                    description="Suppress non-error output",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--no-color",),
+                    dest="no_color",
+                    description="Disable color output",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("-n", "--dry-run"),
+                    dest="dry_run",
+                    description="Show what would happen without making changes",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("-o", "--output-file"),
+                    dest="_output_file",
+                    description="Write output to FILE instead of stdout",
+                    default="",
+                    metavar="FILE",
+                ),
+                RootOptionSpec(
+                    flags=("--force",),
+                    dest="force",
+                    description="Overwrite output file if it exists",
+                    action="store_true",
+                    default=False,
+                ),
+            )
+        )
+        specs.extend(
+            RootOptionSpec(
+                flags=(
+                    (opt.short, f"--{opt.name.replace('_', '-')}")
+                    if opt.short
+                    else (f"--{opt.name.replace('_', '-')}",)
+                ),
+                dest=opt.name,
+                description=opt.description,
+                action="store_true" if opt.is_flag else "store",
+                default=opt.default,
+                option_type=None if opt.is_flag else opt.option_type,
+            )
+            for opt in self._global_options
+        )
+        return tuple(specs)
 
     def before_command(self, fn: Callable) -> Callable:
         """Register a hook that runs before every command.
@@ -692,102 +831,7 @@ class CLI:
 
     def build_parser(self) -> argparse.ArgumentParser:
         """Build argparse parser from registered commands and groups."""
-        parser = _MiloArgumentParser(
-            prog=self.name,
-            description=self.description,
-            formatter_class=HelpRenderer,
-        )
-        parser._cli_ref = self
-        if self.version or self.version_report:
-            reporter = self.version_report or (lambda: f"{self.name} {self.version}")
-            parser._milo_version_report = reporter
-            parser.add_argument(*self.version_flags, action=_VersionReportAction)
-        parser.add_argument(
-            "--llms-txt",
-            action="store_true",
-            help="Output llms.txt for AI agent discovery",
-        )
-        parser.add_argument(
-            "--mcp",
-            action="store_true",
-            help="Run as MCP server (JSON-RPC on stdin/stdout)",
-        )
-        parser.add_argument(
-            "--mcp-install",
-            action="store_true",
-            help="Register this CLI in the milo gateway for AI agent discovery",
-        )
-        parser.add_argument(
-            "--mcp-uninstall",
-            action="store_true",
-            help="Remove this CLI from the milo gateway",
-        )
-        parser.add_argument(
-            "--completions",
-            choices=["bash", "zsh", "fish", "powershell"],
-            default=None,
-            metavar="SHELL",
-            help="Output shell completion script (bash, zsh, fish, powershell)",
-        )
-
-        # Built-in global options
-        parser.add_argument(
-            "-v",
-            "--verbose",
-            action="count",
-            default=0,
-            help="Increase verbosity (-v verbose, -vv debug)",
-        )
-        parser.add_argument(
-            "-q",
-            "--quiet",
-            action="store_true",
-            default=False,
-            help="Suppress non-error output",
-        )
-        parser.add_argument(
-            "--no-color",
-            action="store_true",
-            default=False,
-            help="Disable color output",
-        )
-        parser.add_argument(
-            "-n",
-            "--dry-run",
-            action="store_true",
-            default=False,
-            help="Show what would happen without making changes",
-        )
-        parser.add_argument(
-            "-o",
-            "--output-file",
-            dest="_output_file",
-            default="",
-            metavar="FILE",
-            help="Write output to FILE instead of stdout",
-        )
-        parser.add_argument(
-            "--force",
-            action="store_true",
-            default=False,
-            help="Overwrite output file if it exists",
-        )
-
-        # User-defined global options
-        for opt in self._global_options:
-            flags = [f"--{opt.name.replace('_', '-')}"]
-            if opt.short:
-                flags.insert(0, opt.short)
-            kwargs: dict[str, Any] = {
-                "dest": opt.name,
-                "help": opt.description,
-                "default": opt.default,
-            }
-            if opt.is_flag:
-                kwargs["action"] = "store_true"
-            else:
-                kwargs["type"] = opt.option_type
-            parser.add_argument(*flags, **kwargs)
+        parser = self._new_root_parser()
 
         has_children = self._commands or self._groups
         if has_children:
@@ -795,6 +839,129 @@ class CLI:
             self._add_commands_to_subparsers(subparsers, self._commands)
             self._add_groups_to_subparsers(subparsers, self._groups)
 
+        return parser
+
+    def _new_root_parser(self) -> _MiloArgumentParser:
+        """Create a root parser from the public root-option metadata."""
+        parser = _MiloArgumentParser(
+            prog=self.name,
+            description=self.description,
+            formatter_class=HelpRenderer,
+            add_help=False,
+        )
+        parser._cli_ref = self
+        parser._milo_help_report = self._format_root_help
+        parser._milo_version_report = self.version_report or (lambda: f"{self.name} {self.version}")
+        self._add_root_options(parser)
+        return parser
+
+    def _add_root_options(self, parser: argparse.ArgumentParser) -> None:
+        """Add root options using :meth:`root_option_specs` as the source of truth."""
+        for spec in self.root_option_specs():
+            kwargs: dict[str, Any] = {
+                "help": spec.description,
+            }
+            if spec.action == "help":
+                kwargs["action"] = _MetadataHelpAction
+            elif spec.action == "version_report":
+                kwargs["action"] = _VersionReportAction
+            else:
+                kwargs["dest"] = spec.dest
+                kwargs["action"] = spec.action
+                kwargs["default"] = spec.default
+                if spec.option_type is not None:
+                    kwargs["type"] = spec.option_type
+                if spec.choices:
+                    kwargs["choices"] = spec.choices
+                if spec.metavar:
+                    kwargs["metavar"] = spec.metavar
+            parser.add_argument(*spec.flags, **kwargs)
+
+    def _build_navigation_parser(self) -> argparse.ArgumentParser:
+        """Build a schema-free parser for root options and command selection."""
+        parser = self._new_root_parser()
+        if self._commands or self._groups:
+            subparsers = parser.add_subparsers(dest="_command")
+            self._add_navigation_commands(subparsers, self._commands)
+            self._add_navigation_groups(subparsers, self._groups)
+        return parser
+
+    def _add_navigation_commands(
+        self,
+        subparsers: argparse._SubParsersAction,
+        commands: dict[str, CommandDef | LazyCommandDef],
+    ) -> None:
+        """Add leaf metadata without touching command schemas."""
+        for cmd in commands.values():
+            if cmd.hidden or "cli" not in cmd.surfaces:
+                continue
+            command_parser = subparsers.add_parser(
+                cmd.name,
+                help=cmd.description,
+                aliases=list(cmd.aliases),
+                formatter_class=HelpRenderer,
+                add_help=False,
+            )
+            cast("_MiloArgumentParser", command_parser)._milo_help_report = (
+                lambda command=cmd, parser=command_parser: self._format_command_help(
+                    command, parser.prog
+                )
+            )
+            command_parser.add_argument(
+                "-h",
+                "--help",
+                action=_MetadataHelpAction,
+                help="show this help message and exit",
+            )
+
+    def _add_navigation_groups(
+        self,
+        subparsers: argparse._SubParsersAction,
+        groups: dict[str, Group],
+    ) -> None:
+        """Add group metadata recursively without touching leaf schemas."""
+        for group in groups.values():
+            if group.hidden:
+                continue
+            group_parser = subparsers.add_parser(
+                group.name,
+                help=group.description,
+                aliases=list(group.aliases),
+                formatter_class=HelpRenderer,
+                add_help=False,
+            )
+            cast("_MiloArgumentParser", group_parser)._milo_help_report = (
+                lambda group=group, parser=group_parser: self._format_group_help(group, parser.prog)
+            )
+            group_parser.add_argument(
+                "-h",
+                "--help",
+                action=_MetadataHelpAction,
+                help="show this help message and exit",
+            )
+            if group._commands or group._groups:
+                group_sub = group_parser.add_subparsers(dest=f"_command_{group.name}")
+                self._add_navigation_commands(group_sub, group._commands)
+                self._add_navigation_groups(group_sub, group._groups)
+
+    def _build_selected_parser(
+        self,
+        groups: tuple[Group, ...],
+        command: CommandDef | LazyCommandDef,
+    ) -> argparse.ArgumentParser:
+        """Build a parser containing only one selected command path."""
+        parser = self._new_root_parser()
+        subparsers = parser.add_subparsers(dest="_command")
+        current = subparsers
+        for group in groups:
+            group_parser = current.add_parser(
+                group.name,
+                help=group.description,
+                aliases=list(group.aliases),
+                formatter_class=HelpRenderer,
+            )
+            current = group_parser.add_subparsers(dest=f"_command_{group.name}")
+        self._add_commands_to_subparsers(current, {command.name: command})
         return parser
 
     def _add_commands_to_subparsers(
@@ -958,14 +1125,38 @@ class CLI:
     def run(self, argv: list[str] | None = None) -> Any:
         """Parse args and dispatch to the appropriate command."""
         self._run_called = True
-        parser = self.build_parser()
-        self._parser = parser
-        args = parser.parse_args(argv)
-
-        builtin_mode = self._resolve_builtin_mode(args)
-        if builtin_mode is not None:
-            self._run_builtin_mode(args, builtin_mode)
+        resolved_argv = list(sys.argv[1:] if argv is None else argv)
+        if not resolved_argv:
+            self._format_root_help()
             return None
+
+        navigation_parser = self._build_navigation_parser()
+        self._parser = navigation_parser
+        navigation_args, remaining = navigation_parser.parse_known_args(resolved_argv)
+
+        builtin_mode = self._resolve_builtin_mode(navigation_args)
+        if builtin_mode is not None:
+            if remaining:
+                navigation_parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+            self._run_builtin_mode(navigation_args, builtin_mode)
+            return None
+
+        selected = self._selected_command_path(navigation_args)
+        if selected is None:
+            if remaining:
+                navigation_parser.error(f"unrecognized arguments: {' '.join(remaining)}")
+            execution = self._resolve_command_execution(navigation_args)
+            if execution is not None:
+                raise AssertionError("navigation parser resolved an unexpected command")
+            return None
+
+        parser = self._build_selected_parser(*selected)
+        self._parser = parser
+        args = parser.parse_args(resolved_argv)
+        return self._dispatch_parsed_args(args)
+
+    def _dispatch_parsed_args(self, args: argparse.Namespace) -> Any:
+        """Execute a fully parsed command namespace."""
 
         # Build execution context from global options
         ctx = self._build_context(args)
@@ -997,6 +1188,38 @@ class CLI:
             self._write_command_output(display, execution.fmt, ctx.output_file, force=force)
 
         return result
+
+    def _selected_command_path(
+        self, args: argparse.Namespace
+    ) -> tuple[tuple[Group, ...], CommandDef | LazyCommandDef] | None:
+        """Return the selected group path and leaf from a navigation namespace."""
+        command_name = getattr(args, "_command", None)
+        if not command_name:
+            return None
+
+        command = self.get_command(command_name)
+        if command is not None:
+            return (), command
+
+        group = self._groups.get(command_name)
+        if group is None:
+            canonical_group = self._group_alias_map.get(command_name)
+            if canonical_group is not None:
+                group = self._groups.get(canonical_group)
+        if group is None:
+            return None
+        groups = [group]
+        while True:
+            child_name = getattr(args, f"_command_{group.name}", None)
+            if not child_name:
+                return None
+            command = group.get_command(child_name)
+            if command is not None:
+                return tuple(groups), command
+            group = group.get_group(child_name)
+            if group is None:
+                return None
+            groups.append(group)
 
     def invoke(self, argv: list[str]) -> InvokeResult:
         """Run a command and capture output for testing.
@@ -1085,7 +1308,7 @@ class CLI:
         result = self._resolve_command_from_args(args)
 
         if isinstance(result, ResolvedGroup):
-            result.group.format_help(result.prog)
+            self._format_group_help(result.group, result.prog)
             return None
 
         if isinstance(result, ResolvedNothing):
@@ -1343,7 +1566,7 @@ class CLI:
         )
 
     def _format_root_help(self) -> None:
-        """Render root help from command/group registries and the actual parser."""
+        """Render root help from command, group, and root-option metadata."""
         from milo.help import HelpState
         from milo.templates import get_env
 
@@ -1360,24 +1583,20 @@ class CLI:
             ]
         )
 
-        # Derive options from the actual parser so new flags are never missed
-        options: list[dict[str, Any]] = []
-        for action in self._parser._actions:
-            if isinstance(action, argparse._SubParsersAction):
-                continue
-            flags = ", ".join(action.option_strings) if action.option_strings else ""
-            if not flags:
-                continue
-            entry: dict[str, Any] = {"flags": flags, "help": action.help or ""}
-            if action.metavar:
-                entry["metavar"] = action.metavar
-            options.append(entry)
+        options = tuple(
+            {
+                "flags": ", ".join(spec.flags),
+                "help": spec.description,
+                **({"metavar": spec.metavar} if spec.metavar else {}),
+            }
+            for spec in self.root_option_specs()
+        )
 
         state = HelpState(
             prog=self.name,
             description=self.description,
             commands=commands,
-            options=tuple(options),
+            options=options,
         )
         env = get_env()
         try:
@@ -1391,6 +1610,46 @@ class CLI:
             output = "\n".join(lines)
         sys.stdout.write(output + "\n")
         sys.stdout.flush()
+
+    def _format_group_help(self, group: Group, prog: str) -> None:
+        """Render group metadata through an overrideable application hook."""
+        group.format_help(prog.rsplit(" ", 1)[0])
+
+    def _format_command_help(
+        self,
+        command: CommandDef | LazyCommandDef,
+        prog: str,
+    ) -> None:
+        """Render one leaf schema through an overrideable application hook."""
+        fmt_class = (
+            help_formatter_with_examples(tuple(command.examples))
+            if command.examples
+            else HelpRenderer
+        )
+        parser = _MiloArgumentParser(
+            prog=prog,
+            description=command.description,
+            formatter_class=fmt_class,
+        )
+        try:
+            schema = command.schema
+        except LazyImportError as exc:
+            import warnings
+
+            warnings.warn(
+                f"Command {command.name!r} failed to load: {exc.cause}",
+                UserWarning,
+                stacklevel=2,
+            )
+            schema = {"type": "object", "properties": {}}
+        self._add_arguments_from_schema(parser, schema, command)
+        parser.add_argument(
+            "--format",
+            choices=["plain", "json", "table"],
+            default="plain",
+            help="Output format",
+        )
+        sys.stdout.write(parser.format_help())
 
     def _resolve_command_from_args(self, args: argparse.Namespace) -> ResolveResult:
         """Walk the parsed args to find the leaf command, group, or nothing."""

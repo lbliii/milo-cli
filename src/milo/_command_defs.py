@@ -41,6 +41,20 @@ class GlobalOption:
 
 
 @dataclass(frozen=True, slots=True)
+class RootOptionSpec:
+    """Parser-independent metadata for a CLI-wide root option."""
+
+    flags: tuple[str, ...]
+    dest: str
+    description: str = ""
+    action: Literal["help", "version_report", "store", "store_true", "count"] = "store"
+    default: Any = None
+    option_type: type | None = None
+    choices: tuple[str, ...] = ()
+    metavar: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceDef:
     """A registered MCP resource."""
 

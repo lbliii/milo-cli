@@ -11,7 +11,9 @@ category: build-clis
 icon: zap
 ---
 
-Lazy loading defers the import of command handler modules until the command is actually invoked. This keeps CLI startup fast even with dozens of commands that have heavy dependencies.
+Lazy loading defers command handler imports until Milo needs that command's
+schema or handler. Root help, group help, and another selected command do not
+resolve lazy siblings, so large command trees keep cheap interactions cheap.
 
 ## lazy_command
 
@@ -29,7 +31,9 @@ cli.lazy_command(
 )
 ```
 
-The module `myapp.commands.deploy` is not imported until someone runs `myapp deploy`. All other commands start instantly.
+The module `myapp.commands.deploy` is not imported while Milo renders root or
+group help, or while another command runs. Leaf help and execution resolve only
+the selected leaf.
 
 ## Pre-computed schemas
 
@@ -52,6 +56,29 @@ cli.lazy_command(
 ```
 
 With a pre-computed schema, `--llms-txt` and `--mcp tools/list` work without importing any handler modules.
+
+The `schema=` value is ordinary JSON Schema and is the stable cache format. An
+application may keep it in Python as above or load a persisted `.json` file:
+
+```python
+import json
+from importlib.resources import files
+
+deploy_schema = json.loads(
+    files("myapp.schemas").joinpath("deploy.json").read_text(encoding="utf-8")
+)
+
+cli.lazy_command(
+    "deploy",
+    "myapp.commands.deploy:deploy_handler",
+    schema=deploy_schema,
+)
+```
+
+Milo retains the supplied object on `LazyCommandDef`; no second schema source
+or Milo-specific cache encoding is involved. Keep the cached schema beside the
+annotated handler and test it against `function_to_schema()` when the handler's
+contract changes.
 
 CLI presentation can also be pre-computed with the same schema extension:
 
@@ -91,6 +118,12 @@ site.lazy_command(
 3. The result is cached as a full `CommandDef` — subsequent calls skip the import
 
 Resolution is thread-safe (uses a lock with double-check pattern).
+
+If `schema=` is omitted, root and group help remain metadata-only, but selected
+leaf help/parser construction imports that leaf to derive its schema. Full-tree
+discovery (`--llms-txt`, completions, and MCP `tools/list`) likewise resolves
+each lazy command that has no pre-computed schema. Supplying schemas makes that
+fallback explicit and removes those imports.
 
 If the module or attribute cannot be imported, terminal invocation exits `1`
 with `M-CMD-004`. `call()` and `call_raw()` raise the same structured

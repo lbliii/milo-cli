@@ -68,7 +68,7 @@ The executable fixture in `tests/test_chirp_adoption_contract.py` uses only
 | Typed string, integer, boolean, list, and optional values | Function annotations and defaults generate argparse and JSON Schema | Covered, except positional presentation |
 | Hyphenated command names | `@cli.command("security-check")` | Covered |
 | Shared `run` / `dev` implementation | Register one function under two command definitions | Covered |
-| Lazy command modules | `cli.lazy_command(..., schema=...)` avoids importing the handler for help and discovery | Covered |
+| Lazy command modules | Metadata-only root/group help and selected-command parsing avoid lazy siblings; `schema=` also avoids handler imports for full-tree discovery | Covered |
 | Structured check/diff results | Return dict/dataclass; `invoke`, `call`, `call_raw`, and MCP share dispatch | Covered |
 | Contract failure repair | Raise Milo errors with stable codes and argument/constraint context | Covered after #85/#86 |
 | Destructive migration metadata | `annotations={"destructiveHint": True}` and optional human `confirm=` | Covered |
