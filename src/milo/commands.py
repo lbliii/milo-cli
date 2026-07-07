@@ -1698,7 +1698,13 @@ class CLI:
 
         return ResolvedNothing(attempted=sub_name, fmt=fmt)
 
-    def call(self, command_name: str, **kwargs: Any) -> Any:
+    def call(
+        self,
+        command_name: str,
+        *,
+        ctx: Context | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Programmatically call a command by name or dotted path.
 
         Used by MCP server and for programmatic invocation::
@@ -1708,15 +1714,25 @@ class CLI:
 
         Arguments are validated and string inputs are coerced against the
         command's generated schema before hooks or handlers run.
+
+        A host-provided ``ctx`` can route output and approvals without
+        touching process-global streams. Context remains invisible to command
+        schemas and is injected into the handler as usual.
         """
         _found, cmd = self._get_resolved_command(command_name)
-        ctx = self._new_call_context()
+        ctx = self._resolve_call_context(ctx, method="call")
         result = self._execute_command(
             cmd, ctx, self._build_call_kwargs(cmd, kwargs, ctx), raise_on_error=True
         )
         return self._consume_result(result, emit_progress=False)
 
-    def call_raw(self, command_name: str, **kwargs: Any) -> Any:
+    def call_raw(
+        self,
+        command_name: str,
+        *,
+        ctx: Context | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Call a command without consuming generators.
 
         Like :meth:`call`, but returns the raw result — if the handler
@@ -1725,7 +1741,7 @@ class CLI:
         the same schema validation and coercion as :meth:`call`.
         """
         _found, cmd = self._get_resolved_command(command_name)
-        ctx = self._new_call_context()
+        ctx = self._resolve_call_context(ctx, method="call_raw")
         return self._execute_command(
             cmd,
             ctx,
@@ -1734,6 +1750,25 @@ class CLI:
             call_name=command_name,
             raise_on_error=True,
         )
+
+    def _resolve_call_context(self, ctx: Context | None, *, method: str) -> Context:
+        """Validate a host context while rejecting protocol attempts to spoof one."""
+        from milo.context import Context as ContextClass
+
+        if ctx is None:
+            return self._new_call_context()
+        if not isinstance(ctx, ContextClass):
+            from milo._errors import ErrorCode, InputError
+
+            raise InputError(
+                ErrorCode.INP_UNEXPECTED_ARGUMENT,
+                "Context injection requires a milo.Context instance.",
+                argument="ctx",
+                constraint={"type": "Context"},
+                context={"reason": "unexpected_argument", "method": method},
+                suggestion="Remove 'ctx' from command arguments; only the host may inject it.",
+            )
+        return ctx
 
     def suggest_command(self, name: str) -> str | None:
         """Suggest the closest command name for typo correction."""

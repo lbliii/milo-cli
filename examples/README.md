@@ -39,5 +39,7 @@ uv run milo verify examples/greet/app.py
   already owns templates, assets, auth, or mutations, keep the HTML in that
   framework and let Milo expose the typed command and resource metadata.
 - Use `taskman` when an MCP client needs both tools and read-only resources.
+- Use `ctxdemo` when a terminal, web request, or worker needs to own command
+  diagnostics, interaction policy, and approval decisions.
 - Use `outputgallery` when output quality is the feature, especially for diagnostics, CI summaries, or site tooling.
 - Run `uv run milo verify path/to/app.py` after adapting an example.

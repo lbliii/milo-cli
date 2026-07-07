@@ -16,6 +16,7 @@ ctx.confirm(), --dry-run, --output-file.
 
 from __future__ import annotations
 
+import io
 import time
 
 from milo import CLI, Context, get_context
@@ -117,6 +118,25 @@ def check() -> dict:
         "verbosity": ctx.verbosity,
         "environment": ctx.globals.get("environment", "local"),
     }
+
+
+def hosted_deploy(service: str, *, approved: bool) -> tuple[dict, str]:
+    """Call the deploy capability from a non-terminal host.
+
+    A web adapter can replace the in-memory sink and closure with its response
+    buffer and approval store. No process-global stream or terminal policy is
+    touched.
+    """
+    output = io.StringIO()
+    ctx = Context(
+        color=False,
+        globals={"environment": "production"},
+        output_sink=output,
+        interactive=False,
+        confirm_strategy=lambda _message, *, default=False: approved,
+    )
+    result = cli.call("deploy", ctx=ctx, service=service)
+    return result, output.getvalue()
 
 
 if __name__ == "__main__":

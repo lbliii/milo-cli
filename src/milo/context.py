@@ -7,7 +7,39 @@ import sys
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
+
+
+class OutputSink(Protocol):
+    """Minimal text destination used by Context diagnostics and progress."""
+
+    def write(self, data: str, /) -> int | None:
+        """Write text and optionally return the number of characters consumed."""
+        ...
+
+    def flush(self) -> None:
+        """Flush buffered text."""
+        ...
+
+
+class ConfirmStrategy(Protocol):
+    """Host-provided approval policy for :meth:`Context.confirm`."""
+
+    def __call__(self, message: str, *, default: bool = False) -> bool:
+        """Return whether the named action is approved."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class NullOutputSink:
+    """Output sink that intentionally discards all text."""
+
+    def write(self, data: str, /) -> int:
+        """Discard *data* while honoring the text sink contract."""
+        return len(data)
+
+    def flush(self) -> None:
+        """No-op because this sink never buffers output."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +75,26 @@ class Context:
     globals: dict[str, Any] = field(default_factory=dict)
     """Values from user-defined global options."""
 
+    output_sink: OutputSink | None = field(default=None, repr=False, compare=False)
+    """Destination for diagnostics and inline progress; defaults to current stderr."""
+
+    interactive: bool | None = None
+    """Host interaction policy; None preserves current stdin TTY detection."""
+
+    confirm_strategy: ConfirmStrategy | None = field(default=None, repr=False, compare=False)
+    """Optional host approval policy used instead of terminal input."""
+
+    @property
+    def _output(self) -> OutputSink:
+        """Resolve the configured sink without capturing stderr at construction."""
+        return self.output_sink if self.output_sink is not None else sys.stderr
+
+    def _write_output(self, message: str) -> None:
+        """Write and flush one diagnostic fragment through the active sink."""
+        output = self._output
+        output.write(message)
+        output.flush()
+
     def log(self, message: str, *, level: int = 0) -> None:
         """Print a message if verbosity is at or above *level*.
 
@@ -51,34 +103,29 @@ class Context:
         level 2 = debug (shown with -vv)
         """
         if self.verbosity >= level:
-            sys.stderr.write(message + "\n")
-            sys.stderr.flush()
+            self._write_output(message + "\n")
 
     def info(self, message: str) -> None:
         """Print an informational message (level 0)."""
         if self.verbosity >= 0:
             prefix = "\033[34minfo:\033[0m " if self.color else "info: "
-            sys.stderr.write(prefix + message + "\n")
-            sys.stderr.flush()
+            self._write_output(prefix + message + "\n")
 
     def success(self, message: str) -> None:
         """Print a success message (level 0)."""
         if self.verbosity >= 0:
             prefix = "\033[32m\u2713\033[0m " if self.color else "OK: "
-            sys.stderr.write(prefix + message + "\n")
-            sys.stderr.flush()
+            self._write_output(prefix + message + "\n")
 
     def warning(self, message: str) -> None:
         """Print a warning message (always shown, even in quiet mode)."""
         prefix = "\033[33mwarning:\033[0m " if self.color else "warning: "
-        sys.stderr.write(prefix + message + "\n")
-        sys.stderr.flush()
+        self._write_output(prefix + message + "\n")
 
     def error(self, message: str) -> None:
         """Print an error message (always shown)."""
         prefix = "\033[31merror:\033[0m " if self.color else "error: "
-        sys.stderr.write(prefix + message + "\n")
-        sys.stderr.flush()
+        self._write_output(prefix + message + "\n")
 
     def confirm(self, message: str, *, default: bool = False) -> bool:
         """Prompt for yes/no confirmation. Returns default in non-interactive mode.
@@ -89,16 +136,18 @@ class Context:
             self.info(f"[dry-run] Would ask: {message}")
             return default
 
-        if not sys.stdin.isatty():
+        if self.confirm_strategy is not None:
+            return bool(self.confirm_strategy(message, default=default))
+
+        if not self.is_interactive:
             return default
 
         suffix = " [Y/n] " if default else " [y/N] "
         try:
-            sys.stderr.write(message + suffix)
-            sys.stderr.flush()
+            self._write_output(message + suffix)
             answer = input().strip().lower()
         except EOFError, KeyboardInterrupt:
-            sys.stderr.write("\n")
+            self._write_output("\n")
             return default
 
         if not answer:
@@ -140,7 +189,13 @@ class Context:
                     do_work()
                     p.update(1)
         """
-        return CLIProgress(total=total, label=label, color=self.color, quiet=self.quiet)
+        return CLIProgress(
+            total=total,
+            label=label,
+            color=self.color,
+            quiet=self.quiet,
+            output_sink=self._output,
+        )
 
     @property
     def quiet(self) -> bool:
@@ -255,7 +310,9 @@ class Context:
 
     @property
     def is_interactive(self) -> bool:
-        """True when stdin is a TTY."""
+        """Return the configured host policy or current stdin TTY state."""
+        if self.interactive is not None:
+            return self.interactive
         return sys.stdin.isatty()
 
 
@@ -269,12 +326,25 @@ class CLIProgress:
         label: str = "",
         color: bool = True,
         quiet: bool = False,
+        output_sink: OutputSink | None = None,
     ) -> None:
         self._total = total
         self._label = label
         self._color = color
         self._quiet = quiet
+        self._output_sink = output_sink
         self._current = 0
+
+    @property
+    def _output(self) -> OutputSink:
+        """Resolve the sink lazily for direct CLIProgress construction."""
+        return self._output_sink if self._output_sink is not None else sys.stderr
+
+    def _write_output(self, message: str) -> None:
+        """Write and flush progress through the active sink."""
+        output = self._output
+        output.write(message)
+        output.flush()
 
     def __enter__(self) -> CLIProgress:
         if not self._quiet:
@@ -283,8 +353,7 @@ class CLIProgress:
 
     def __exit__(self, *exc: object) -> None:
         if not self._quiet:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
+            self._write_output("\n")
 
     def update(self, n: int = 1) -> None:
         """Advance progress by n steps."""
@@ -311,8 +380,7 @@ class CLIProgress:
         else:
             parts.append(f"{self._current} items")
 
-        sys.stderr.write("".join(parts))
-        sys.stderr.flush()
+        self._write_output("".join(parts))
 
 
 _current_context: ContextVar[Context | None] = ContextVar("milo_context", default=None)

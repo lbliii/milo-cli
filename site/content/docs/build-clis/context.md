@@ -52,7 +52,7 @@ ctx.log("Verbose detail", level=1)
 ctx.log("Debug trace", level=2)
 ```
 
-Messages go to stderr, keeping stdout clean for structured output.
+By default, messages go to stderr, keeping stdout clean for structured output.
 
 That stdout/stderr split matters for MCP: stdout carries JSON-RPC frames under
 `--mcp`, so progress logs and diagnostics must not use `print()` in reusable
@@ -101,6 +101,56 @@ def helper():
 surface. It should not be used to smuggle hidden inputs into schemas; public
 inputs still belong in the command signature.
 
+## Hosting commands without a terminal
+
+Web servers, job workers, and tests can supply a host-owned context to
+`CLI.call()` or `CLI.call_raw()`. The sink receives diagnostics and inline
+progress, `interactive` replaces TTY detection, and `confirm_strategy` maps a
+confirmation request to the host's approval store:
+
+```python
+import io
+
+from milo import CLI, Context
+
+cli = CLI(name="hosted")
+
+@cli.command("deploy")
+def deploy(ctx: Context = None) -> bool:
+    ctx.info("deploy requested")
+    return ctx.confirm("Approve deployment?")
+
+output = io.StringIO()
+
+def approved(message: str, *, default: bool = False) -> bool:
+    return message == "Approve deployment?"
+
+ctx = Context(
+    color=False,
+    output_sink=output,
+    interactive=False,
+    confirm_strategy=approved,
+)
+
+assert cli.call("deploy", ctx=ctx) is True
+assert output.getvalue() == "info: deploy requested\n"
+```
+
+`output_sink` implements the small public `OutputSink` protocol: `write(str)`
+and `flush()`. `io.StringIO` captures output; `NullOutputSink()` discards it.
+When no sink, interaction policy, or confirmation strategy is supplied, Milo
+retains its existing stderr, `stdin.isatty()`, and `input()` behavior.
+
+The host owns synchronization for a shared sink or confirmation store. Milo
+calls both synchronously and does not add a lock around application-owned
+objects. MCP arguments cannot supply `ctx`; context injection remains outside
+the public tool schema.
+
+These are three projections of one safety decision: terminal handlers call
+`ctx.confirm()`, a browser host implements `confirm_strategy` with its approval
+store, and agents discover the command's `destructiveHint` annotation. The
+annotation remains descriptive; the host strategy owns the actual approval.
+
 ## Running interactive apps from commands
 
 Use `ctx.run_app()` to launch an interactive `App` from within a CLI command handler. The command blocks while the app runs and receives the final state when it exits:
@@ -140,6 +190,9 @@ This bridges the CLI dispatch layer with the Elm Architecture event loop — the
 | `format` | `str` | Output format: `"plain"`, `"json"`, `"table"` |
 | `color` | `bool` | Whether color output is enabled |
 | `globals` | `dict` | Values from user-defined global options |
+| `output_sink` | `OutputSink \| None` | Host destination for diagnostics and progress; defaults to current stderr |
+| `interactive` | `bool \| None` | Host interaction policy; defaults to current stdin TTY detection |
+| `confirm_strategy` | `ConfirmStrategy \| None` | Host approval policy; defaults to terminal confirmation |
 
 :::{tip}
 Combine with [[docs/about/concepts/configuration|Configuration]] to let global options control config loading — for example, a `--profile` option that selects a config profile.

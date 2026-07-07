@@ -3,22 +3,32 @@
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import sys
 from unittest.mock import patch
 
 import pytest
 
+import milo
 from milo._errors import (
     ConfigError,
     ErrorCode,
+    InputError,
     MiloError,
     PipelineError,
     PluginError,
     format_error,
 )
 from milo.commands import CLI
-from milo.context import Context, get_context, set_context
+from milo.context import (
+    ConfirmStrategy,
+    Context,
+    NullOutputSink,
+    OutputSink,
+    get_context,
+    set_context,
+)
 
 # ---------------------------------------------------------------------------
 # Context basics
@@ -26,12 +36,20 @@ from milo.context import Context, get_context, set_context
 
 
 class TestContext:
+    def test_headless_contracts_are_lazy_public_exports(self):
+        assert milo.ConfirmStrategy is ConfirmStrategy
+        assert milo.OutputSink is OutputSink
+        assert milo.NullOutputSink is NullOutputSink
+
     def test_defaults(self):
         ctx = Context()
         assert ctx.verbosity == 0
         assert ctx.format == "plain"
         assert ctx.color is True
         assert ctx.globals == {}
+        assert ctx.output_sink is None
+        assert ctx.interactive is None
+        assert ctx.confirm_strategy is None
 
     def test_quiet(self):
         ctx = Context(verbosity=-1)
@@ -70,6 +88,75 @@ class TestContext:
     def test_globals(self):
         ctx = Context(globals={"environment": "production"})
         assert ctx.globals["environment"] == "production"
+
+    def test_output_sink_captures_diagnostics_and_progress(self):
+        output = io.StringIO()
+        ctx = Context(output_sink=output, color=False)
+
+        ctx.log("log")
+        ctx.info("info")
+        ctx.success("success")
+        ctx.warning("warning")
+        ctx.error("error")
+        with ctx.progress(total=1, label="work") as progress:
+            progress.update()
+
+        captured = output.getvalue()
+        assert "log\n" in captured
+        assert "info: info\n" in captured
+        assert "OK: success\n" in captured
+        assert "warning: warning\n" in captured
+        assert "error: error\n" in captured
+        assert "work" in captured
+        assert "100%" in captured
+
+    def test_null_output_sink_is_silent(self, capsys):
+        ctx = Context(output_sink=NullOutputSink(), color=False)
+
+        ctx.info("hidden")
+        ctx.error("hidden")
+        with ctx.progress(total=1) as progress:
+            progress.update()
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_interactive_policy_overrides_terminal_detection(self):
+        assert Context(interactive=False).is_interactive is False
+        assert Context(interactive=True).is_interactive is True
+
+    def test_confirm_strategy_runs_for_non_interactive_host(self):
+        decisions: list[tuple[str, bool]] = []
+
+        def approve(message: str, *, default: bool = False) -> bool:
+            decisions.append((message, default))
+            return True
+
+        ctx = Context(interactive=False, confirm_strategy=approve)
+
+        assert ctx.confirm("Deploy?", default=False) is True
+        assert decisions == [("Deploy?", False)]
+
+    def test_dry_run_does_not_consult_confirm_strategy(self):
+        calls = 0
+        output = io.StringIO()
+
+        def approve(message: str, *, default: bool = False) -> bool:
+            nonlocal calls
+            calls += 1
+            return True
+
+        ctx = Context(
+            dry_run=True,
+            color=False,
+            output_sink=output,
+            confirm_strategy=approve,
+        )
+
+        assert ctx.confirm("Deploy?") is False
+        assert calls == 0
+        assert "[dry-run] Would ask: Deploy?" in output.getvalue()
 
 
 class TestContextVar:
@@ -225,6 +312,59 @@ class TestContextInjection:
 
         result = cli.run(["-e", "prod", "build"])
         assert result == "prod"
+
+    def test_call_accepts_host_owned_context(self):
+        cli = CLI(name="app")
+        output = io.StringIO()
+        approvals: list[str] = []
+
+        def approve(message: str, *, default: bool = False) -> bool:
+            approvals.append(message)
+            return True
+
+        @cli.command("deploy")
+        def deploy(ctx: Context = None) -> bool:
+            ctx.info("hosted")
+            return ctx.confirm("Approve deployment?")
+
+        ctx = Context(
+            color=False,
+            interactive=False,
+            output_sink=output,
+            confirm_strategy=approve,
+        )
+
+        assert cli.call("deploy", ctx=ctx) is True
+        assert get_context() is ctx
+        assert output.getvalue() == "info: hosted\n"
+        assert approvals == ["Approve deployment?"]
+
+    def test_call_raw_accepts_host_owned_context(self):
+        cli = CLI(name="app")
+        output = io.StringIO()
+
+        @cli.command("check")
+        def check(ctx: Context = None) -> bool:
+            ctx.warning("captured")
+            return ctx.is_interactive
+
+        ctx = Context(color=False, interactive=False, output_sink=output)
+
+        assert cli.call_raw("check", ctx=ctx) is False
+        assert output.getvalue() == "warning: captured\n"
+
+    def test_call_rejects_non_context_ctx(self):
+        cli = CLI(name="app")
+
+        @cli.command("check")
+        def check(ctx: Context = None) -> bool:
+            return ctx.is_interactive
+
+        with pytest.raises(InputError, match="Context injection requires") as exc_info:
+            cli.call("check", ctx={})  # type: ignore[arg-type]
+        assert exc_info.value.code is ErrorCode.INP_UNEXPECTED_ARGUMENT
+        assert exc_info.value.argument == "ctx"
+        assert exc_info.value.context["reason"] == "unexpected_argument"
 
     def test_ctx_not_in_schema(self):
         """Context parameter should not appear in JSON schema."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from milo import CLI, MinLen, Option, Positional
+from milo import CLI, Context, MinLen, NullOutputSink, Option, Positional
 
 
 def _make_chirp_shaped_cli() -> CLI:
@@ -82,3 +82,20 @@ def test_bench_large_lazy_selected_parser(benchmark) -> None:
     selected = cli._selected_command_path(args)
     assert selected is not None
     benchmark(cli._build_selected_parser, *selected)
+
+
+def test_bench_programmatic_call_with_host_context(benchmark) -> None:
+    """Dispatch a typed command with a host-owned silent Context."""
+    cli = CLI(name="hosted")
+
+    @cli.command("status")
+    def status(ctx: Context = None) -> bool:
+        ctx.info("status")
+        return ctx.is_interactive
+
+    ctx = Context(
+        output_sink=NullOutputSink(),
+        interactive=False,
+        confirm_strategy=lambda _message, *, default=False: True,
+    )
+    benchmark(cli.call, "status", ctx=ctx)

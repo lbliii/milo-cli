@@ -84,7 +84,10 @@ _LAZY_IMPORTS = {
     "GlobalOption": "commands",
     "RootOptionSpec": "commands",
     # Context
+    "ConfirmStrategy": "context",
     "Context": "context",
+    "NullOutputSink": "context",
+    "OutputSink": "context",
     "get_context": "context",
     "CLIProgress": "context",
     # Config
@@ -199,6 +202,7 @@ __all__ = [
     "Config",
     "ConfigError",
     "ConfigSpec",
+    "ConfirmStrategy",
     "Context",
     "CycleError",
     "Debounce",
@@ -243,7 +247,9 @@ __all__ = [
     "MiddlewareStack",
     "MiloError",
     "MinLen",
+    "NullOutputSink",
     "Option",
+    "OutputSink",
     "Pattern",
     "Phase",
     "PhaseLog",

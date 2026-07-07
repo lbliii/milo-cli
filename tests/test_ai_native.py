@@ -330,6 +330,17 @@ class TestMCP:
         assert result["errorData"]["reason"] == "unexpected_argument"
         assert result["errorData"]["errorCode"] == "M-INP-005"
 
+    def test_call_tool_cannot_spoof_host_context(self):
+        cli = self._make_cli()
+        result = _call_tool(
+            cli,
+            {"name": "greet", "arguments": {"name": "A", "ctx": {"interactive": True}}},
+        )
+        assert result["isError"] is True
+        assert result["errorData"]["argument"] == "ctx"
+        assert result["errorData"]["reason"] == "unexpected_argument"
+        assert result["errorData"]["errorCode"] == "M-INP-005"
+
     def test_call_tool_milo_error_surfaces_argument_context(self):
         from milo._errors import ErrorCode, MiloError
 

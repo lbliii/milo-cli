@@ -44,7 +44,7 @@ For regression detection, compare **Median** values — they're most resistant t
 | `test_bench_render.py` | Rendering | Kida template render by size, display-cell helpers, env creation, terminal update simulation |
 | `test_bench_mcp.py` | MCP protocol | JSON-RPC parse/serialize, router dispatch, tools/list generation, full round-trip |
 | `test_bench_schema.py` | Schema and validation | function_to_schema by param count and type complexity; constrained runtime argument validation |
-| `test_bench_commands.py` | Command parser | Parser construction with positional/option metadata, surface policy, version callback, and lazy schemas |
+| `test_bench_commands.py` | Command parser and dispatch | Parser construction with positional/option metadata, lazy schemas, and host-owned Context calls |
 | `test_bench_gateway.py` | Gateway | Discovery cost, MCP Apps URI/link rewriting, proxied tools/call, tool routing, scaling with N children |
 
 ## Adding a Benchmark

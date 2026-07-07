@@ -38,6 +38,36 @@ def test_greet_argv():
 
 For direct calls that bypass argv parsing, use `cli.call_raw(name, **kwargs)`.
 
+Host integrations can test output and approval behavior without patching
+`sys.stdin` or `sys.stderr` by passing a context to `call()`:
+
+```python milo-docs:compile
+import io
+
+from milo import CLI, Context
+
+cli = CLI(name="hosted")
+
+@cli.command("deploy")
+def deploy(ctx: Context = None) -> bool:
+    ctx.info("requested")
+    return ctx.confirm("Approve?")
+
+output = io.StringIO()
+ctx = Context(
+    color=False,
+    output_sink=output,
+    interactive=False,
+    confirm_strategy=lambda _message, *, default=False: True,
+)
+
+assert cli.call("deploy", ctx=ctx) is True
+assert output.getvalue() == "info: requested\n"
+```
+
+Use `NullOutputSink()` instead when the host intentionally discards all
+diagnostics and progress.
+
 ## Layer 3 — MCP dispatch
 
 Verify that the JSON-RPC `tools/call` path returns what agents expect, including

@@ -1105,3 +1105,87 @@ Collateral: Root/examples/site indexes, example guidance, changelog, and
 Steward Notes.
 Confidence: high
 Verification Status: machine-verified
+
+## Steward Notes — Headless Context (#87)
+
+- Consulted stewards: Milo Core, Tests, Examples, Agent Docs, Site And
+  Reference Docs, Performance And Startup Cost, Free-Threading And
+  Concurrency, and Release And Dependency Surface.
+- Approval: the maintainer approved the public Context, command-dispatch, and
+  runtime contract on 2026-07-07.
+- Accepted public API: lazy-exported `OutputSink` and `ConfirmStrategy`
+  protocols, `NullOutputSink`, and the appended frozen `Context` fields
+  `output_sink`, `interactive`, and `confirm_strategy`. Existing positional
+  field order and default terminal behavior remain intact.
+- Output boundary: all Context diagnostics and `CLIProgress` writes use the
+  configured sink; a missing sink resolves current `sys.stderr` at write time,
+  preserving `CLI.invoke()` capture and terminal behavior. `io.StringIO`
+  captures output and `NullOutputSink` intentionally discards it.
+- Interaction and approval: `interactive=None` preserves current
+  `stdin.isatty()` detection. A host strategy runs before terminal policy;
+  dry-run remains first and never consults the strategy. Terminal fallback
+  retains the existing suffix, `input()`, EOF, and interrupt semantics.
+- Dispatch contract: `CLI.call(..., ctx=Context(...))` and `call_raw()` inject
+  a host-owned Context through the existing handler/middleware/validation path.
+  Non-Context values are rejected with `M-INP-005`; MCP arguments cannot spoof
+  the reserved channel and receive structured repair data. Context remains
+  absent from argparse, JSON Schema, MCP `tools/list`, and llms.txt.
+- Safety mapping: terminal `ctx.confirm()`, a browser/worker
+  `confirm_strategy`, and MCP `destructiveHint` are documented as projections
+  of one approval decision. The host owns enforcement and Milo does not infer
+  browser, auth, session, or persistence policy.
+- Concurrency: Context configuration is immutable and dispatch-local;
+  `CLIProgress` remains single-owner mutable state. Milo adds no shared state,
+  lock, listener, executor, cancellation, or shutdown path. A host that shares
+  a sink or approval store across threads owns its synchronization, avoiding a
+  hidden lock order inside Milo.
+- Performance: the new free-threaded benchmark measures typed schema
+  validation, ContextVar setup, a silent sink write, and handler dispatch for a
+  host-owned Context. Python 3.14.2t with `PYTHON_GIL=0` measured an 8.0
+  microsecond median on local Apple Silicon. This is a new workload baseline;
+  no before/after speed claim is made.
+- Collateral: `ctxdemo` now contains an executable non-terminal host adapter;
+  focused example, Context, dispatch, MCP spoof, public-export, and default
+  behavior tests move with README, testing guide, Context/dispatch reference,
+  benchmark catalog/baseline, changelog, and these notes. No scaffold change:
+  generated CLIs use default terminal Context behavior and expose no host
+  adapter surface.
+- Verification: `make ci` passed 1,663 tests with one skip and 82.96% branch
+  coverage under `PYTHON_GIL=0`; the same four pre-existing `ty` warnings
+  remain. `make docs-test` passed strict templates and all 64 tagged snippets.
+  Bengal built 135 production pages with its existing autodoc, internal-link,
+  and analytics diagnostics.
+
+### #87 Context And Dispatch Parity Matrix
+
+| Surface | Context source | Output/approval behavior |
+| --- | --- | --- |
+| CLI `run` | parser-built default Context | current stderr, TTY detection, terminal input |
+| CLI `invoke` | parser-built default Context | existing captured stderr and exit semantics |
+| `call` | default or host `ctx=` | consumed result; host sink/policy/strategy honored |
+| `call_raw` | default or host `ctx=` | raw generator/value; same injection and validation |
+| MCP `tools/call` | Milo-owned default Context | agent `ctx` rejected with structured `M-INP-005` |
+| schema/llms.txt | no Context property | unchanged agent-visible command contract |
+| `CLIProgress` | Context-resolved sink | inline writes and final newline use the same sink |
+| dry-run confirm | configured Context | logs to sink, returns default, never calls strategy |
+
+Steward: Milo Core
+Area: Host-owned Context output, interaction, and confirmation
+Severity: P1
+Invariant: A non-terminal host must execute a typed Milo command with its own
+diagnostic sink and approval policy without mutating process-global streams or
+exposing Context to agents.
+Evidence: `src/milo/context.py`; `src/milo/commands.py`;
+`tests/test_context.py`; `tests/test_ai_native.py`;
+`tests/test_ctxdemo_example.py`.
+User Impact: Web requests, workers, and tests can reuse the same command and
+schema contract while retaining ownership of output and approvals.
+Required Fix: Keep defaults terminal-compatible, inject only real Context
+instances through programmatic dispatch, and reject protocol spoofing.
+Required Proof: Captured/silent output, progress sink, interaction override,
+approval and dry-run ordering, call/call_raw injection, MCP repair data,
+schema omission, public exports, example, free-threading, and docs parity.
+Collateral: README, testing guide, Context/dispatch reference, ctxdemo,
+benchmark baseline/catalog, changelog, and Steward Notes.
+Confidence: high
+Verification Status: machine-verified
