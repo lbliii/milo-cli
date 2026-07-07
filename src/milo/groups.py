@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from milo._command_defs import CommandSurface
+    from milo.context import Context
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +71,11 @@ class Group:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         display_result: bool = True,
+        terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Callable:
         """Register a function as a command within this group."""
         from milo.commands import _make_command_def
@@ -82,9 +88,11 @@ class Group:
                 aliases=tuple(aliases),
                 tags=tuple(tags),
                 hidden=hidden,
+                surfaces=tuple(surfaces),
                 examples=tuple(examples),
                 confirm=confirm,
                 display_result=display_result,
+                terminal_renderer=terminal_renderer,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -105,10 +113,12 @@ class Group:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
+        terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Any:
         """Register a lazy-loaded command within this group.
 
@@ -124,10 +134,12 @@ class Group:
             aliases=aliases,
             tags=tags,
             hidden=hidden,
+            surfaces=surfaces,
             examples=examples,
             confirm=confirm,
             annotations=annotations,
             display_result=display_result,
+            terminal_renderer=terminal_renderer,
         )
         self._commands[name] = cmd
         for alias in aliases:
@@ -228,7 +240,7 @@ class Group:
             [
                 {"name": cmd.name, "help": getattr(cmd, "description", "")}
                 for cmd in self._commands.values()
-                if not getattr(cmd, "hidden", False)
+                if not getattr(cmd, "hidden", False) and "cli" in cmd.surfaces
             ]
             + [
                 {"name": g.name, "help": g.description}

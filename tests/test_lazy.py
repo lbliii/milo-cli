@@ -186,6 +186,27 @@ class TestCLILazy:
         result = cli.run(["add", "--a", "3", "--b", "7"])
         assert result == 10
 
+    def test_precomputed_schema_can_define_positional_presentation(self):
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "greet",
+            "_lazy_handlers:greet",
+            schema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "x-milo-cli": {"kind": "positional", "metavar": "NAME"},
+                    }
+                },
+                "required": ["name"],
+            },
+        )
+
+        result = cli.invoke(["greet", "Lazy"])
+        assert result.exit_code == 0
+        assert result.result == "Hello, Lazy!"
+
     def test_lazy_command_get_command(self):
         cli = CLI(name="app")
         cli.lazy_command(

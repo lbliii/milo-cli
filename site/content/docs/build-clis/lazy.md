@@ -53,6 +53,21 @@ cli.lazy_command(
 
 With a pre-computed schema, `--llms-txt` and `--mcp tools/list` work without importing any handler modules.
 
+CLI presentation can also be pre-computed with the same schema extension:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "x-milo-cli": {"kind": "positional", "metavar": "TARGET"}
+    }
+  },
+  "required": ["target"]
+}
+```
+
 ## Lazy commands in groups
 
 Groups support lazy loading too:
@@ -76,6 +91,11 @@ site.lazy_command(
 3. The result is cached as a full `CommandDef` — subsequent calls skip the import
 
 Resolution is thread-safe (uses a lock with double-check pattern).
+
+If the module or attribute cannot be imported, terminal invocation exits `1`
+with `M-CMD-004`. `call()` and `call_raw()` raise the same structured
+`MiloError`; MCP returns its `reason`, `command`, `importPath`, and suggestion
+in `errorData`.
 
 ## When to use lazy loading
 

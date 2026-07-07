@@ -404,6 +404,18 @@ class TestResolveResult:
 
 
 class TestGroupBareInvocation:
+    def test_group_help_and_mcp_honor_command_surfaces(self):
+        cli = CLI(name="app")
+        group = cli.group("server")
+
+        @group.command("run", surfaces=("cli",))
+        def run() -> str:
+            return "ok"
+
+        assert "run" in cli.invoke(["server"]).output
+        assert "server.run" not in {tool["name"] for tool in _list_tools(cli)}
+        assert "**run**" not in generate_llms_txt(cli)
+
     def test_group_bare_shows_help_not_error(self):
         cli = _make_cli_with_groups()
         result = cli.invoke(["site"])

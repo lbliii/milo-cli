@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 from typing import Annotated, Literal, TypedDict
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
+from milo._errors import InputError
 from milo.commands import CLI
 from milo.schema import (
     Description,
@@ -18,11 +21,45 @@ from milo.schema import (
     Lt,
     MaxLen,
     MinLen,
+    Option,
     Pattern,
+    Positional,
     _parse_param_docs,
     _type_to_schema,
     function_to_schema,
+    validate_arguments,
 )
+
+
+def test_cli_presentation_markers_emit_ignorable_schema_extensions() -> None:
+    def command(
+        app: Annotated[str, Positional("APP")],
+        migrations_dir: Annotated[
+            str, Option(aliases=("-m", "--migrations"), metavar="DIR")
+        ] = "migrations",
+    ) -> None: ...
+
+    properties = function_to_schema(command)["properties"]
+    assert properties["app"]["x-milo-cli"] == {
+        "kind": "positional",
+        "metavar": "APP",
+    }
+    assert properties["migrations_dir"]["x-milo-cli"] == {
+        "kind": "option",
+        "aliases": ["-m", "--migrations"],
+        "metavar": "DIR",
+    }
+
+
+def test_cli_presentation_markers_reject_invalid_or_conflicting_metadata() -> None:
+    with pytest.raises(ValueError, match="start with"):
+        Option(aliases=("migrations",))
+
+    def command(value: Annotated[str, Positional(), Option()]) -> None: ...
+
+    with pytest.raises(ValueError, match="only one"):
+        function_to_schema(command)
+
 
 # --- Test Enum ---
 
@@ -669,3 +706,188 @@ class TestStrictMode:
         # Should not raise
         schema = function_to_schema(handler)
         assert schema["properties"]["output"]["type"] == "string"
+
+
+class TestValidateArguments:
+    def test_variadic_plumbing_is_not_exposed_as_public_arguments(self) -> None:
+        def handler(name: str, *args: object, **kwargs: object) -> str:
+            return name
+
+        schema = function_to_schema(handler)
+        assert schema["properties"] == {"name": {"type": "string"}}
+        assert schema["required"] == ["name"]
+
+    def test_coerces_string_sourced_primitives_and_containers(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "ratio": {"type": "number"},
+                "enabled": {"type": "boolean"},
+                "items": {"type": "array", "items": {"type": "integer"}},
+                "config": {
+                    "type": "object",
+                    "properties": {"port": {"type": "integer"}},
+                    "required": ["port"],
+                },
+            },
+            "required": ["count", "ratio", "enabled", "items", "config"],
+        }
+
+        assert validate_arguments(
+            schema,
+            {
+                "count": "2",
+                "ratio": "1.5",
+                "enabled": "yes",
+                "items": '["3", "4"]',
+                "config": '{"port": "8080"}',
+            },
+        ) == {
+            "count": 2,
+            "ratio": 1.5,
+            "enabled": True,
+            "items": [3, 4],
+            "config": {"port": 8080},
+        }
+
+    def test_validation_does_not_mutate_input_containers(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"items": {"type": "array", "items": {"type": "integer"}}},
+        }
+        items = ["1", "2"]
+        assert validate_arguments(schema, {"items": items}) == {"items": [1, 2]}
+        assert items == ["1", "2"]
+
+    def test_explicit_none_preserves_optional_default(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"items": {"type": "array", "default": None}},
+        }
+        assert validate_arguments(schema, {"items": None}) == {"items": None}
+
+    def test_null_type_rejects_non_null_values_in_any_of(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "null"},
+                    ]
+                }
+            },
+        }
+
+        assert validate_arguments(schema, {"value": None}) == {"value": None}
+        assert validate_arguments(schema, {"value": "ok"}) == {"value": "ok"}
+        with pytest.raises(InputError) as exc_info:
+            validate_arguments(schema, {"value": 1})
+        assert exc_info.value.code.value == "M-INP-006"
+        assert exc_info.value.argument == "value"
+        assert exc_info.value.context["reason"] == "type_mismatch"
+
+    @pytest.mark.parametrize(
+        ("arguments", "code", "argument", "reason"),
+        [
+            ({}, "M-INP-004", "name", "missing_required_argument"),
+            (
+                {"name": "ok", "bogus": 1},
+                "M-INP-005",
+                "bogus",
+                "unexpected_argument",
+            ),
+            ({"name": 1}, "M-INP-006", "name", "type_mismatch"),
+            ({"name": ""}, "M-INP-007", "name", "constraint_violation"),
+        ],
+    )
+    def test_errors_have_stable_repair_identity(
+        self,
+        arguments: dict[str, object],
+        code: str,
+        argument: str,
+        reason: str,
+    ) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"name": {"type": "string", "minLength": 1}},
+            "required": ["name"],
+        }
+        with pytest.raises(InputError) as exc_info:
+            validate_arguments(schema, arguments)
+        assert exc_info.value.code.value == code
+        assert exc_info.value.argument == argument
+        assert exc_info.value.context["reason"] == reason
+        assert exc_info.value.constraint
+        assert exc_info.value.suggestion
+
+    def test_enforces_all_declared_constraint_keywords(self) -> None:
+        cases = [
+            ({"type": "string", "minLength": 2}, "x", "minLength"),
+            ({"type": "string", "maxLength": 2}, "xxx", "maxLength"),
+            ({"type": "string", "pattern": r"^a+$"}, "bbb", "pattern"),
+            ({"type": "integer", "minimum": 2}, 1, "minimum"),
+            ({"type": "integer", "maximum": 2}, 3, "maximum"),
+            ({"type": "number", "exclusiveMinimum": 2}, 2, "exclusiveMinimum"),
+            ({"type": "number", "exclusiveMaximum": 2}, 2, "exclusiveMaximum"),
+            ({"type": "string", "enum": ["a", "b"]}, "c", "enum"),
+            ({"type": "array", "minItems": 2}, [1], "minItems"),
+            ({"type": "array", "maxItems": 2}, [1, 2, 3], "maxItems"),
+            ({"type": "array", "uniqueItems": True}, [1, 1], "uniqueItems"),
+        ]
+        for value_schema, value, keyword in cases:
+            schema = {"type": "object", "properties": {"value": value_schema}}
+            with pytest.raises(InputError) as exc_info:
+                validate_arguments(schema, {"value": value})
+            assert exc_info.value.constraint == {keyword: value_schema[keyword]}
+
+    def test_invalid_schema_default_is_rejected_before_handler_use(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"name": {"type": "string", "minLength": 1, "default": ""}},
+        }
+        with pytest.raises(InputError) as exc_info:
+            validate_arguments(schema, {})
+        assert exc_info.value.argument == "name"
+
+    @given(st.text(alphabet="abc", max_size=8))
+    def test_string_constraints_match_generated_values(self, value: str) -> None:
+        value_schema = {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 5,
+            "pattern": r"^[ab]+$",
+        }
+        schema = {"type": "object", "properties": {"value": value_schema}}
+        accepted = 2 <= len(value) <= 5 and all(char in "ab" for char in value)
+        if accepted:
+            assert validate_arguments(schema, {"value": value}) == {"value": value}
+        else:
+            with pytest.raises(InputError):
+                validate_arguments(schema, {"value": value})
+
+    @given(st.integers(min_value=-20, max_value=20))
+    def test_numeric_constraints_match_generated_values(self, value: int) -> None:
+        value_schema = {"type": "integer", "exclusiveMinimum": 0, "maximum": 10}
+        schema = {"type": "object", "properties": {"value": value_schema}}
+        if 0 < value <= 10:
+            assert validate_arguments(schema, {"value": value}) == {"value": value}
+        else:
+            with pytest.raises(InputError):
+                validate_arguments(schema, {"value": value})
+
+    @given(st.lists(st.integers(), max_size=6))
+    def test_array_constraints_match_generated_values(self, value: list[int]) -> None:
+        value_schema = {
+            "type": "array",
+            "items": {"type": "integer"},
+            "minItems": 1,
+            "maxItems": 3,
+        }
+        schema = {"type": "object", "properties": {"value": value_schema}}
+        if 1 <= len(value) <= 3:
+            assert validate_arguments(schema, {"value": value}) == {"value": value}
+        else:
+            with pytest.raises(InputError):
+                validate_arguments(schema, {"value": value})

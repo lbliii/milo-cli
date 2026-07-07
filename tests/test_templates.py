@@ -138,6 +138,11 @@ class TestGetEnv:
         out = tmpl.render()
         assert out == "✖  |界 |3|abc…"
 
+    def test_max_cell_width_uses_the_widest_unicode_line(self):
+        from milo._cells import max_cell_width
+
+        assert max_cell_width("ascii\n界界界\ne\u0301") == 6
+
     def test_open_rule_filters_render_even_fading_rules(self):
         from milo._cells import cell_width
         from milo.templates import get_env

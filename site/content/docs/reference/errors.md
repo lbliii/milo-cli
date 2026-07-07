@@ -47,7 +47,7 @@ Constructor fields:
 
 | Exception | Subsystem |
 |---|---|
-| `InputError` | Raw mode, key reading, escape parsing |
+| `InputError` | Command arguments, raw mode, key reading, escape parsing |
 | `StateError` | Reducers, dispatch, sagas, combined state |
 | `FormError` | Form fields, validation, submit behavior |
 | `AppError` | App lifecycle, rendering, templates |
@@ -64,6 +64,10 @@ Constructor fields:
 | `M-INP-001` | `INP_RAW_MODE` | Failed to enter or restore raw terminal mode |
 | `M-INP-002` | `INP_ESCAPE_PARSE` | Failed to parse an escape sequence |
 | `M-INP-003` | `INP_READ` | Failed while reading terminal input |
+| `M-INP-004` | `INP_REQUIRED_ARGUMENT` | Required command argument was omitted |
+| `M-INP-005` | `INP_UNEXPECTED_ARGUMENT` | Command argument is not present in the generated schema |
+| `M-INP-006` | `INP_ARGUMENT_TYPE` | Command argument could not be coerced to its schema type |
+| `M-INP-007` | `INP_ARGUMENT_CONSTRAINT` | Command argument violates a schema constraint |
 | `M-STA-001` | `STA_REDUCER` | Reducer raised or returned invalid state |
 | `M-STA-002` | `STA_DISPATCH` | Dispatch failed |
 | `M-STA-003` | `STA_SAGA` | Saga execution failed |
@@ -90,6 +94,8 @@ Constructor fields:
 | `M-PLG-002` | `PLG_HOOK` | Plugin hook failure |
 | `M-CMD-001` | `CMD_NOT_FOUND` | Command was not found |
 | `M-CMD-002` | `CMD_AMBIGUOUS` | Command resolution was ambiguous |
+| `M-CMD-003` | `CMD_HOOK` | A before-command hook failed |
+| `M-CMD-004` | `CMD_IMPORT` | A lazy command module or attribute failed to import |
 
 ## Terminal Formatting
 

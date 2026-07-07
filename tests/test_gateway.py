@@ -241,6 +241,8 @@ class TestProxyCall:
 
         assert result["isError"] is True
         assert "Unknown tool" in result["content"][0]["text"]
+        assert result["errorData"]["errorCode"] == "M-CMD-001"
+        assert result["errorData"]["reason"] == "unknown_tool"
 
     def test_proxy_call_child_unavailable(self):
         """Missing child returns isError."""
@@ -250,11 +252,14 @@ class TestProxyCall:
 
         assert result["isError"] is True
         assert "not available" in result["content"][0]["text"]
+        assert result["errorData"]["reason"] == "cli_unavailable"
 
     def test_proxy_call_child_error(self):
         """Child returning an error is surfaced correctly."""
         child = MagicMock()
-        child.send_call.return_value = {"error": {"code": -1, "message": "broken"}}
+        child.send_call.return_value = {
+            "error": {"code": -1, "message": "broken", "data": {"reason": "child_failed"}}
+        }
         children = {"taskman": child}
         routing = {"taskman.add": ("taskman", "add")}
 
@@ -262,6 +267,7 @@ class TestProxyCall:
 
         assert result["isError"] is True
         assert "broken" in result["content"][0]["text"]
+        assert result["errorData"]["reason"] == "child_failed"
 
 
 # ---------------------------------------------------------------------------

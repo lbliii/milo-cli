@@ -44,8 +44,8 @@ The `help.kida` template receives:
 |----------|------|-------------|
 | `state.prog` | `str` | Program name |
 | `state.description` | `str` | Parser description captured from argparse |
-| `state.epilog` | `str` | Parser epilog, when populated |
-| `state.usage` | `str` | Usage string, when populated |
+| `state.epilog` | `str` | Reserved; currently empty by default |
+| `state.usage` | `str` | Reserved; currently empty by default |
 | `state.groups` | `tuple[dict]` | Captured argparse action groups |
 | `state.examples` | `tuple[dict]` | Optional examples supplied by `help_formatter_with_examples()` |
 | `state.commands` | `tuple[dict]` | Reserved for command summaries |

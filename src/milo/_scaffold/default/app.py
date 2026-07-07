@@ -1,9 +1,9 @@
 """{{name}} — a milo CLI scaffolded by `milo new`.
 
 Run modes:
-    uv run python app.py greet --name Alice
-    uv run python app.py --llms-txt
-    uv run python app.py --mcp
+    uv run --python 3.14 --with milo-cli python app.py greet --name Alice
+    uv run --python 3.14 --with milo-cli python app.py --llms-txt
+    uv run --python 3.14 --with milo-cli python app.py --mcp
 """
 
 from __future__ import annotations

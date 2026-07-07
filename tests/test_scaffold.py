@@ -36,6 +36,25 @@ class TestScaffoldFunction:
         assert "{{name}}" not in app
         assert "{{name}}" not in readme
 
+    def test_readme_more_links_work_outside_the_source_repository(self, tmp_path):
+        project = scaffold("my_cli", tmp_path)
+        readme = (project / "README.md").read_text()
+        more = readme.split("## More", maxsplit=1)[1]
+        assert "https://lbliii.github.io/milo-cli/docs/get-started/quickstart/" in more
+        assert "https://github.com/lbliii/milo-cli/blob/main/docs/agent-quickstart.md" in more
+        assert "https://lbliii.github.io/milo-cli/docs/quality/testing/" in more
+        assert "`docs/" not in more
+        assert "`site/" not in more
+
+    def test_readme_commands_bootstrap_clean_environment(self, tmp_path):
+        project = scaffold("my_cli", tmp_path)
+        readme = (project / "README.md").read_text()
+
+        assert "uv run --python 3.14 --with milo-cli python app.py" in readme
+        assert "--with milo-cli --with pytest pytest tests/" in readme
+        assert "--with milo-cli milo verify app.py" in readme
+        assert "claude mcp add --transport stdio my_cli" in readme
+
     @pytest.mark.parametrize(
         "bad_name",
         ["My-CLI", "1_cli", "foo bar", "", "FOO", "_leading_underscore"],
@@ -116,8 +135,11 @@ class TestMiloNewCommand:
         assert (tmp_path / "cli_cmd_test" / "app.py").is_file()
         assert "Next steps:" in result.stdout
         assert "cd " in result.stdout
-        assert "uv run python app.py greet --name Alice" in result.stdout
-        assert "uv run milo verify app.py" in result.stdout
+        assert (
+            "uv run --python 3.14 --with milo-cli python app.py greet --name Alice" in result.stdout
+        )
+        assert "uv run --python 3.14 --with milo-cli --with pytest pytest tests/" in result.stdout
+        assert "uv run --python 3.14 --with milo-cli milo verify app.py" in result.stdout
 
     def test_milo_new_invalid_name_exits_nonzero_with_error(self, tmp_path):
         result = subprocess.run(

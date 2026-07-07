@@ -41,7 +41,7 @@ def generate_help_all(cli: CLI) -> str:
     if cli._commands:
         lines.append("## Commands\n")
         for cmd in cli._commands.values():
-            if cmd.hidden:
+            if cmd.hidden or "cli" not in cmd.surfaces:
                 continue
             _format_cmd_markdown(cmd, lines)
 
@@ -75,7 +75,13 @@ def _format_cmd_markdown(
         for name, schema in props.items():
             ptype = schema.get("type", "string")
             req = "yes" if name in required else ""
-            lines.append(f"| `--{name.replace('_', '-')}` | {ptype} | {req} | |")
+            presentation = schema.get("x-milo-cli", {})
+            label = (
+                presentation.get("metavar", name)
+                if presentation.get("kind") == "positional"
+                else f"--{name.replace('_', '-')}"
+            )
+            lines.append(f"| `{label}` | {ptype} | {req} | |")
         lines.append("")
 
     if cmd.examples:
@@ -100,7 +106,7 @@ def _format_group_markdown(
         lines.append(f"{group.description}\n")
 
     for cmd in group._commands.values():
-        if cmd.hidden:
+        if cmd.hidden or "cli" not in cmd.surfaces:
             continue
         _format_cmd_markdown(cmd, lines, prefix=f"{group.name} ")
 

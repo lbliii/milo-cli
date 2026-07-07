@@ -29,6 +29,27 @@ from milo.state import Store
 _GIL_ENABLED = getattr(sys, "_is_gil_enabled", lambda: True)()
 
 
+def _wait_for_action_waiters(
+    store: Store,
+    action_type: str,
+    *,
+    count: int = 1,
+    timeout: float = 10.0,
+) -> None:
+    """Wait until the saga runtime has observably registered action waiters."""
+    deadline = time.monotonic() + timeout
+    poll = threading.Event()
+    while True:
+        with store._lock:
+            if len(store._action_waiters.get(action_type, ())) >= count:
+                return
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Expected {count} waiter(s) for {action_type}, but registration timed out"
+            )
+        poll.wait(0.001)
+
+
 # ---------------------------------------------------------------------------
 # Stress 1: 100 simultaneous sagas (pool saturation + queueing)
 # ---------------------------------------------------------------------------
@@ -147,7 +168,8 @@ def test_stress_all_with_multi_thread_dispatch():
 
     store = Store(reducer, 0, max_workers=8)
     store.run_saga(_parent())
-    time.sleep(0.05)  # Let Take waiters register
+    for action_type in ("EVT_A", "EVT_B", "EVT_C", "EVT_D"):
+        _wait_for_action_waiters(store, action_type)
 
     # Dispatch from 4 separate threads
     threads = []
@@ -179,14 +201,23 @@ def test_stress_cancellation_storm():
     """Rapidly fork and cancel 50 sagas — no deadlocks, no leaked threads."""
     actions = []
     lock = threading.Lock()
+    cancelled = threading.Event()
+    workers_started = threading.Event()
+    started_count = [0]
 
     def _long_saga():
+        with lock:
+            started_count[0] += 1
+            if started_count[0] >= 8:
+                workers_started.set()
         yield Delay(seconds=30.0)
         yield Put(Action("SHOULD_NOT_REACH"))
 
     def reducer(state, action):
         with lock:
             actions.append(action.type)
+            if actions.count("@@SAGA_CANCELLED") == 50:
+                cancelled.set()
         return state or 0
 
     store = Store(reducer, 0, max_workers=8)
@@ -196,14 +227,15 @@ def test_stress_cancellation_storm():
         ctx = store.run_saga(_long_saga())
         contexts.append(ctx)
 
-    time.sleep(0.1)  # Let sagas start blocking on Delay
+    assert workers_started.wait(timeout=10.0), "Worker pool did not reach saturation"
 
     # Cancel all rapidly
     for ctx in contexts:
         ctx.cancel_tree()
 
-    time.sleep(0.5)  # Let cancellation propagate
+    assert cancelled.wait(timeout=10.0), "Cancellation actions did not propagate"
     store.shutdown()
+    store._executor.shutdown(wait=True)
 
     cancel_count = actions.count("@@SAGA_CANCELLED")
     assert cancel_count == 50, f"Expected 50 cancellations, got {cancel_count}"
@@ -226,10 +258,13 @@ def test_stress_take_every_rapid_dispatch():
     total = 50
     lock = threading.Lock()
     handled = [0]
+    meaningful_done = threading.Event()
 
     def _handler(action):
         with lock:
             handled[0] += 1
+            if handled[0] >= 5:
+                meaningful_done.set()
         yield Put(Action("HANDLED"))
 
     def _watcher():
@@ -240,7 +275,7 @@ def test_stress_take_every_rapid_dispatch():
 
     store = Store(reducer, 0, max_workers=8)
     ctx = store.run_saga(_watcher())
-    time.sleep(0.05)
+    _wait_for_action_waiters(store, "RAPID")
 
     # Dispatch from multiple threads for maximum contention
     barrier = threading.Barrier(5)
@@ -260,11 +295,10 @@ def test_stress_take_every_rapid_dispatch():
     for t in threads:
         t.join(timeout=10.0)
 
-    # Give handlers time to finish
-    time.sleep(1.0)
+    assert meaningful_done.wait(timeout=10.0), "Too few TakeEvery handlers completed"
     ctx.cancel_tree()
-    time.sleep(0.2)
     store.shutdown()
+    store._executor.shutdown(wait=True)
 
     # Under contention some actions are missed (by design), but we should
     # handle a meaningful fraction without deadlocks or crashes
@@ -278,13 +312,15 @@ def test_stress_take_every_rapid_dispatch():
 
 
 def test_stress_take_latest_contention():
-    """TakeLatest with 20 rapid actions — only the last handler completes."""
+    """TakeLatest cancels 19 active handlers and completes only the last."""
     done = threading.Event()
     completed = []
     lock = threading.Lock()
+    handler_started = [threading.Event() for _ in range(20)]
 
     def _handler(action):
-        yield Delay(seconds=0.2)
+        handler_started[action.payload].set()
+        yield Take(f"RELEASE_{action.payload}", timeout=10.0)
         with lock:
             completed.append(action.payload)
         done.set()
@@ -297,22 +333,22 @@ def test_stress_take_latest_contention():
 
     store = Store(reducer, 0, max_workers=8)
     ctx = store.run_saga(_watcher())
-    time.sleep(0.05)
+
+    _wait_for_action_waiters(store, "SEARCH")
 
     for i in range(20):
         store.dispatch(Action("SEARCH", payload=i))
-        time.sleep(0.01)
+        assert handler_started[i].wait(timeout=10.0), f"Handler {i} did not start"
+        _wait_for_action_waiters(store, "SEARCH")
 
+    _wait_for_action_waiters(store, "RELEASE_19")
+    store.dispatch(Action("RELEASE_19"))
     assert done.wait(timeout=10.0), "TakeLatest never completed"
     ctx.cancel_tree()
-    time.sleep(0.3)
     store.shutdown()
+    store._executor.shutdown(wait=True)
 
-    # TakeLatest is unbuffered: under contention the watcher can miss a
-    # trailing action while it is re-registering. It should still cancel older
-    # work and complete only the latest action it observed.
-    assert len(completed) == 1
-    assert completed[0] >= 18
+    assert completed == [19]
 
 
 # ---------------------------------------------------------------------------
@@ -330,12 +366,21 @@ def test_stress_pool_pressure_fires_under_load():
             pressure_events.append((active, max_w))
 
     barrier = threading.Event()
+    workers_started = threading.Event()
     done = threading.Event()
     remaining = [0]
+    started = [0]
     count_lock = threading.Lock()
 
+    def _block_worker():
+        with count_lock:
+            started[0] += 1
+            if started[0] >= 4:
+                workers_started.set()
+        barrier.wait(timeout=10.0)
+
     def _blocking_saga():
-        yield Call(fn=lambda: barrier.wait(timeout=10.0))
+        yield Call(fn=_block_worker)
         with count_lock:
             remaining[0] -= 1
             if remaining[0] <= 0:
@@ -357,7 +402,7 @@ def test_stress_pool_pressure_fires_under_load():
     for _ in range(total):
         store.run_saga(_blocking_saga())
 
-    time.sleep(0.2)
+    assert workers_started.wait(timeout=10.0), "Worker pool did not reach saturation"
     barrier.set()
     assert done.wait(timeout=10.0), (
         "Timed out waiting for worker sagas to complete; possible deadlock "

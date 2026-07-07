@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
+from milo._errors import MiloError
 from milo.commands import CLI
+from milo.mcp import _call_tool
 
 
 class TestMiddlewareIntegration:
@@ -81,6 +85,19 @@ class TestMiddlewareIntegration:
         result = cli.invoke(["greet"])
         assert result.exit_code == 1
         assert "hook failed" in result.stderr
+
+        with pytest.raises(MiloError) as call_error:
+            cli.call("greet")
+        assert call_error.value.code.value == "M-CMD-003"
+        assert call_error.value.context["reason"] == "before_command_hook_failed"
+
+        with pytest.raises(MiloError):
+            cli.call_raw("greet")
+
+        mcp = _call_tool(cli, {"name": "greet", "arguments": {}})
+        assert mcp["isError"] is True
+        assert mcp["errorData"]["errorCode"] == "M-CMD-003"
+        assert mcp["errorData"]["reason"] == "before_command_hook_failed"
 
     def test_after_hook_error_handling(self):
         """After-command hook errors are caught (command still succeeds)."""

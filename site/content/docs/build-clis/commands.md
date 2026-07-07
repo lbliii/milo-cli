@@ -53,10 +53,52 @@ myapp greet --name Alice --loud
     description="Deploy the application",
     aliases=("d",),          # Alternative names
     tags=("ops",),           # Grouping in llms.txt
-    hidden=True,             # Omit from help and llms.txt
+    hidden=True,             # Omit from help, llms.txt, and MCP tools
 )
 def deploy(target: str, dry_run: bool = False) -> dict: ...
 ```
+
+Use `surfaces` when a valid terminal command should not be callable by an
+agent. Programmatic `call()` and `call_raw()` remain available regardless of
+discovery policy:
+
+```python milo-docs:compile
+@cli.command("serve", surfaces=("cli",))
+def serve() -> None:
+    """Run a long-lived local server."""
+```
+
+Allowed surface names are `"cli"`, `"mcp"`, and `"llms"`. `hidden=True`
+still hides a command everywhere.
+
+## Positional arguments and option aliases
+
+The Python parameter name stays authoritative for JSON Schema, MCP, and
+programmatic calls. `Annotated` metadata changes only its CLI presentation:
+
+```python milo-docs:compile
+from typing import Annotated
+
+from milo import CLI, MinLen, Option, Positional
+
+cli = CLI(name="files")
+
+
+@cli.command("copy")
+def copy(
+    sources: Annotated[list[str], Positional("SOURCE"), MinLen(1)],
+    destination: Annotated[str, Option(aliases=("-d",), metavar="DIR")] = ".",
+) -> dict[str, object]:
+    return {"sources": sources, "destination": destination}
+```
+
+```text
+files copy one.txt two.txt -d archive
+```
+
+Milo records this presentation as the ignorable `x-milo-cli` extension in the
+generated property schema, so pre-computed lazy schemas can express the same
+contract. `MinLen(1)` on an array uses one-or-more parsing.
 
 ## Supported parameter types
 
@@ -102,6 +144,27 @@ Every CLI gets these flags automatically:
 | `-v` / `--verbose` | Increase verbosity (stackable: `-vv` for debug) |
 | `-q` / `--quiet` | Suppress non-error output |
 | `--no-color` | Disable color output |
+
+To preserve an established version alias or report dependency versions lazily,
+configure both on the root CLI:
+
+```python milo-docs:compile
+from milo import CLI
+
+
+def version_report() -> str:
+    return "myapp 2.0\ntemplate-engine 1.0"
+
+
+cli = CLI(
+    name="myapp",
+    version_flags=("-V", "--version"),
+    version_report=version_report,
+)
+```
+
+The callback is invoked only when a version flag is selected, not while
+building the parser or rendering root help.
 
 ## Programmatic invocation
 
@@ -229,6 +292,8 @@ The `DoctorReport` dataclass tracks counts: `report.ok`, `report.warnings`, `rep
 Milo can check PyPI for newer versions of your package:
 
 ```python milo-docs:compile
+import sys
+
 from milo.version_check import check_version, format_version_notice
 
 info = check_version("myapp", current_version="1.0.0")
@@ -243,7 +308,9 @@ A new version of myapp is available: 1.0.0 -> 1.2.0
 
 Key behaviors:
 
-- **Caching** — results are cached in `~/.milo/cache/` for 24 hours to avoid hitting PyPI on every invocation.
+- **Caching** — results are cached for 24 hours in Milo's platform data
+  directory: `~/.milo/cache/` on Unix and
+  `%LOCALAPPDATA%\milo\cache\` on Windows.
 - **Silent failures** — network errors, timeouts, and cache failures are swallowed; `check_version()` returns `None`.
 - **Opt-out** — set `NO_UPDATE_CHECK=1` or `CI=1` to disable the check entirely.
 - **Installer detection** — `format_version_notice()` detects `uv` vs `pip` and prints the correct upgrade command.

@@ -17,7 +17,7 @@ with a JSON Schema, and an llms.txt entry.
 ## Run the CLI
 
 ```bash
-uv run python app.py greet --name Alice
+uv run --python 3.14 --with milo-cli python app.py greet --name Alice
 ```
 
 Expected output:
@@ -29,7 +29,7 @@ Hello, Alice!
 Boolean defaults become flags:
 
 ```bash
-uv run python app.py greet --name Alice --loud
+uv run --python 3.14 --with milo-cli python app.py greet --name Alice --loud
 ```
 
 Expected output:
@@ -41,8 +41,8 @@ HELLO, ALICE!
 Inspect the generated help:
 
 ```bash
-uv run python app.py --help
-uv run python app.py greet --help
+uv run --python 3.14 --with milo-cli python app.py --help
+uv run --python 3.14 --with milo-cli python app.py greet --help
 ```
 
 ## Inspect the Agent Contract
@@ -50,13 +50,13 @@ uv run python app.py greet --help
 Generate an agent-readable command catalog:
 
 ```bash
-uv run python app.py --llms-txt
+uv run --python 3.14 --with milo-cli python app.py --llms-txt
 ```
 
 Run as an MCP server over stdin/stdout:
 
 ```bash
-uv run python app.py --mcp
+uv run --python 3.14 --with milo-cli python app.py --mcp
 ```
 
 MCP uses stdout for JSON-RPC. Do not use `print()` for progress or logs in code
@@ -65,8 +65,8 @@ that may run under `--mcp`; use `Context` output helpers or stderr boundary code
 ## Test and Verify
 
 ```bash
-uv run pytest tests/ -v
-uv run milo verify app.py
+uv run --python 3.14 --with milo-cli --with pytest pytest tests/ -v
+uv run --python 3.14 --with milo-cli milo verify app.py
 ```
 
 The generated test file covers four layers:
@@ -89,27 +89,28 @@ nonzero on failures that would make the CLI unsafe to register as an MCP tool.
 4. Return JSON-serializable values: `dict`, `list`, `str`, `int`, `float`, `bool`,
    `None`, or dataclasses built from those values.
 5. Add matching tests in `tests/test_app.py`.
-6. Rerun `uv run pytest tests/ -v` and `uv run milo verify app.py`.
+6. Rerun the test and verify commands below.
 
 ## CI
 
 Use both command tests and `milo verify`:
 
 ```bash
-uv run pytest tests/ -v
-uv run milo verify app.py
+uv run --python 3.14 --with milo-cli --with pytest pytest tests/ -v
+uv run --python 3.14 --with milo-cli milo verify app.py
 ```
 
 ## Register with Claude
 
 ```bash
-claude mcp add {{name}} -- uv run python /absolute/path/to/{{name}}/app.py --mcp
+claude mcp add --transport stdio {{name}} -- \
+  uv run --python 3.14 --with milo-cli python /absolute/path/to/{{name}}/app.py --mcp
 ```
 
 The absolute path should point at this project's `app.py`.
 
 ## More
 
-- Public quickstart: `site/content/docs/get-started/quickstart.md`
-- Agent quickstart: `docs/agent-quickstart.md`
-- Testing guide: `docs/testing.md`
+- [Public quickstart](https://lbliii.github.io/milo-cli/docs/get-started/quickstart/)
+- [Agent quickstart](https://github.com/lbliii/milo-cli/blob/main/docs/agent-quickstart.md)
+- [Testing guide](https://lbliii.github.io/milo-cli/docs/quality/testing/)

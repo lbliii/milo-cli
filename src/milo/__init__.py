@@ -2,156 +2,161 @@
 
 from __future__ import annotations
 
+_LAZY_IMPORTS = {
+    # Types
+    "Action": "_types",
+    "Key": "_types",
+    "SpecialKey": "_types",
+    "AppStatus": "_types",
+    "RenderTarget": "_types",
+    "FieldType": "_types",
+    "FieldSpec": "_types",
+    "FieldState": "_types",
+    "FormState": "_types",
+    "Screen": "_types",
+    "Transition": "_types",
+    "ReducerResult": "_types",
+    "Quit": "_types",
+    "Call": "_types",
+    "Put": "_types",
+    "Select": "_types",
+    "Fork": "_types",
+    "Delay": "_types",
+    "Retry": "_types",
+    "Timeout": "_types",
+    "TryCall": "_types",
+    "Race": "_types",
+    "All": "_types",
+    "Take": "_types",
+    "Debounce": "_types",
+    "Cmd": "_types",
+    "Batch": "_types",
+    "Sequence": "_types",
+    "TickCmd": "_types",
+    "ViewState": "_types",
+    "compact_cmds": "_types",
+    "BUILTIN_ACTIONS": "_types",
+    # Errors
+    "MiloError": "_errors",
+    "InputError": "_errors",
+    "StateError": "_errors",
+    "FormError": "_errors",
+    "AppError": "_errors",
+    "FlowError": "_errors",
+    "ConfigError": "_errors",
+    "PipelineError": "_errors",
+    "PluginError": "_errors",
+    "ErrorCode": "_errors",
+    "format_error": "_errors",
+    "format_render_error": "_errors",
+    # State
+    "Store": "state",
+    "SagaContext": "state",
+    "EffectResult": "state",
+    "combine_reducers": "state",
+    # App
+    "App": "app",
+    "run": "app",
+    "render_html": "app",
+    # Flow
+    "FlowScreen": "flow",
+    "Flow": "flow",
+    "FlowState": "flow",
+    # Form
+    "form": "form",
+    "form_reducer": "form",
+    "form_schema": "form",
+    "make_form_reducer": "form",
+    # Help
+    "HelpRenderer": "help",
+    # Dev
+    "DevServer": "dev",
+    # Commands (AI-native)
+    "CLI": "commands",
+    "CommandDef": "commands",
+    "CommandSurface": "commands",
+    "LazyCommandDef": "commands",
+    "InvokeResult": "commands",
+    # Groups
+    "Group": "groups",
+    "GroupDef": "groups",
+    "GlobalOption": "commands",
+    # Context
+    "Context": "context",
+    "get_context": "context",
+    "CLIProgress": "context",
+    # Config
+    "Config": "config",
+    "ConfigSpec": "config",
+    # Pipeline
+    "Pipeline": "pipeline",
+    "Phase": "pipeline",
+    "PhasePolicy": "pipeline",
+    "PhaseLog": "pipeline",
+    "PipelineState": "pipeline",
+    "PhaseStatus": "pipeline",
+    "PipelineViewState": "pipeline",
+    "make_detail_reducer": "pipeline",
+    "pipeline_to_timeline": "pipeline",
+    "set_active_pipeline": "pipeline",
+    "get_active_pipeline": "pipeline",
+    "CycleError": "pipeline",
+    # Plugins
+    "HookRegistry": "plugins",
+    "function_to_schema": "schema",
+    "validate_arguments": "schema",
+    "MinLen": "schema",
+    "MaxLen": "schema",
+    "Gt": "schema",
+    "Lt": "schema",
+    "Ge": "schema",
+    "Le": "schema",
+    "Pattern": "schema",
+    "Description": "schema",
+    "Positional": "schema",
+    "Option": "schema",
+    # Theme
+    "ThemeStyle": "theme",
+    "ThemeProxy": "theme",
+    "DEFAULT_THEME": "theme",
+    "make_style_filter": "theme",
+    "format_output": "output",
+    "write_output": "output",
+    "generate_llms_txt": "llms",
+    # Commands v2 (resources, prompts)
+    "ResourceDef": "commands",
+    "PromptDef": "commands",
+    # Middleware
+    "MCPCall": "middleware",
+    "MiddlewareStack": "middleware",
+    # Streaming
+    "Progress": "streaming",
+    # Observability
+    "RequestLog": "observability",
+    "RequestLogger": "observability",
+    # Completions
+    "install_completions": "completions",
+    # Doctor
+    "Check": "doctor",
+    "DoctorReport": "doctor",
+    "run_doctor": "doctor",
+    "format_doctor_report": "doctor",
+    # Reducer combinators
+    "quit_on": "reducers",
+    "with_cursor": "reducers",
+    "with_confirm": "reducers",
+    # Version check
+    "VersionInfo": "version_check",
+    "check_version": "version_check",
+}
+
 
 def __getattr__(name: str):
     """Lazy imports for public API."""
-    _imports = {
-        # Types
-        "Action": "_types",
-        "Key": "_types",
-        "SpecialKey": "_types",
-        "AppStatus": "_types",
-        "RenderTarget": "_types",
-        "FieldType": "_types",
-        "FieldSpec": "_types",
-        "FieldState": "_types",
-        "FormState": "_types",
-        "Screen": "_types",
-        "Transition": "_types",
-        "ReducerResult": "_types",
-        "Quit": "_types",
-        "Call": "_types",
-        "Put": "_types",
-        "Select": "_types",
-        "Fork": "_types",
-        "Delay": "_types",
-        "Retry": "_types",
-        "Timeout": "_types",
-        "TryCall": "_types",
-        "Race": "_types",
-        "All": "_types",
-        "Take": "_types",
-        "Debounce": "_types",
-        "Cmd": "_types",
-        "Batch": "_types",
-        "Sequence": "_types",
-        "TickCmd": "_types",
-        "ViewState": "_types",
-        "compact_cmds": "_types",
-        "BUILTIN_ACTIONS": "_types",
-        # Errors
-        "MiloError": "_errors",
-        "InputError": "_errors",
-        "StateError": "_errors",
-        "FormError": "_errors",
-        "AppError": "_errors",
-        "FlowError": "_errors",
-        "ConfigError": "_errors",
-        "PipelineError": "_errors",
-        "PluginError": "_errors",
-        "ErrorCode": "_errors",
-        "format_error": "_errors",
-        "format_render_error": "_errors",
-        # State
-        "Store": "state",
-        "SagaContext": "state",
-        "EffectResult": "state",
-        "combine_reducers": "state",
-        # App
-        "App": "app",
-        "run": "app",
-        "render_html": "app",
-        # Flow
-        "FlowScreen": "flow",
-        "Flow": "flow",
-        "FlowState": "flow",
-        # Form
-        "form": "form",
-        "form_reducer": "form",
-        "form_schema": "form",
-        "make_form_reducer": "form",
-        # Help
-        "HelpRenderer": "help",
-        # Dev
-        "DevServer": "dev",
-        # Commands (AI-native)
-        "CLI": "commands",
-        "CommandDef": "commands",
-        "LazyCommandDef": "commands",
-        "InvokeResult": "commands",
-        # Groups
-        "Group": "groups",
-        "GroupDef": "groups",
-        "GlobalOption": "commands",
-        # Context
-        "Context": "context",
-        "get_context": "context",
-        "CLIProgress": "context",
-        # Config
-        "Config": "config",
-        "ConfigSpec": "config",
-        # Pipeline
-        "Pipeline": "pipeline",
-        "Phase": "pipeline",
-        "PhasePolicy": "pipeline",
-        "PhaseLog": "pipeline",
-        "PipelineState": "pipeline",
-        "PhaseStatus": "pipeline",
-        "PipelineViewState": "pipeline",
-        "make_detail_reducer": "pipeline",
-        "pipeline_to_timeline": "pipeline",
-        "set_active_pipeline": "pipeline",
-        "get_active_pipeline": "pipeline",
-        "CycleError": "pipeline",
-        # Plugins
-        "HookRegistry": "plugins",
-        "function_to_schema": "schema",
-        "MinLen": "schema",
-        "MaxLen": "schema",
-        "Gt": "schema",
-        "Lt": "schema",
-        "Ge": "schema",
-        "Le": "schema",
-        "Pattern": "schema",
-        "Description": "schema",
-        # Theme
-        "ThemeStyle": "theme",
-        "ThemeProxy": "theme",
-        "DEFAULT_THEME": "theme",
-        "make_style_filter": "theme",
-        "format_output": "output",
-        "write_output": "output",
-        "generate_llms_txt": "llms",
-        # Commands v2 (resources, prompts)
-        "ResourceDef": "commands",
-        "PromptDef": "commands",
-        # Middleware
-        "MCPCall": "middleware",
-        "MiddlewareStack": "middleware",
-        # Streaming
-        "Progress": "streaming",
-        # Observability
-        "RequestLog": "observability",
-        "RequestLogger": "observability",
-        # Completions
-        "install_completions": "completions",
-        # Doctor
-        "Check": "doctor",
-        "DoctorReport": "doctor",
-        "run_doctor": "doctor",
-        "format_doctor_report": "doctor",
-        # Reducer combinators
-        "quit_on": "reducers",
-        "with_cursor": "reducers",
-        "with_confirm": "reducers",
-        # Version check
-        "VersionInfo": "version_check",
-        "check_version": "version_check",
-    }
-    if name in _imports:
+    if name in _LAZY_IMPORTS:
         import importlib
 
-        module = importlib.import_module(f"milo.{_imports[name]}")
+        module = importlib.import_module(f"milo.{_LAZY_IMPORTS[name]}")
         return getattr(module, name)
     raise AttributeError(f"module 'milo' has no attribute {name!r}")
 
@@ -177,6 +182,7 @@ __all__ = [
     "Check",
     "Cmd",
     "CommandDef",
+    "CommandSurface",
     "Config",
     "ConfigError",
     "ConfigSpec",
@@ -187,6 +193,7 @@ __all__ = [
     "Description",
     "DevServer",
     "DoctorReport",
+    "EffectResult",
     "ErrorCode",
     "FieldSpec",
     "FieldState",
@@ -216,6 +223,7 @@ __all__ = [
     "MiddlewareStack",
     "MiloError",
     "MinLen",
+    "Option",
     "Pattern",
     "Phase",
     "PhaseLog",
@@ -226,6 +234,7 @@ __all__ = [
     "PipelineState",
     "PipelineViewState",
     "PluginError",
+    "Positional",
     "Progress",
     "PromptDef",
     "Put",
@@ -237,6 +246,7 @@ __all__ = [
     "RequestLogger",
     "ResourceDef",
     "Retry",
+    "SagaContext",
     "Screen",
     "Select",
     "Sequence",
@@ -276,6 +286,7 @@ __all__ = [
     "run",
     "run_doctor",
     "set_active_pipeline",
+    "validate_arguments",
     "with_confirm",
     "with_cursor",
     "write_output",

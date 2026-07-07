@@ -39,3 +39,28 @@ def test_every_example_is_referenced_in_examples_readme():
 def test_root_readme_points_to_examples_landing_page():
     readme = _README.read_text(encoding="utf-8")
     assert "[examples/README.md](examples/README.md)" in readme
+
+
+def _root_example_row(name: str) -> str:
+    marker = f"](examples/{name})"
+    return next(line for line in _README.read_text(encoding="utf-8").splitlines() if marker in line)
+
+
+def test_root_readme_key_apis_match_current_example_code():
+    devtool = _root_example_row("devtool")
+    assert "`before_command`/`after_command`" in devtool
+    assert "before_run" not in devtool
+
+    taskman = _root_example_row("taskman")
+    assert "`@cli.command`" in taskman
+    assert "`@cli.resource`" in taskman
+
+
+def test_greet_copy_guidance_preserves_the_tests_directory():
+    greet = (_EXAMPLES_DIR / "greet" / "README.md").read_text(encoding="utf-8")
+    quickstart = (_REPO_ROOT / "docs" / "agent-quickstart.md").read_text(encoding="utf-8")
+    testing = (_REPO_ROOT / "docs" / "testing.md").read_text(encoding="utf-8")
+
+    assert "`tests/test_greet.py` under your project" in greet
+    assert "`my_cli/tests/test_greet.py`" in quickstart
+    assert "CLI's `tests/` directory" in testing

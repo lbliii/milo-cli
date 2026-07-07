@@ -33,7 +33,8 @@ The test file at `tests/test_greet.py` is a template covering the public contrac
 - **MCP dispatch** — `_call_tool(cli, {...})` returns the expected response, and
   a missing required arg returns structured error data with `argument` context.
 
-Copy this file next to your own `app.py` and edit the assertions.
+Copy this file to `tests/test_greet.py` under your project, then edit the
+imports and assertions for your app.
 
 ## How this gets discovered by Claude
 

@@ -7,11 +7,12 @@ import enum
 import functools
 import inspect
 import json
+import math
 import re as _re
 import types
 import typing
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Literal, Union, get_args, get_origin
 
 # ---------------------------------------------------------------------------
@@ -73,6 +74,28 @@ class Description:
     """Override or supplement the parameter description."""
 
     value: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Positional:
+    """Present an ``Annotated`` parameter as a positional CLI argument."""
+
+    metavar: str = ""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Option:
+    """Customize an ``Annotated`` CLI option without changing its schema name."""
+
+    aliases: tuple[str, ...] = ()
+    metavar: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "aliases", tuple(self.aliases))
+        invalid = [alias for alias in self.aliases if not alias.startswith("-")]
+        if invalid:
+            msg = f"Option aliases must start with '-': {invalid!r}"
+            raise ValueError(msg)
 
 
 _CONSTRAINT_MAP: dict[type, str] = {
@@ -139,6 +162,348 @@ def function_to_schema(
     return schema
 
 
+def validate_arguments(
+    schema: dict[str, Any],
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate and coerce command arguments against Milo's JSON Schema.
+
+    The returned mapping is a new dictionary. String inputs are coerced only
+    when the schema declares a non-string primitive, array, or object type.
+    Unknown and missing arguments are rejected before handler execution.
+    """
+    properties = schema.get("properties", {})
+    required = schema.get("required", ())
+
+    for name in arguments:
+        if name not in properties:
+            _raise_argument_error(
+                code_name="INP_UNEXPECTED_ARGUMENT",
+                argument=name,
+                message=f"Unexpected argument {name!r}.",
+                constraint={"additionalProperties": False},
+                reason="unexpected_argument",
+                suggestion=f"Remove {name!r}; it is not declared by this command.",
+            )
+
+    for name in required:
+        if name not in arguments:
+            _raise_argument_error(
+                code_name="INP_REQUIRED_ARGUMENT",
+                argument=name,
+                message=f"Missing required argument {name!r}.",
+                constraint={"required": True},
+                reason="missing_required_argument",
+                suggestion=f"Provide {name!r}.",
+            )
+
+    validated = {
+        name: _validate_schema_value(value, properties[name], argument=name, root=schema)
+        for name, value in arguments.items()
+    }
+    for name, value_schema in properties.items():
+        if (
+            name not in arguments
+            and "default" in value_schema
+            and value_schema["default"] is not None
+        ):
+            _validate_schema_value(
+                value_schema["default"], value_schema, argument=name, root=schema
+            )
+    return validated
+
+
+def _validate_schema_value(
+    value: Any,
+    value_schema: dict[str, Any],
+    *,
+    argument: str,
+    root: dict[str, Any],
+) -> Any:
+    value_schema = _resolve_schema_ref(value_schema, root)
+
+    if value is None and value_schema.get("default", object()) is None:
+        return None
+
+    if "anyOf" in value_schema:
+        from milo._errors import InputError
+
+        for candidate in value_schema["anyOf"]:
+            try:
+                return _validate_schema_value(value, candidate, argument=argument, root=root)
+            except InputError:
+                continue
+        _raise_argument_error(
+            code_name="INP_ARGUMENT_TYPE",
+            argument=argument,
+            message=f"Argument {argument!r} does not match any allowed type.",
+            constraint={"anyOf": value_schema["anyOf"]},
+            reason="type_mismatch",
+            suggestion="Use a value matching one of the declared schema alternatives.",
+        )
+
+    expected = value_schema.get("type")
+    coerced = _coerce_schema_type(value, expected, argument=argument)
+
+    if "enum" in value_schema and coerced not in value_schema["enum"]:
+        _raise_constraint_error(
+            argument,
+            "enum",
+            value_schema["enum"],
+            f"Use one of: {', '.join(map(repr, value_schema['enum']))}.",
+        )
+
+    if expected == "string":
+        _validate_string_constraints(coerced, value_schema, argument)
+    elif expected in {"integer", "number"}:
+        _validate_number_constraints(coerced, value_schema, argument)
+    elif expected == "array":
+        _validate_array_constraints(coerced, value_schema, argument, root)
+    elif expected == "object":
+        coerced = _validate_object_constraints(coerced, value_schema, argument, root)
+
+    return coerced
+
+
+def _resolve_schema_ref(value_schema: dict[str, Any], root: dict[str, Any]) -> dict[str, Any]:
+    ref = value_schema.get("$ref")
+    prefix = "#/$defs/"
+    if not isinstance(ref, str) or not ref.startswith(prefix):
+        return value_schema
+    resolved = root.get("$defs", {}).get(ref.removeprefix(prefix))
+    return resolved if isinstance(resolved, dict) else value_schema
+
+
+def _coerce_schema_type(value: Any, expected: Any, *, argument: str) -> Any:
+    if expected is None:
+        return value
+
+    coerced = value
+    try:
+        if expected == "string":
+            if not isinstance(value, str):
+                raise TypeError
+        elif expected == "integer":
+            if isinstance(value, bool):
+                raise TypeError
+            if isinstance(value, str):
+                coerced = int(value)
+            elif not isinstance(value, int):
+                raise TypeError
+        elif expected == "number":
+            if isinstance(value, bool):
+                raise TypeError
+            if isinstance(value, str):
+                coerced = float(value)
+            elif not isinstance(value, (int, float)):
+                raise TypeError
+            if not math.isfinite(coerced):
+                raise TypeError
+        elif expected == "boolean":
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"true", "1", "yes", "on"}:
+                    coerced = True
+                elif normalized in {"false", "0", "no", "off"}:
+                    coerced = False
+                else:
+                    raise TypeError
+            elif not isinstance(value, bool):
+                raise TypeError
+        elif expected == "null":
+            if value is not None:
+                raise TypeError
+        elif expected == "array":
+            if isinstance(value, str):
+                coerced = json.loads(value)
+            elif isinstance(value, (list, tuple, set, frozenset)):
+                coerced = list(value)
+            if not isinstance(coerced, list):
+                raise TypeError
+        elif expected == "object":
+            if isinstance(value, str):
+                coerced = json.loads(value)
+            if not isinstance(coerced, dict):
+                raise TypeError
+    except TypeError, ValueError:
+        _raise_argument_error(
+            code_name="INP_ARGUMENT_TYPE",
+            argument=argument,
+            message=f"Argument {argument!r} must be of type {expected!r}.",
+            constraint={"type": expected},
+            reason="type_mismatch",
+            suggestion=f"Provide {argument!r} as {expected}.",
+        )
+    return coerced
+
+
+def _validate_string_constraints(value: str, value_schema: dict[str, Any], argument: str) -> None:
+    if "minLength" in value_schema and len(value) < value_schema["minLength"]:
+        _raise_constraint_error(
+            argument,
+            "minLength",
+            value_schema["minLength"],
+            f"Use at least {value_schema['minLength']} character(s).",
+        )
+    if "maxLength" in value_schema and len(value) > value_schema["maxLength"]:
+        _raise_constraint_error(
+            argument,
+            "maxLength",
+            value_schema["maxLength"],
+            f"Use at most {value_schema['maxLength']} character(s).",
+        )
+    if "pattern" in value_schema and _re.search(value_schema["pattern"], value) is None:
+        _raise_constraint_error(
+            argument,
+            "pattern",
+            value_schema["pattern"],
+            f"Use text matching /{value_schema['pattern']}/.",
+        )
+
+
+def _validate_number_constraints(
+    value: int | float, value_schema: dict[str, Any], argument: str
+) -> None:
+    checks = (
+        ("minimum", lambda bound: value >= bound, "greater than or equal to"),
+        ("maximum", lambda bound: value <= bound, "less than or equal to"),
+        ("exclusiveMinimum", lambda bound: value > bound, "greater than"),
+        ("exclusiveMaximum", lambda bound: value < bound, "less than"),
+    )
+    for key, predicate, wording in checks:
+        if key in value_schema and not predicate(value_schema[key]):
+            _raise_constraint_error(
+                argument,
+                key,
+                value_schema[key],
+                f"Use a value {wording} {value_schema[key]}.",
+            )
+
+
+def _validate_array_constraints(
+    value: list[Any],
+    value_schema: dict[str, Any],
+    argument: str,
+    root: dict[str, Any],
+) -> None:
+    if "minItems" in value_schema and len(value) < value_schema["minItems"]:
+        _raise_constraint_error(
+            argument,
+            "minItems",
+            value_schema["minItems"],
+            f"Provide at least {value_schema['minItems']} item(s).",
+        )
+    if "maxItems" in value_schema and len(value) > value_schema["maxItems"]:
+        _raise_constraint_error(
+            argument,
+            "maxItems",
+            value_schema["maxItems"],
+            f"Provide at most {value_schema['maxItems']} item(s).",
+        )
+    if value_schema.get("uniqueItems") and any(
+        left == right for index, left in enumerate(value) for right in value[index + 1 :]
+    ):
+        _raise_constraint_error(
+            argument,
+            "uniqueItems",
+            True,
+            "Remove duplicate items.",
+        )
+    item_schema = value_schema.get("items")
+    if isinstance(item_schema, dict):
+        for index, item in enumerate(value):
+            value[index] = _validate_schema_value(
+                item,
+                item_schema,
+                argument=f"{argument}[{index}]",
+                root=root,
+            )
+
+
+def _validate_object_constraints(
+    value: dict[str, Any],
+    value_schema: dict[str, Any],
+    argument: str,
+    root: dict[str, Any],
+) -> dict[str, Any]:
+    properties = value_schema.get("properties", {})
+    required = value_schema.get("required", ())
+    for name in required:
+        if name not in value:
+            _raise_argument_error(
+                code_name="INP_REQUIRED_ARGUMENT",
+                argument=f"{argument}.{name}",
+                message=f"Missing required field {name!r} in {argument!r}.",
+                constraint={"required": True},
+                reason="missing_required_argument",
+                suggestion=f"Provide {argument}.{name!s}.",
+            )
+
+    validated = dict(value)
+    for name, item in value.items():
+        if name in properties:
+            validated[name] = _validate_schema_value(
+                item,
+                properties[name],
+                argument=f"{argument}.{name}",
+                root=root,
+            )
+        elif value_schema.get("additionalProperties") is False:
+            _raise_argument_error(
+                code_name="INP_UNEXPECTED_ARGUMENT",
+                argument=f"{argument}.{name}",
+                message=f"Unexpected field {name!r} in {argument!r}.",
+                constraint={"additionalProperties": False},
+                reason="unexpected_argument",
+                suggestion=f"Remove {argument}.{name!s}.",
+            )
+        elif isinstance(value_schema.get("additionalProperties"), dict):
+            validated[name] = _validate_schema_value(
+                item,
+                value_schema["additionalProperties"],
+                argument=f"{argument}.{name}",
+                root=root,
+            )
+    return validated
+
+
+def _raise_constraint_error(
+    argument: str,
+    key: str,
+    expected: Any,
+    suggestion: str,
+) -> typing.NoReturn:
+    _raise_argument_error(
+        code_name="INP_ARGUMENT_CONSTRAINT",
+        argument=argument,
+        message=f"Argument {argument!r} violates {key}={expected!r}.",
+        constraint={key: expected},
+        reason="constraint_violation",
+        suggestion=suggestion,
+    )
+
+
+def _raise_argument_error(
+    *,
+    code_name: str,
+    argument: str,
+    message: str,
+    constraint: dict[str, Any],
+    reason: str,
+    suggestion: str,
+) -> typing.NoReturn:
+    from milo._errors import ErrorCode, InputError
+
+    raise InputError(
+        ErrorCode[code_name],
+        message,
+        argument=argument,
+        constraint=constraint,
+        context={"reason": reason},
+        suggestion=suggestion,
+    )
+
+
 @functools.lru_cache(maxsize=256)
 def _function_to_schema_cached(
     func: Callable[..., Any], *, strict: bool = False
@@ -174,6 +539,11 @@ def _function_to_schema_cached(
     undocumented: list[str] = []
 
     for name, param in sig.parameters.items():
+        if param.kind in {
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        }:
+            continue
         annotation = hints.get(name, param.annotation)
         if annotation is inspect.Parameter.empty:
             annotation = str
@@ -260,6 +630,23 @@ def _type_to_schema(
         schema = _type_to_schema(base_type, _seen, _defs, _strict=_strict)
         is_array = schema.get("type") == "array"
         for meta in args[1:]:
+            if isinstance(meta, Positional):
+                if "x-milo-cli" in schema:
+                    raise ValueError("Use only one Positional or Option marker per parameter")
+                schema["x-milo-cli"] = {
+                    "kind": "positional",
+                    **({"metavar": meta.metavar} if meta.metavar else {}),
+                }
+                continue
+            if isinstance(meta, Option):
+                if "x-milo-cli" in schema:
+                    raise ValueError("Use only one Positional or Option marker per parameter")
+                schema["x-milo-cli"] = {
+                    "kind": "option",
+                    **({"aliases": list(meta.aliases)} if meta.aliases else {}),
+                    **({"metavar": meta.metavar} if meta.metavar else {}),
+                }
+                continue
             key = _CONSTRAINT_MAP.get(type(meta))
             if key:
                 # MinLen/MaxLen map to minItems/maxItems for arrays

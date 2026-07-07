@@ -1494,10 +1494,13 @@ class TestTakeEveryEffect:
         from milo.state import Store
 
         results = []
+        handled = threading.Event()
 
         def handle_click(action):
             results.append(action.payload)
             yield Put(Action("CLICK_HANDLED", payload=action.payload))
+            if len(results) == 3:
+                handled.set()
 
         def watcher():
             yield TakeEvery("CLICK", handle_click)
@@ -1507,17 +1510,34 @@ class TestTakeEveryEffect:
 
         store = Store(reducer, None)
         ctx = store.run_saga(watcher())
-        time.sleep(0.1)
 
-        store.dispatch(Action("CLICK", payload="btn1"))
-        time.sleep(0.05)
-        store.dispatch(Action("CLICK", payload="btn2"))
-        time.sleep(0.05)
-        store.dispatch(Action("CLICK", payload="btn3"))
-        time.sleep(0.3)
+        def wait_for_click_waiter() -> None:
+            deadline = time.monotonic() + 10
+            poll = threading.Event()
+            while time.monotonic() < deadline:
+                with store._lock:
+                    if store._action_waiters.get("CLICK"):
+                        return
+                poll.wait(0.001)
+            raise AssertionError("TakeEvery did not register its CLICK waiter")
+
+        for payload in ("btn1", "btn2", "btn3"):
+            wait_for_click_waiter()
+            store.dispatch(Action("CLICK", payload=payload))
+
+        assert handled.wait(10), "TakeEvery did not handle all dispatched actions"
+
+        deadline = time.monotonic() + 10
+        poll = threading.Event()
+        while time.monotonic() < deadline:
+            with ctx._lock:
+                if not ctx.children:
+                    break
+            poll.wait(0.001)
+        else:
+            raise AssertionError("TakeEvery child handlers did not finish")
 
         ctx.cancel_tree()
-        time.sleep(0.2)
         store._executor.shutdown(wait=True)
 
         assert sorted(results) == ["btn1", "btn2", "btn3"]

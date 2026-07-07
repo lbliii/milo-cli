@@ -41,6 +41,20 @@ def deploy(environment: str, service: str, version: str = "latest",
 `result`, and `exception`. `cli.call()` and `call_raw()` return the handler's
 plain value or raise.
 
+## Argument Contract
+
+Every dispatch surface uses the command's `function_to_schema()` result before
+the handler runs. Milo rejects missing and unexpected arguments, type errors,
+enum mismatches, `Annotated` length and item limits, patterns, uniqueness, and
+numeric bounds. Programmatic and MCP calls also coerce string-sourced integers,
+numbers, booleans, JSON arrays, and JSON objects. Defaults and injected
+`Context` parameters retain their normal Python behavior.
+
+Unknown keyword arguments are errors rather than being silently discarded.
+Programmatic calls raise `InputError`; CLI dispatch exits nonzero; MCP returns
+structured `errorData`. Middleware may repair or inject arguments before the
+shared validation step, but invalid values never reach the command handler.
+
 ## Groups
 
 Grouped commands use spaces in argv and dot notation in programmatic/MCP calls.

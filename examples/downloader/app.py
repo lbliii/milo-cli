@@ -8,7 +8,6 @@ tick-based spinner animation, and parallel saga execution.
 
 from __future__ import annotations
 
-import time
 import urllib.request
 from dataclasses import dataclass, replace
 
@@ -38,6 +37,7 @@ URLS: tuple[str, ...] = (
     "https://jsonplaceholder.typicode.com/posts/1",
     "https://httpbin.org/get",
 )
+TICK_SECONDS = 0.1
 
 # ---------------------------------------------------------------------------
 # State
@@ -62,7 +62,6 @@ class State:
     urls: tuple[UrlState, ...] = ()
     phase: str = "ready"  # ready | fetching | done
     tick: int = 0
-    start_time: float = 0.0
     elapsed: float = 0.0
 
 
@@ -150,16 +149,16 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
                         state,
                         phase="fetching",
                         tick=0,
-                        start_time=time.time(),
+                        elapsed=0.0,
                     ),
                     sagas=(fetch_all_saga,),
                 )
 
         case "@@TICK":
             new_state = replace(state, tick=state.tick + 1)
-            if state.phase == "fetching" and state.start_time > 0:
+            if state.phase == "fetching":
                 new_state = replace(
-                    new_state, elapsed=time.time() - state.start_time
+                    new_state, elapsed=state.elapsed + TICK_SECONDS
                 )
             return new_state
 
@@ -196,11 +195,7 @@ def reducer(state: State | None, action: Action) -> State | ReducerResult | Quit
             )
 
         case "ALL_DONE":
-            return replace(
-                state,
-                phase="done",
-                elapsed=time.time() - state.start_time if state.start_time else 0.0,
-            )
+            return replace(state, phase="done")
 
     return state
 
@@ -215,7 +210,7 @@ if __name__ == "__main__":
         template="downloader.kida",
         reducer=reducer,
         initial_state=State(urls=tuple(UrlState(url=u) for u in URLS)),
-        tick_rate=0.1,
+        tick_rate=TICK_SECONDS,
         exit_template="exit.kida",
     )
     app.run()
