@@ -152,7 +152,7 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 | **Snapshot Testing** | `assert_renders`, `assert_state`, `assert_saga` for deterministic test coverage | [Testing →](https://lbliii.github.io/milo-cli/docs/quality/testing/) |
 | **Pipeline** | Declarative multi-phase workflows with dependency graphs, retry policies, and output capture | [Pipeline →](https://lbliii.github.io/milo-cli/docs/quality/pipeline/) |
 | **Help Rendering** | `HelpRenderer` — drop-in `argparse.HelpFormatter` using Kida templates | [Help →](https://lbliii.github.io/milo-cli/docs/build-clis/help/) |
-| **Context** | Execution context with verbosity, output format, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo-cli/docs/build-clis/context/) |
+| **Context** | Injectable output, interaction, approvals, global options, and `run_app()` bridge | [Context →](https://lbliii.github.io/milo-cli/docs/build-clis/context/) |
 | **Configuration** | `Config` with validation, init scaffolding, and profile support | [Config →](https://lbliii.github.io/milo-cli/docs/about/concepts/configuration/) |
 | **Shell Completions** | Generate bash/zsh/fish completions from CLI definitions | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
 | **Doctor Diagnostics** | `run_doctor()` validates environment, dependencies, and config health | [CLI →](https://lbliii.github.io/milo-cli/docs/build-clis/commands/) |
@@ -170,7 +170,7 @@ Pick the example closest to your use case, copy its `app.py`, and adapt. See [ex
 | The simplest possible CLI | [examples/greet](examples/greet) | `CLI`, `@cli.command` |
 | Dual-mode CLI ↔ MCP server (flagship) | [examples/deploy](examples/deploy) | `Annotated`, `MinLen`, `Context`, `Progress`, `--mcp` |
 | MCP tool with a negotiated interactive UI resource | [examples/mcp_app](examples/mcp_app) | Dependency-free HTML, `ui_resource`, `MCPAppToolMeta`, structured fallback |
-| Context injection, logging, progress, confirms | [examples/ctxdemo](examples/ctxdemo) | `Context`, `ctx.info`, `ctx.progress`, `ctx.confirm` |
+| Context injection, host-owned output, progress, confirms | [examples/ctxdemo](examples/ctxdemo) | `Context`, `OutputSink`, `ctx.progress`, `ctx.confirm` |
 | Nested command groups (`app repo list`) | [examples/groups](examples/groups) | `cli.group()`, `walk_commands` |
 | Fast startup via deferred imports | [examples/lazyapp](examples/lazyapp) | `cli.lazy_command()` |
 | Production CLI with hooks, completions, doctor | [examples/devtool](examples/devtool) | `run_doctor`, `before_command`/`after_command`, did-you-mean, completions |

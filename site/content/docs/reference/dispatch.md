@@ -80,6 +80,12 @@ def build(output: str = "_site", clean: bool = False) -> dict[str, str | bool]:
 schemas. A handler can use `ctx.log()`, `ctx.error()`, `ctx.progress()`, or
 `ctx.run_app()` without exposing `ctx` as a user argument.
 
+Programmatic hosts may pass a real `Context` through the reserved
+`cli.call(..., ctx=host_context)` or `call_raw(..., ctx=host_context)` keyword.
+That context can own output, interaction, and confirmation policy. MCP command
+arguments cannot inject `ctx`; attempts return structured `M-INP-005` repair
+data because agent-visible inputs remain defined only by the command schema.
+
 ## Return Values
 
 | Return value | CLI default output | MCP `tools/call` |

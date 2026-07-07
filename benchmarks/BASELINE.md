@@ -196,6 +196,20 @@ Linear scaling at ~15.8μs per command (dominated by schema generation).
 
 ---
 
+## Host-Owned Context Dispatch
+
+Added after the v0.2.2 baseline. Local spot check: 2026-07-07, macOS Apple
+Silicon, CPython 3.14.2t, `PYTHON_GIL=0`.
+
+| Operation | Median | Notes |
+|---|---|---|
+| `CLI.call()` with host Context | 8.0μs | Schema validation, ContextVar setup, silent sink write, handler dispatch |
+
+This establishes a new workload baseline; no before/after speed claim is made.
+The host owns synchronization for shared sink and approval objects.
+
+---
+
 ## Key Findings
 
 1. **`get_env()` cache now works**: 125ns cached vs 125μs uncached — 1,000x improvement from fixing the singleton cache-write condition.
