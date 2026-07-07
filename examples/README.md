@@ -8,7 +8,7 @@ These examples are copy paths, not side demos. Every example directory has a run
 |---|---|---|
 | The smallest typed CLI | [greet](greet) | One command, tests for schema, CLI dispatch, llms.txt, and MCP dispatch |
 | A human CLI that is also an MCP tool | [deploy](deploy) | Typed constraints, destructive tool annotations, progress, resources, prompts, and interactive confirmation |
-| A tool with an optional MCP Apps view | [mcp_app](mcp_app) | Stable `ui://` resource, nested tool metadata, and structured fallback |
+| A tool with an optional MCP Apps view | [mcp_app](mcp_app) | Dependency-free interactive HTML, stable `ui://` metadata, gateway-safe calls, and structured fallback |
 | An agent-readable task CLI | [taskman](taskman) | Commands plus MCP resources over application state |
 | Polished terminal output patterns | [outputgallery](outputgallery) | Human summaries, CI-safe output, JSON mode, and Kida output primitives |
 
@@ -35,6 +35,9 @@ uv run milo verify examples/greet/app.py
 
 - Start with `greet` unless you already know you need state, progress, resources, or templates.
 - Use `deploy` when the command has real-world side effects and needs agent-visible annotations.
+- Use `mcp_app` for standalone static HTML. When Chirp or another web framework
+  already owns templates, assets, auth, or mutations, keep the HTML in that
+  framework and let Milo expose the typed command and resource metadata.
 - Use `taskman` when an MCP client needs both tools and read-only resources.
 - Use `outputgallery` when output quality is the feature, especially for diagnostics, CI summaries, or site tooling.
 - Run `uv run milo verify path/to/app.py` after adapting an example.

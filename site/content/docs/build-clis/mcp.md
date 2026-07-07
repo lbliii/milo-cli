@@ -385,7 +385,8 @@ These failures exit 1 and include the next repair action. Schema documentation
 warnings still exit 0. Milo validates transport shape only: it does not parse,
 sanitize, render, or otherwise interpret the application HTML.
 
-See the runnable [minimal MCP Apps example](https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app).
+See the runnable
+[dependency-free interactive MCP Apps example](https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app).
 
 ---
 
