@@ -1,1 +1,0 @@
-Corrected onboarding, example-index, help, form, platform-path, and version-check documentation to match direct versus gateway MCP names, generated project paths, current APIs, bundled rendering behavior, and cross-platform storage; agent-guide snippets are now covered by the docs verification gate.

@@ -136,6 +136,44 @@ benchmark baseline, and Steward Notes.
 Confidence: high
 Verification Status: machine-verified
 
+## Steward Notes — Milo 0.4.0 Release
+
+- Consulted stewards: Release And Dependency Surface, Milo Core, Tests, Agent
+  Docs, Site And Reference Docs, Performance And Startup Cost, and
+  Free-Threading And Concurrency.
+- Approval: the maintainer explicitly authorized release work on 2026-07-07.
+- Version decision: 0.4.0 is a feature release. It collects the already-reviewed
+  schema enforcement, MCP Apps, downstream adoption, lazy help/dispatch, and
+  host-owned Context contracts; the scope is larger than a patch while retaining
+  Python 3.14+ and `kida-templates>=0.9.0,<0.10.0` compatibility.
+- Release surfaces: `pyproject.toml`, the lazy package version, `uv.lock`, the
+  compiled towncrier changelog, and the public 0.4.0 site notes agree. All 18
+  pending fragments were consumed, and the release-preparation PR intentionally
+  carries the `skip-changelog` label.
+- Packaging: the sdist and universal wheel build as version 0.4.0. An isolated
+  Python 3.14 wheel smoke test imported `CLI`, `Context`, `MCPAppToolMeta`, and
+  `RootOptionSpec`; wheel metadata retains the supported Python and Kida ranges
+  and includes MCP Apps, `py.typed`, scaffold, and template package data.
+- Publishing boundary: a GitHub Release for `v0.4.0` triggers the repository's
+  trusted-publishing workflow, which builds on free-threaded Python and publishes
+  to PyPI through OIDC. No local PyPI credential or direct upload is introduced.
+- Concurrency: release preparation changes version metadata and documentation,
+  not runtime behavior or shared mutable state. The constituent runtime changes
+  retain their focused free-threading, cancellation, ordering, and dispatch
+  evidence from their implementation PRs.
+- Performance: release preparation changes no hot path, so no new benchmark is
+  required. Feature PR benchmarks and baselines remain the applicable evidence.
+- Verification: `make ci` passed 1,663 tests with one skip and 82.98% branch
+  coverage under `PYTHON_GIL=0`; the same four documented `ty` warnings remain.
+  `make docs-test` passed strict templates and all 64 tagged snippets. The
+  production Bengal build succeeded with the repository's existing autodoc,
+  internal-link, and analytics diagnostics. Remote GitHub/PyPI status confirmed
+  that 0.4.0 is newer than and not yet published over 0.3.1.
+- Collateral: changelog, public release notes, version metadata, lockfile, built
+  artifacts, and downstream canary guidance move together. No scaffold shape or
+  migration is required because the release preserves default terminal behavior
+  and the existing runtime dependency range.
+
 Steward: Milo Core
 Area: Shared dispatch argument semantics
 Severity: P2

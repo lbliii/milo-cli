@@ -2,6 +2,64 @@
 
 All notable changes to Milo are documented here.
 
+## 0.4.0 — 2026-07-07
+
+### Added
+
+- Added MCP `server/discover` support and explicit unsupported protocol-version errors so clients can prepare for stateless MCP negotiation while `2025-11-25` initialization remains supported. ([#stateless-mcp-readiness](https://github.com/lbliii/milo-cli/issues/stateless-mcp-readiness))
+- Added a source-pinned Chirp CLI adoption contract with an executable parity
+  fixture, five concrete Milo gap reproducers, ownership boundaries, and an
+  ordered migration plan. ([#75](https://github.com/lbliii/milo-cli/issues/75))
+- Added typed CLI presentation markers (`Positional` and `Option`), per-command
+  `surfaces`, lazy custom version reporting, and terminal-only result renderers so
+  established CLIs can adopt Milo without changing argv or protocol behavior. ([#76](https://github.com/lbliii/milo-cli/issues/76))
+- Added typed MCP Apps 2026-01-26 contracts for negotiated `ui://` HTML
+  resources, nested tool-to-resource metadata, deterministic security metadata,
+  and structured resource errors with text-only fallback for existing clients. ([#79](https://github.com/lbliii/milo-cli/issues/79))
+- Added collision-safe MCP Apps gateway proxying with negotiated child discovery,
+  deterministic `ui://` rewriting, metadata-preserving resource reads, and
+  repairable child lifecycle errors. ([#80](https://github.com/lbliii/milo-cli/issues/80))
+- Extended `milo verify` with stable in-process, gateway, and subprocess MCP Apps
+  conformance checks for negotiated capabilities, linked `ui://`
+  resources, MIME/profile metadata, readable text or base64 payloads, and clean
+  JSON-RPC stdout. ([#81](https://github.com/lbliii/milo-cli/issues/81))
+- Expanded the framework-neutral MCP Apps example into a dependency-free
+  interactive view that handles the stable host lifecycle, renders structured
+  tool results, calls direct or gateway-namespaced tools, and carries focused
+  CLI, schema, MCP, resource, gateway, verifier, and docs proof. ([#82](https://github.com/lbliii/milo-cli/issues/82))
+- Added public `validate_arguments()` schema enforcement and completed the lazy
+  public manifest for `SagaContext` and `EffectResult`. ([#85](https://github.com/lbliii/milo-cli/issues/85))
+- Added host-owned `Context` output sinks, interaction policy, confirmation
+  strategies, and programmatic `ctx=` injection so web servers, workers, and tests
+  can run commands without touching process-global terminal streams. ([#87](https://github.com/lbliii/milo-cli/issues/87))
+
+### Changed
+
+- Lazy command CLIs now render root and group help without resolving leaf schemas
+  and build only the selected command parser during execution. Added immutable
+  `RootOptionSpec` metadata through `CLI.root_option_specs()` so custom help
+  renderers share Milo's built-in and user-defined root option contract. ([#70](https://github.com/lbliii/milo-cli/issues/70))
+- Reworked the README around a clean-machine 60-second proof, added an honest
+  Milo/FastMCP/Typer decision guide, and prepared the launch post and demo
+  recording runbook. ([#88](https://github.com/lbliii/milo-cli/issues/88))
+
+### Fixed
+
+- Corrected onboarding, example-index, help, form, platform-path, and version-check documentation to match direct versus gateway MCP names, generated project paths, current APIs, bundled rendering behavior, and cross-platform storage; agent-guide snippets are now covered by the docs verification gate. ([#direct-mcp-tool-name](https://github.com/lbliii/milo-cli/issues/direct-mcp-tool-name))
+- Bundled command, panel, phase, and pipeline components now align and preserve wide Unicode text by display-cell width; the `panel` component also renders its documented border styles instead of failing on dynamic lookup. ([#display-cell-components](https://github.com/lbliii/milo-cli/issues/display-cell-components))
+- The downloader example reducer now derives elapsed time from tick actions instead of reading the wall clock, keeping the reducer deterministic and replayable. ([#pure-downloader-reducer](https://github.com/lbliii/milo-cli/issues/pure-downloader-reducer))
+- Milo's testing helpers now reject incomplete or overlong saga effect sequences, expose structured MCP repair data through `CallResult.error_data`, and pass `assert_renders(width=...)` into the template context. ([#strict-assert-saga](https://github.com/lbliii/milo-cli/issues/strict-assert-saga))
+- Lazy command import failures now exit nonzero in terminal use and expose the
+  structured `M-CMD-004` repair contract to programmatic and MCP callers. ([#76](https://github.com/lbliii/milo-cli/issues/76))
+- Milo now enforces generated input schemas across CLI, programmatic, and MCP
+  dispatch, rejects unknown arguments with structured repair data, and preserves
+  middleware argument repair before validation. Nullable `anyOf` schemas now
+  reject values that match neither the declared type nor `null`. ([#85](https://github.com/lbliii/milo-cli/issues/85))
+- Hidden commands are now uncallable over MCP, gateway errors retain structured
+  repair data, before-command hook failures are protocol-safe, and free-threaded
+  effect stress tests use deterministic synchronization. ([#86](https://github.com/lbliii/milo-cli/issues/86))
+
+
 ## 0.3.1 — 2026-05-23
 
 ### Changed

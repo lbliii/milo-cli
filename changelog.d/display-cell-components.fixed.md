@@ -1,1 +1,0 @@
-Bundled command, panel, phase, and pipeline components now align and preserve wide Unicode text by display-cell width; the `panel` component also renders its documented border styles instead of failing on dynamic lookup.
