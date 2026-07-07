@@ -234,6 +234,8 @@ uv run milo verify my_cli/app.py
 - Tool annotations: `@cli.command("deploy", annotations={"destructiveHint": True})`.
 - Optional embedded UI: pair `@cli.ui_resource("ui://...")` with
   `ui=MCPAppToolMeta("ui://...")`; keep the command's text/structured fallback.
+  The Milo gateway negotiates child UI support and rewrites resource links per
+  CLI, so identical child URIs stay collision-free.
 - Groups and subcommands: `cli.group("db")` + `@db.command("migrate")`.
 - Middleware: `cli.before_command(hook)` / `cli.after_command(hook)`.
 

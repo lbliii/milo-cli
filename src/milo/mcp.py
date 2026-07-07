@@ -37,6 +37,10 @@ def _client_supports_ui(params: dict[str, Any]) -> bool:
 
     capabilities = params.get("capabilities")
     if not isinstance(capabilities, dict):
+        meta = params.get("_meta")
+        if isinstance(meta, dict):
+            capabilities = meta.get("io.modelcontextprotocol/clientCapabilities")
+    if not isinstance(capabilities, dict):
         return False
     extensions = capabilities.get("extensions")
     if not isinstance(extensions, dict):

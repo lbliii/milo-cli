@@ -33,6 +33,15 @@ def test_mcp_reference_documents_stable_apps_contract() -> None:
     assert "does not render HTML" in text
 
 
+def test_mcp_reference_documents_gateway_ui_contract() -> None:
+    text = (_ROOT / "site/content/docs/build-clis/mcp.md").read_text(encoding="utf-8")
+    assert "Gateway namespacing and lifecycle" in text
+    assert "ui://milo-gateway/weather/ui%3A%2F%2Fweather%2Fdashboard" in text
+    assert "deterministic first-wins" in text
+    assert "disconnect, timeout, parse, or unavailable" in text
+    assert "M-UI-004" in text
+
+
 def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:
     text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
     assert 'Use the `greet` tool to greet "Bob"' in text
