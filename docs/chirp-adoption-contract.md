@@ -259,8 +259,8 @@ Verification Status: machine-verified
 ### Shared release work
 
 - Chirp may add `milo-cli` only after explicit dependency approval. Both
-  projects already require Python 3.14+ and `kida-templates>=0.9`; Milo pins
-  Kida below 0.10, so compatible release ranges must be recorded.
+  projects require Python 3.14+; Milo 0.4.1 records the compatible
+  `kida-templates>=0.11.0,<0.12.0` range needed by the Chirp release lane.
 - A downstream canary must pin released versions rather than silently tracking
   either main branch.
 - Release notes must name argv/help/output changes even when additive.
@@ -272,7 +272,8 @@ Verification Status: machine-verified
 2. **Implement #76 in Milo.** Completed from the five gap reproducers with no
    Chirp imports or conditions; public API, docs, changelog, and benchmarks move
    together.
-3. **Release Milo.** Do not make Chirp depend on an unreleased branch.
+3. **Release Milo.** Milo 0.4.1 is the Kida 0.11 compatibility release; do not
+   make Chirp depend on an unreleased branch.
 4. **Build a Chirp adapter branch.** Register all eleven commands lazily with
    precomputed schemas. Keep `resolve_app`, scaffolds, and domain logic in
    Chirp.
