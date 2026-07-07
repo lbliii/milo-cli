@@ -20,3 +20,9 @@ def test_agent_quickstart_documents_discovery_and_version_repair() -> None:
     assert "mcp_discover" in text
     assert "JSON-RPC `-32004`" in text
     assert "error.data.supported" in text
+
+
+def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:
+    text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
+    assert 'Use the `greet` tool to greet "Bob"' in text
+    assert "`my_cli.greet` tool instead" in text

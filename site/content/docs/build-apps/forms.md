@@ -54,7 +54,8 @@ FieldSpec("token", "API Token", field_type=FieldType.PASSWORD)
 
 :::{tab-item} Select
 
-Cycle through choices with Up/Down arrow keys. Renders as a radio-style list with `[x]` / `[ ]` indicators.
+Cycle through choices with Up/Down arrow keys. The selected choice uses the
+theme's check icon; unselected choices are indented and dimmed.
 
 ```python
 FieldSpec("region", "Region", field_type=FieldType.SELECT,

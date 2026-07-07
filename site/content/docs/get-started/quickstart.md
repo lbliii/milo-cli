@@ -160,7 +160,8 @@ Failures mean the CLI is not safe to register as an MCP tool yet.
 Claude Code and other MCP hosts can launch your CLI over stdin/stdout:
 
 ```bash
-claude mcp add my_cli -- uv run python /absolute/path/to/my_cli/app.py --mcp
+claude mcp add --transport stdio my_cli -- \
+  uv run python /absolute/path/to/my_cli/app.py --mcp
 ```
 
 MCP uses stdout for JSON-RPC. Do not write progress logs with `print()` from

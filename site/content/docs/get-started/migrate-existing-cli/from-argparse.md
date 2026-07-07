@@ -38,13 +38,19 @@ print(deploy(args.environment, args.service, args.version))
 ## After
 
 ```python milo-docs:compile
-from milo import CLI
+from typing import Annotated
+
+from milo import CLI, Positional
 
 cli = CLI(name="deployer", description="Deploy services")
 
 
 @cli.command("deploy", description="Deploy a service")
-def deploy(environment: str, service: str, version: str = "latest") -> dict[str, str]:
+def deploy(
+    environment: Annotated[str, Positional("ENVIRONMENT")],
+    service: Annotated[str, Positional("SERVICE")],
+    version: str = "latest",
+) -> dict[str, str]:
     """Deploy a service.
 
     Args:
@@ -62,8 +68,8 @@ if __name__ == "__main__":
 Run it:
 
 ```bash
-uv run python app.py deploy --environment staging --service api
-uv run python app.py deploy --environment staging --service api --format json
+uv run python app.py deploy staging api
+uv run python app.py deploy staging api --format json
 uv run python app.py --llms-txt
 uv run milo verify app.py
 ```
@@ -73,7 +79,7 @@ uv run milo verify app.py
 | argparse concept | Milo equivalent |
 |---|---|
 | `ArgumentParser(prog=..., description=...)` | `CLI(name=..., description=...)` |
-| `add_argument("name")` | Required typed parameter: `name: str` |
+| `add_argument("name")` | `name: Annotated[str, Positional("NAME")]` |
 | `add_argument("--name", default="x")` | Defaulted parameter: `name: str = "x"` |
 | `type=int` | Annotation: `count: int` |
 | `choices=[...]` | `Literal[...]` or `Enum` |
@@ -82,8 +88,11 @@ uv run milo verify app.py
 
 ## What To Watch
 
-- Positional arguments become named CLI options by default in Milo command
-  handlers. That makes MCP calls and repair loops clearer.
+- Parameters become named CLI options by default. Use `Positional(...)` to
+  preserve established argv; MCP and programmatic callers still use the Python
+  parameter name.
+- Use `Option(aliases=("-x",))` to preserve existing option spellings and
+  `surfaces=("cli",)` for long-running commands that should not be MCP tools.
 - `print()` output is process output. For agent-facing commands, prefer
   structured returns and `Context` output helpers.
 - Parser errors become structured Milo/MCP diagnostics when the command is

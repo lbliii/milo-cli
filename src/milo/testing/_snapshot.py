@@ -36,7 +36,7 @@ def assert_renders(
 
     tmpl = env.get_template(template) if isinstance(template, str) else template
 
-    rendered = tmpl.render(state=state)
+    rendered = tmpl.render(state=state, width=width)
 
     if not color:
         rendered = strip_ansi(rendered)
@@ -84,13 +84,30 @@ def assert_saga(
     saga: Any,
     steps: list[tuple[Any, Any]],
 ) -> None:
-    """Step through saga, assert each yielded effect matches."""
-    effect = next(saga)
-    for expected_effect, send_value in steps:
+    """Step through a saga and assert its complete effect sequence."""
+    try:
+        effect = next(saga)
+    except StopIteration:
+        if steps:
+            raise AssertionError(
+                f"Saga stopped before step 1; expected effect: {steps[0][0]}"
+            ) from None
+        return
+
+    if not steps:
+        raise AssertionError(f"Saga yielded unexpected effect: {effect}")
+
+    for index, (expected_effect, send_value) in enumerate(steps):
         assert effect == expected_effect, (
             f"Effect mismatch:\n  expected: {expected_effect}\n  actual: {effect}"
         )
         try:
             effect = saga.send(send_value)
         except StopIteration:
-            return
+            if index == len(steps) - 1:
+                return
+            raise AssertionError(
+                f"Saga stopped after step {index + 1}; expected effect: {steps[index + 1][0]}"
+            ) from None
+
+    raise AssertionError(f"Saga yielded unexpected extra effect: {effect}")

@@ -38,7 +38,7 @@ def generate_llms_txt(cli: CLI) -> str:
     untagged: list[CommandDef | LazyCommandDef] = []
 
     for cmd in cli.commands.values():
-        if cmd.hidden:
+        if cmd.hidden or "llms" not in cmd.surfaces:
             continue
         if cmd.tags:
             for tag in cmd.tags:
@@ -108,7 +108,7 @@ def _format_group(group: Group, lines: list[str], depth: int) -> None:
     lines.append("")
 
     for cmd in group.commands.values():
-        if cmd.hidden:
+        if cmd.hidden or "llms" not in cmd.surfaces:
             continue
         lines.append(_format_command(cmd))
     if group.commands:
@@ -150,7 +150,11 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
     if props:
         params = []
         for name, schema in props.items():
-            flag = f"--{name.replace('_', '-')}"
+            presentation = schema.get("x-milo-cli", {})
+            positional = presentation.get("kind") == "positional"
+            flag = (
+                presentation.get("metavar", name) if positional else f"--{name.replace('_', '-')}"
+            )
             param_type = schema.get("type", "string")
             if name in required:
                 params.append(f"`{flag}` ({param_type}, **required**)")
@@ -167,7 +171,15 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
     if examples:
         parts.append("\n  Examples:")
         for ex in examples:
-            args_str = " ".join(f"--{k.replace('_', '-')} {v}" for k, v in ex.items())
+            args = []
+            for key, value in ex.items():
+                schema = props.get(key, {})
+                presentation = schema.get("x-milo-cli", {})
+                if presentation.get("kind") == "positional":
+                    args.append(str(value))
+                else:
+                    args.append(f"--{key.replace('_', '-')} {value}")
+            args_str = " ".join(args)
             parts.append(f"\n    `{cmd.name} {args_str}`")
 
     return "".join(parts)
@@ -175,7 +187,11 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
 
 def _detect_workflows(cli: CLI) -> list[str]:
     """Heuristically detect command workflows via output→input parameter overlap."""
-    commands = [(name, cmd) for name, cmd in cli.walk_commands() if not cmd.hidden]
+    commands = [
+        (name, cmd)
+        for name, cmd in cli.walk_commands()
+        if not cmd.hidden and "llms" in cmd.surfaces
+    ]
     # Pre-compute property sets once — O(N) instead of O(N²)
     prop_sets = {name: set(cmd.schema.get("properties", {}).keys()) for name, cmd in commands}
     workflows: list[str] = []

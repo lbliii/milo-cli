@@ -103,6 +103,31 @@ write_output(data, fmt="table")
 
 This is what the CLI dispatcher calls after each command handler returns.
 
+## Terminal-only renderers
+
+Keep handlers structured for programmatic and MCP callers while preserving a
+purpose-built human report with `terminal_renderer`:
+
+```python milo-docs:compile
+from milo import CLI, Context
+
+cli = CLI(name="audit")
+
+
+def render_summary(result: dict[str, int], ctx: Context) -> str:
+    return f"Found {result['findings']} finding(s)"
+
+
+@cli.command("check", terminal_renderer=render_summary)
+def check() -> dict[str, int]:
+    return {"findings": 3}
+```
+
+The renderer receives `(result, context)` and runs only for plain output sent
+to the terminal. `--format json`, `--format table`, `--output-file`, `call()`,
+`call_raw()`, and MCP retain the original structured result. Do not `print()`
+inside reusable handlers or renderers; MCP reserves stdout for JSON-RPC.
+
 ## Advanced terminal reports
 
 For dense diagnostic output, study

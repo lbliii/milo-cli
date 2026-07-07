@@ -27,6 +27,7 @@ class CallResult:
     text: str
     is_error: bool
     structured: Any
+    error_data: dict[str, Any] | None = None
 
 
 class MCPClient:
@@ -64,6 +65,7 @@ class MCPClient:
             text=text,
             is_error=raw.get("isError", False),
             structured=raw.get("structuredContent"),
+            error_data=raw.get("errorData"),
         )
 
     def list_resources(self) -> list[dict[str, Any]]:

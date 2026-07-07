@@ -8,12 +8,13 @@ import inspect
 import io
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from milo._command_defs import (
     CommandDef,
+    CommandSurface,
     GlobalOption,
     InvokeResult,
     LazyCommandDef,
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CLI",
     "CommandDef",
+    "CommandSurface",
     "GlobalOption",
     "InvokeResult",
     "LazyCommandDef",
@@ -98,6 +100,7 @@ class _MiloArgumentParser(argparse.ArgumentParser):
     """ArgumentParser subclass that provides did-you-mean suggestions."""
 
     _cli_ref: CLI | None = None
+    _milo_version_report: Callable[[], str] = lambda: ""
 
     def error(self, message: str) -> NoReturn:  # type: ignore[override]
         """Override to add did-you-mean for invalid subcommand choices."""
@@ -117,6 +120,25 @@ class _MiloArgumentParser(argparse.ArgumentParser):
                     )
                     sys.exit(2)
         super().error(message)
+
+
+class _VersionReportAction(argparse.Action):
+    """Render the configured version report only when its flag is selected."""
+
+    def __init__(self, option_strings: list[str], dest: str, **kwargs: Any) -> None:
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        del namespace, values, option_string
+        report = cast("_MiloArgumentParser", parser)._milo_version_report()
+        parser._print_message(f"{report.rstrip()}\n", sys.stdout)
+        parser.exit()
 
 
 class CLI:
@@ -156,10 +178,18 @@ class CLI:
         name: str = "",
         description: str = "",
         version: str = "",
+        version_flags: tuple[str, ...] | list[str] = ("--version",),
+        version_report: Callable[[], str] | None = None,
     ) -> None:
         self.name = name or "app"
         self.description = description
         self.version = version
+        self.version_flags = tuple(version_flags)
+        self.version_report = version_report
+        if (version or version_report) and not self.version_flags:
+            raise ValueError("version_flags cannot be empty when version reporting is enabled")
+        if any(not flag.startswith("-") for flag in self.version_flags):
+            raise ValueError("version_flags entries must start with '-'")
         self._commands: dict[str, CommandDef | LazyCommandDef] = {}
         self._alias_map: dict[str, str] = {}
         self._groups: dict[str, Group] = {}
@@ -254,10 +284,12 @@ class CLI:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
+        terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> Callable:
         """Register a function as a CLI command.
 
@@ -272,6 +304,8 @@ class CLI:
                 idempotentHint, openWorldHint).
             display_result: If False, suppress plain-format output while still
                 returning data for ``--format json`` or ``--output-file``.
+            surfaces: Discovery and invocation surfaces where the command is visible.
+            terminal_renderer: Render structured results for plain terminal output only.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -291,10 +325,12 @@ class CLI:
                 aliases=tuple(aliases),
                 tags=tuple(tags),
                 hidden=hidden,
+                surfaces=tuple(surfaces),
                 examples=tuple(examples),
                 confirm=confirm,
                 annotations=annotations,
                 display_result=display_result,
+                terminal_renderer=terminal_renderer,
             )
             self._commands[name] = cmd
             for alias in aliases:
@@ -315,10 +351,12 @@ class CLI:
         aliases: tuple[str, ...] | list[str] = (),
         tags: tuple[str, ...] | list[str] = (),
         hidden: bool = False,
+        surfaces: tuple[CommandSurface, ...] | list[CommandSurface] = ("cli", "mcp", "llms"),
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
+        terminal_renderer: Callable[[Any, Context], str] | None = None,
     ) -> LazyCommandDef:
         """Register a lazy-loaded command.
 
@@ -337,10 +375,12 @@ class CLI:
             aliases=aliases,
             tags=tags,
             hidden=hidden,
+            surfaces=surfaces,
             examples=examples,
             confirm=confirm,
             annotations=annotations,
             display_result=display_result,
+            terminal_renderer=terminal_renderer,
         )
         self._commands[name] = cmd
         for alias in aliases:
@@ -608,10 +648,10 @@ class CLI:
             formatter_class=HelpRenderer,
         )
         parser._cli_ref = self
-        if self.version:
-            parser.add_argument(
-                "--version", action="version", version=f"{self.name} {self.version}"
-            )
+        if self.version or self.version_report:
+            reporter = self.version_report or (lambda: f"{self.name} {self.version}")
+            parser._milo_version_report = reporter
+            parser.add_argument(*self.version_flags, action=_VersionReportAction)
         parser.add_argument(
             "--llms-txt",
             action="store_true",
@@ -714,7 +754,7 @@ class CLI:
     ) -> None:
         """Add command parsers to a subparsers action."""
         for cmd in commands.values():
-            if cmd.hidden:
+            if cmd.hidden or "cli" not in cmd.surfaces:
                 continue
             fmt_class = (
                 help_formatter_with_examples(tuple(cmd.examples)) if cmd.examples else HelpRenderer
@@ -787,10 +827,16 @@ class CLI:
         for param_name, param_schema in props.items():
             param = sig.parameters.get(param_name) if sig else None
             kwargs: dict[str, Any] = {}
+            presentation = param_schema.get("x-milo-cli", {})
+            is_positional = presentation.get("kind") == "positional"
 
             # Determine type
             json_type = param_schema.get("type", "string")
             if json_type == "boolean":
+                if is_positional:
+                    raise ValueError(
+                        f"Boolean parameter {param_name!r} cannot be a positional CLI argument"
+                    )
                 is_required = param_name in required_set
                 if param and param.default is not inspect.Parameter.empty:
                     default = param.default
@@ -817,7 +863,7 @@ class CLI:
             elif json_type == "number":
                 kwargs["type"] = float
             elif json_type == "array":
-                kwargs["nargs"] = "*"
+                kwargs["nargs"] = "+" if param_schema.get("minItems", 0) >= 1 else "*"
                 item_type = param_schema.get("items", {}).get("type", "string")
                 if item_type == "integer":
                     kwargs["type"] = int
@@ -837,16 +883,27 @@ class CLI:
                 kwargs["default"] = param_schema["default"]
 
             # Required vs optional
-            if param_name in required_set and json_type != "boolean":
+            if param_name in required_set and json_type != "boolean" and not is_positional:
                 kwargs["required"] = True
+
+            if is_positional and param_name not in required_set and json_type != "array":
+                kwargs["nargs"] = "?"
 
             # Help text from schema description (extracted from docstring)
             desc = param_schema.get("description", "")
             if desc:
                 kwargs["help"] = desc
 
-            flag = f"--{param_name.replace('_', '-')}"
-            parser.add_argument(flag, dest=param_name, **kwargs)
+            metavar = presentation.get("metavar")
+            if metavar:
+                kwargs["metavar"] = metavar
+
+            if is_positional:
+                parser.add_argument(param_name, **kwargs)
+            else:
+                flag = f"--{param_name.replace('_', '-')}"
+                aliases = presentation.get("aliases", ())
+                parser.add_argument(flag, *aliases, dest=param_name, **kwargs)
 
     def run(self, argv: list[str] | None = None) -> Any:
         """Parse args and dispatch to the appropriate command."""
@@ -880,7 +937,14 @@ class CLI:
         suppress = not execution.command.display_result and not ctx.output_file
         if not suppress:
             force = getattr(args, "force", False)
-            self._write_command_output(result, execution.fmt, ctx.output_file, force=force)
+            display = result
+            if (
+                execution.command.terminal_renderer is not None
+                and execution.fmt == "plain"
+                and not ctx.output_file
+            ):
+                display = execution.command.terminal_renderer(result, ctx)
+            self._write_command_output(display, execution.fmt, ctx.output_file, force=force)
 
         return result
 
@@ -989,11 +1053,10 @@ class CLI:
         try:
             cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
         except LazyImportError as exc:
-            sys.stderr.write(f"error: {exc}\n")
-            sys.stderr.write(
-                f"  hint: Check that {exc.import_path!r} is installed and importable.\n"
-            )
-            return None
+            from milo._errors import format_error
+
+            sys.stderr.write(f"{format_error(self._lazy_import_error(exc))}\n")
+            sys.exit(1)
         confirm_msg = getattr(found, "confirm", "") or getattr(cmd, "confirm", "")
         return CommandExecution(found=found, command=cmd, fmt=result.fmt, confirm_msg=confirm_msg)
 
@@ -1021,7 +1084,7 @@ class CLI:
     ) -> tuple[CommandDef | LazyCommandDef, CommandDef]:
         """Resolve a command name to the registered definition and eager command.
 
-        Raises :class:`LazyImportError` if a lazy command fails to import.
+        Raises a structured :class:`MiloError` if a lazy command fails to import.
         """
         found = self.get_command(command_name)
         if not found:
@@ -1030,17 +1093,46 @@ class CLI:
             if suggestion:
                 msg += f". Did you mean {suggestion!r}?"
             raise ValueError(msg)
-        cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        try:
+            cmd = found.resolve() if isinstance(found, LazyCommandDef) else found
+        except LazyImportError as exc:
+            raise self._lazy_import_error(exc) from exc
         return found, cmd
 
-    def _filter_call_kwargs(self, command: CommandDef, kwargs: dict[str, Any]) -> dict[str, Any]:
-        """Filter programmatic kwargs to handler parameters, excluding context injection."""
+    @staticmethod
+    def _lazy_import_error(exc: LazyImportError):
+        """Convert an import implementation detail into Milo's public error contract."""
+        from milo._errors import ErrorCode, MiloError
+
+        return MiloError(
+            ErrorCode.CMD_IMPORT,
+            f"Command {exc.command_name!r} failed to import from {exc.import_path!r}: "
+            f"{type(exc.cause).__name__}: {exc.cause}",
+            context={
+                "reason": "lazy_import_failed",
+                "command": exc.command_name,
+                "importPath": exc.import_path,
+            },
+            suggestion=f"Check that {exc.import_path!r} is installed and importable.",
+        )
+
+    def _validate_command_kwargs(
+        self, command: CommandDef, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Validate user arguments and preserve injected Context parameters."""
         sig = inspect.signature(command.handler)
-        return {
+        context_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k in sig.parameters and not _is_context_param(sig.parameters[k])
+            if k in sig.parameters and (k == "ctx" or _is_context_param(sig.parameters[k]))
         }
+        user_kwargs = {k: v for k, v in kwargs.items() if k not in context_kwargs}
+
+        from milo.schema import validate_arguments
+
+        validated = validate_arguments(command.schema, user_kwargs)
+        validated.update(context_kwargs)
+        return validated
 
     def _build_call_kwargs(
         self,
@@ -1050,11 +1142,11 @@ class CLI:
     ) -> dict[str, Any]:
         """Build handler kwargs for programmatic/MCP calls, injecting context."""
         sig = inspect.signature(command.handler)
-        filtered = self._filter_call_kwargs(command, kwargs)
+        call_kwargs = dict(kwargs)
         for param_name, param in sig.parameters.items():
             if param_name == "ctx" or _is_context_param(param):
-                filtered[param_name] = ctx
-        return filtered
+                call_kwargs[param_name] = ctx
+        return call_kwargs
 
     def _new_call_context(self) -> Context:
         """Create a default context for programmatic command calls."""
@@ -1076,9 +1168,14 @@ class CLI:
         from milo.context import set_context
 
         set_context(ctx)
-        self._run_before_command_hooks(ctx, command.name, kwargs)
 
         try:
+            self._run_before_command_hooks(ctx, command.name, kwargs)
+
+            def invoke_handler(arguments: dict[str, Any]) -> Any:
+                validated = self._validate_command_kwargs(command, arguments)
+                return command.handler(**validated)
+
             if self._middleware:
                 from milo.middleware import MCPCall
 
@@ -1087,8 +1184,8 @@ class CLI:
                     name=call_name or command.name,
                     arguments=kwargs,
                 )
-                return self._middleware.execute(ctx, call, lambda c: command.handler(**c.arguments))
-            return command.handler(**kwargs)
+                return self._middleware.execute(ctx, call, lambda c: invoke_handler(c.arguments))
+            return invoke_handler(kwargs)
         except SystemExit:
             raise
         except KeyboardInterrupt:
@@ -1121,8 +1218,14 @@ class CLI:
             except SystemExit:
                 raise
             except Exception as exc:
-                ctx.error(f"before_command hook failed: {type(exc).__name__}: {exc}")
-                sys.exit(1)
+                from milo._errors import ErrorCode, MiloError
+
+                raise MiloError(
+                    ErrorCode.CMD_HOOK,
+                    f"before_command hook failed: {type(exc).__name__}: {exc}",
+                    context={"reason": "before_command_hook_failed"},
+                    suggestion="Fix or remove the failing before_command hook.",
+                ) from exc
 
     def _run_after_command_hooks(self, ctx: Context, command_name: str, result: Any) -> None:
         """Execute after-command hooks."""
@@ -1198,7 +1301,7 @@ class CLI:
             [
                 {"name": cmd.name, "help": getattr(cmd, "description", "")}
                 for cmd in self._commands.values()
-                if not getattr(cmd, "hidden", False)
+                if not getattr(cmd, "hidden", False) and "cli" in cmd.surfaces
             ]
             + [
                 {"name": g.name, "help": g.description}
@@ -1293,6 +1396,9 @@ class CLI:
 
             cli.call("greet", name="Alice")
             cli.call("site.build", output="_site")
+
+        Arguments are validated and string inputs are coerced against the
+        command's generated schema before hooks or handlers run.
         """
         _found, cmd = self._get_resolved_command(command_name)
         ctx = self._new_call_context()
@@ -1306,7 +1412,8 @@ class CLI:
 
         Like :meth:`call`, but returns the raw result — if the handler
         returns a generator, it is *not* consumed.  The MCP server uses
-        this to stream ``Progress`` yields as notifications.
+        this to stream ``Progress`` yields as notifications. Arguments use
+        the same schema validation and coercion as :meth:`call`.
         """
         _found, cmd = self._get_resolved_command(command_name)
         ctx = self._new_call_context()

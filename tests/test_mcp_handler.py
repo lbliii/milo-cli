@@ -89,6 +89,16 @@ class TestListTools:
         assert "fail" in names
         assert "hidden-cmd" not in names
 
+    def test_hidden_group_commands_are_not_listed(self) -> None:
+        cli = CLI(name="testapp")
+        internal = cli.group("internal", hidden=True)
+
+        @internal.command("secret")
+        def secret() -> str:
+            return "secret"
+
+        assert _list_tools(cli) == []
+
     def test_tool_has_input_schema(self) -> None:
         cli = _make_cli()
         tools = _list_tools(cli)
@@ -187,6 +197,53 @@ class TestCallTool:
         cli = _make_cli()
         result = _call_tool(cli, {"name": "nonexistent", "arguments": {}})
         assert result["isError"] is True
+        assert result["errorData"]["reason"] == "unknown_tool"
+
+    def test_hidden_tool_is_rejected_without_calling_handler(self) -> None:
+        cli = CLI(name="testapp")
+        called = False
+
+        @cli.command("secret", hidden=True)
+        def secret() -> str:
+            nonlocal called
+            called = True
+            return "secret"
+
+        assert _list_tools(cli) == []
+        result = _call_tool(cli, {"name": "secret", "arguments": {}})
+        assert result["isError"] is True
+        assert result["errorData"]["errorCode"] == "M-CMD-001"
+        assert result["errorData"]["reason"] == "hidden_command"
+        assert called is False
+
+    def test_hidden_group_tool_is_rejected_without_calling_handler(self) -> None:
+        cli = CLI(name="testapp")
+        internal = cli.group("internal", hidden=True)
+        called = False
+
+        @internal.command("secret")
+        def secret() -> str:
+            nonlocal called
+            called = True
+            return "secret"
+
+        result = _call_tool(cli, {"name": "internal.secret", "arguments": {}})
+        assert result["isError"] is True
+        assert result["errorData"]["reason"] == "hidden_command"
+        assert called is False
+
+    def test_hidden_lazy_tool_is_rejected_without_importing(self) -> None:
+        cli = CLI(name="testapp")
+        cli.lazy_command(
+            "secret",
+            "package_that_does_not_exist:handler",
+            hidden=True,
+        )
+
+        result = _call_tool(cli, {"name": "secret", "arguments": {}})
+        assert result["isError"] is True
+        assert result["errorData"]["reason"] == "hidden_command"
+        assert "schema" not in result["errorData"]
 
     def test_structured_content_for_dict_result(self) -> None:
         cli = _make_cli()

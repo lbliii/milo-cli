@@ -52,6 +52,11 @@ update docs only if hidden MCP semantics change.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. MCP now rejects hidden commands and
+commands beneath hidden groups before lazy resolution or handler execution,
+with `M-CMD-001` repair data. Gateway routing remains derived solely from
+discovery and now returns the same structured identity for unroutable names.
+
 Steward: Milo Core
 Area: Shared dispatch argument semantics
 Severity: P2
@@ -78,6 +83,11 @@ docs impact unless public behavior is intentionally retained.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. `invoke`, `call`, `call_raw`, and MCP all
+reject unknown arguments. Programmatic paths raise `InputError`; MCP exposes
+`M-INP-005`, `argument`, `reason`, `constraint`, `suggestion`, and schema;
+argv parsing retains argparse's nonzero unknown-option diagnostic.
+
 Steward: Milo Core
 Area: Protocol error boundary for before-command hooks
 Severity: P1
@@ -103,6 +113,11 @@ Collateral: none unless hook error semantics are documented.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. Before-command hook failures now raise
+protocol-safe `M-CMD-003` errors for programmatic and MCP dispatch instead of
+escaping as `SystemExit`; terminal dispatch still reports the error and exits
+nonzero. Focused tests cover `invoke`, `call`, `call_raw`, and `tools/call`.
+
 Steward: Milo Core
 Area: Lazy public API manifest
 Severity: P3
@@ -123,6 +138,11 @@ Required Proof: Add an exhaustive test that the lazy public map and
 Collateral: changelog/docs only if treated as a public API correction.
 Confidence: medium
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06 with maintainer approval. `SagaContext` and
+`EffectResult` are now present in `__all__`; the lazy import manifest is a
+module-level data contract, and an exhaustive test requires it to equal
+`__all__`. The newly public `validate_arguments` follows the same lazy path.
 
 ### Tests
 
@@ -148,6 +168,13 @@ Collateral: no docs impact unless documenting stricter helper behavior.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. `assert_saga()` now fails when a saga
+stops before all expected steps are consumed and when it yields an
+unexpected extra effect. Proof:
+`.venv/bin/pytest tests/test_testing.py -q` (`33 passed`) and
+`uv run ruff check src/milo/testing/_snapshot.py tests/test_testing.py`
+(`All checks passed`).
+
 Steward: Tests
 Area: `tests/test_effects_stress.py` free-threading stress synchronization
 Severity: P2
@@ -166,6 +193,14 @@ Required Proof: Run affected stress tests under `PYTHON_GIL=0`.
 Collateral: none; test-only stability issue.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. Free-threading stress tests now coordinate
+readiness, cancellation, handler completion, worker saturation, and teardown
+through observable waiter registration and events. The launch-blocking
+`test_stress_take_latest_contention` flake from issue #86 also proves the
+final payload exactly across 25 consecutive runs. The sole remaining 2 ms
+delay paces the contention workload itself; it is not used to infer
+readiness or completion.
 
 Steward: Tests
 Area: `src/milo/testing/_mcp.py` structured error assertions
@@ -188,6 +223,10 @@ Collateral: update testing docs if they show MCPClient error assertions.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. `CallResult.error_data` now exposes the
+MCP response's structured repair payload, with a missing-argument
+regression asserting both `argument` and `reason`.
+
 Steward: Tests
 Area: `src/milo/testing/_snapshot.py` render helper API
 Severity: P3
@@ -207,6 +246,10 @@ retained, or update tests to confirm the simpler signature if removed.
 Collateral: check README and `docs/testing.md` only if documented there.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. `assert_renders(width=...)` now passes
+the requested width into the template render context, with a focused test
+proving custom widths are observable.
 
 ### Agent Docs
 
@@ -233,6 +276,11 @@ Collateral: `docs/agent-quickstart.md`; check scaffold README wording.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. Direct registration now instructs the
+reader to call `greet`, while the gateway alternative explicitly uses
+`my_cli.greet`. `tests/test_mcp_compat_docs.py` locks both names to their
+respective setup paths.
+
 Steward: Agent Docs
 Area: scaffold README deep links
 Severity: P2
@@ -249,6 +297,10 @@ URLs or paths present in the generated project.
 Collateral: scaffold README; possibly `docs/agent-quickstart.md`.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. Generated READMEs now link to the public
+site or an explicit GitHub source page, and `tests/test_scaffold.py`
+rejects repo-relative `docs/` and `site/` links in the More section.
 
 Steward: Agent Docs
 Area: snippet verification coverage
@@ -270,6 +322,11 @@ Collateral: `docs/agent-quickstart.md`, `docs/testing.md`, and scaffold
 README if made checkable.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. Python fences in both agent guides are
+compiled, environment-dependent shell fences carry explicit skip reasons,
+and `tests/test_docs_snippets.py` rejects future untagged Python or shell
+fences in either guide.
 
 ### Templates And Default UX
 
@@ -294,6 +351,16 @@ correction`.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. `command_row`, `header_box`, `panel`,
+`phase_detail`, `pipeline_detail`, and `pipeline_progress` now size and pad
+dynamic text with display-cell helpers. Focused render tests cover CJK and
+ANSI-aware column/border alignment. The proof also exposed and fixed
+`panel()`'s invalid dynamic `BoxSet` lookup and title-fill precedence, with
+all five supported border styles exercised. No benchmark impact: panel
+width scanning remains linear in rendered content and other changes replace
+code-point arithmetic with existing cell-width filters. No docs impact:
+this restores the already documented fixed-width rendering contract.
+
 ### Site And Reference Docs
 
 Steward: Site And Reference Docs
@@ -315,6 +382,12 @@ Collateral: Release notes and changelog; no source behavior change.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Disproved on 2026-07-06. The cited Kida 0.7 text is scoped to
+the historical 0.3.0 release. The current 0.3.1 release page,
+`CHANGELOG.md` 0.3.1 section, `pyproject.toml`, and `uv.lock` all agree on
+`kida-templates>=0.9.0,<0.10.0`; changing the 0.3.0 record would make the
+release history inaccurate.
+
 Steward: Site And Reference Docs
 Area: Changelog / documentation information architecture
 Severity: P2
@@ -332,6 +405,10 @@ Required Proof: Confirm `site/content/docs/usage/live.md` is absent,
 Collateral: Changelog/release surface only.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Disproved on 2026-07-06. `CHANGELOG.md` already points to
+`docs/build-apps/live`, the current site page, and contains no
+`usage/live.md` reference. The retired `usage/` section remains absent.
 
 Steward: Site And Reference Docs
 Area: Reference docs / platform paths
@@ -351,6 +428,9 @@ Collateral: MCP docs and command/version-check docs.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. Version-cache and MCP-registry docs now
+name Milo's platform data directory with both Unix and Windows paths.
+
 Steward: Site And Reference Docs
 Area: Docs snippets / checkability
 Severity: P3
@@ -369,6 +449,10 @@ Collateral: Site command docs and snippet-check coverage if stronger
 directive is added.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. The version-check snippet imports `sys`
+before using `sys.stderr`; the snippet remains under the compile gate and
+a focused content assertion preserves the dependency.
 
 ### Examples
 
@@ -391,6 +475,12 @@ coverage; no template collateral.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. The reducer now derives elapsed time
+deterministically from `@@TICK` actions using the same interval configured
+on `App`; no wall-clock reads remain in reducer paths. Focused tests cover
+tick progression and completion. No concurrency impact: example state is
+immutable and the change adds no shared mutable state.
+
 Steward: Examples
 Area: README examples index API names
 Severity: P3
@@ -408,6 +498,9 @@ Key API text, or record manual audit.
 Collateral: `README.md`; optionally taskman docstrings.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. The devtool and taskman rows now name
+`before_command`/`after_command`, `@cli.command`, and `@cli.resource`.
 
 Steward: Examples
 Area: greet test template copy path
@@ -427,6 +520,9 @@ Collateral: `examples/greet/README.md`; possibly agent docs/testing docs.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. The example, agent quickstart, and
+testing guide all preserve the destination `tests/` directory.
+
 Steward: Examples
 Area: README index drift gate
 Severity: P3
@@ -443,6 +539,9 @@ Collateral: `tests/test_readme_example_index.py`; `README.md` once stale
 rows are corrected.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. The README index test now verifies the
+current hook and decorator names in the affected structured rows.
 
 Steward: Templates And Default UX
 Area: Help rendering docs parity
@@ -463,6 +562,10 @@ behavior changes.
 Confidence: high
 Verification Status: machine-verified
 
+Resolution: Fixed on 2026-07-06. The help reference now marks
+`state.epilog` and `state.usage` as reserved and empty by default, with a
+content assertion preventing aspirational drift.
+
 Steward: Templates And Default UX
 Area: Form/select template docs parity
 Severity: P3
@@ -481,3 +584,212 @@ Collateral: `site/content/docs/build-apps/forms.md` and
 visual contract changes.
 Confidence: high
 Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-06. Form and template docs now describe the
+theme check icon and dimmed alternatives rendered by the bundled Kida
+templates.
+
+## Steward Notes — Dispatch Trust Hardening
+
+- Consulted stewards: Milo Core, Tests, Agent Docs, Site And Reference
+  Docs, Benchmarks.
+- Accepted: hidden MCP dispatch, unknown-argument drift, before-hook process
+  exits, runtime constraint enforcement, testing-helper gaps, display-cell
+  layout, docs/example/scaffold drift.
+- Rejected after verification: historical Kida 0.7 release mismatch and the
+  retired `usage/live.md` claim.
+- Deferred: downstream Chirp inventory (#75) requires the external repository;
+  MCP Apps work (#79–#82) remains sequenced behind its protocol epic.
+- Concurrency impact: no shared mutable runtime state or lock ordering changed.
+  Validation operates on per-call dictionaries; gateway routing remains a
+  read-only discovery map. Free-threading stress synchronization was made
+  event-driven and verified under `PYTHON_GIL=0`.
+- Performance: representative constrained validation measured a 2.666 µs
+  median on local Python 3.14t with `PYTHON_GIL=0`. This is evidence of the
+  workload cost, not a before/after speed claim.
+
+### Parity Matrix
+
+| Surface | Schema types/constraints | Unknown args | Context | Hidden tools | Hook failure |
+| --- | --- | --- | --- | --- | --- |
+| CLI `invoke` | enforced before handler | argparse rejects | injected, not public | absent from parser | stderr + nonzero exit |
+| `CLI.call` | enforced; strings coerced | `InputError` | injected | programmatic policy unchanged | raises `M-CMD-003` |
+| `CLI.call_raw` | enforced; strings coerced | `InputError` | injected | programmatic policy unchanged | raises `M-CMD-003` |
+| MCP `tools/call` | enforced; strings coerced | structured `M-INP-005` | omitted/injected | structured `M-CMD-001` | structured `M-CMD-003` |
+| Gateway `tools/call` | child contract preserved | child error preserved | child contract preserved | no route; `M-CMD-001` | child error preserved |
+| `tools/list` / schema | single `function_to_schema()` source | exact properties | omitted | omitted | not applicable |
+
+### Global Sweep Receipts
+
+- Hidden-call claims: `rg -n "hidden=True|hidden commands|tools/call" README.md docs site/content src tests`.
+- Silent argument filtering: `rg -n "_filter_call_kwargs|extra kwargs|unexpected_argument|bogus" src tests docs site/content`.
+- Constraint enforcement: `rg -n "MinLen|exclusiveMinimum|validate_arguments|constraint_violation" src tests docs site/content examples`.
+
+### Final Verification Receipts
+
+- `PYTHON_GIL=0 .venv/bin/pytest -q --tb=short`: 1,569 passed, 1 skipped.
+- `make ci`, twice consecutively: lint and format clean; the same four existing
+  `ty` warnings; 82.07% branch-aware coverage; 1,569 passed, 1 skipped.
+- `PYTHON_GIL=0 .venv/bin/pytest tests/ -n 4`, twice consecutively: 1,569
+  passed, 1 skipped on each xdist run.
+- `make docs-test`: all strict templates compile and 50 tagged snippets pass.
+- `uv run towncrier build --draft`: fragments render under Added and Fixed.
+- `PYTHON_GIL=0 ../.venv/bin/bengal build --environment production` from
+  `site/`: 246 pages built. Bengal continues to report 64 pre-existing broken
+  internal links and an autodoc CLI extraction warning; the build exits zero.
+
+### Backlog Boundary
+
+- #75's Chirp source inventory and Milo-side adoption contract are complete in
+  `docs/chirp-adoption-contract.md`, pinned to Chirp commit `9d2279f`. The
+  maintainer approved all five generic contracts; #76 implementation evidence
+  is recorded below.
+- #79–#82 and #87 introduce public protocol, verifier, Context, and lifecycle
+  contracts and require maintainer confirmation before implementation.
+- #88's README, verifier-first onboarding, comparison guide, launch-post draft,
+  recording runbook, and clean-directory smoke proof are complete. Recording
+  the video and choosing a launch date remain human-owned after #85/#86 land.
+- #70 changes command dispatch, lazy resolution, and public option metadata;
+  it remains a separately approved performance project.
+
+## Steward Notes — Launch Package (#88)
+
+Steward: Scaffold And Verify Onboarding
+Area: Clean-machine `milo new` next steps
+Severity: P1
+Invariant: Generated projects run immediately without hidden setup.
+Evidence: A clean-directory `uvx --python 3.14 --from milo-cli milo new
+wow_cli` succeeded, but the generated next steps used `uv run python` and
+`uv run pytest` even though the scaffold has no project metadata declaring
+Milo or pytest.
+User Impact: A first-time user can create the project successfully and then
+fail on the very next documented command because `milo` is not importable.
+Required Fix: Make generated commands self-contained without adding a runtime
+dependency or changing the scaffold file layout.
+Required Proof: Exercise the scaffold, command, tests, and verifier from a
+fresh directory; keep a regression assertion over generated README and CLI
+next-step commands.
+Collateral: README front door, public quickstart, generated README, Claude MCP
+registration examples, launch runbook, tests, and changelog.
+Confidence: high
+Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-07. Generated next steps and the scaffold README
+now request Python 3.14, `milo-cli`, and pytest explicitly through `uv`. A
+published-package clean-directory smoke proved scaffold, command execution, and
+verification; the exact current launch function passed all seven verifier
+checks from a separate clean directory. Static regressions require the
+self-contained commands in both CLI output and generated README.
+
+### Launch Deliverables
+
+- README: one-paste clean-machine proof appears before the feature inventory,
+  and `milo verify` must pass before Claude registration.
+- Public comparison: `site/content/docs/about/comparisons.md` states when to
+  choose Milo, FastMCP, or Typer and links their official documentation.
+- Launch post: `docs/launch-post.md` argues the one-definition position while
+  naming Milo's limits and alternatives.
+- Video runbook: `docs/launch-demo-script.md` contains a 75-second shot list,
+  exact function, registration commands, privacy review, and acceptance checks.
+- Proof: 56 tagged docs snippets pass; the production Bengal build emits the
+  comparison page; the final `make ci` pass reports 1,583 passed, 1 skipped and
+  82.27% coverage. The same four pre-existing `ty` warnings remain.
+- Manual confirmation needed: record and review the final video, then choose
+  the launch date after the trust-hardening changes are released.
+
+## Steward Notes — Chirp Adoption Contract (#75)
+
+- Consulted stewards: Milo Core, Tests, Agent Docs, and Chirp's public-surface
+  and CLI/scaffold constitutions. Chirp was inspected read-only at public commit
+  `9d2279fc6f30b4b4c61e8bc658adf9296afd1e17`.
+- Accepted mappings: typed options/defaults, hyphenated commands, lazy commands
+  with precomputed schemas, structured direct/MCP results, annotations,
+  `invoke` capture, and llms.txt discovery.
+- Accepted blockers: positional/option presentation metadata, CLI-visible but
+  MCP-hidden commands, lazy import failures exiting zero, custom root version
+  aliases/reporting, and terminal-only structured result rendering.
+- Ownership: Chirp retains app resolution, commands, scaffolds, server,
+  contract, freeze, and database behavior. Milo may add only generic contracts
+  justified by executable reproducers; no Chirp conditionals are permitted.
+- Proof: `PYTHON_GIL=0 .venv/bin/pytest -q
+  tests/test_chirp_adoption_contract.py` (`8 passed`). The complete inventory,
+  parity matrix, dependency/security notes, and migration order live in
+  `docs/chirp-adoption-contract.md`.
+- Concurrency impact: none; this batch adds a read-only inventory and tests.
+- Performance: no speed claim. #76 must benchmark root help, version, parser
+  construction, selected-command parsing, and command-module imports.
+- Resolution: the maintainer approved all five public-contract proposals on
+  2026-07-07; downstream dependency changes still require a released version.
+
+## Steward Notes — Chirp Adoption Contracts (#76)
+
+- Consulted stewards: Milo Core, Schema Truth, MCP And Protocol Correctness,
+  Tests, Agent Docs, Site And Reference Docs, and Benchmarks.
+- Approval: the maintainer approved all five contracts on 2026-07-07.
+- Accepted implementation: `Positional` and `Option` annotation markers emit
+  `x-milo-cli`; `surfaces` controls CLI/MCP/llms visibility; lazy imports fail
+  as `M-CMD-004`; `version_flags` and `version_report` preserve root version
+  behavior lazily; `terminal_renderer` formats only plain terminal output.
+- Rejected scope: no Chirp imports, domain resolution, scaffold migration,
+  server lifecycle, database behavior, or generic output-format alias was
+  added to Milo.
+- Concurrency impact: no shared mutable runtime state or lock ordering changed.
+  Command metadata is immutable; the existing lazy-resolution lock remains the
+  sole synchronization boundary. Renderers and version callbacks execute in
+  the invoking thread.
+- Performance: `benchmarks/test_bench_commands.py` measures representative
+  parser construction with positionals, aliases, surfaces, a lazy version
+  callback, and precomputed lazy schemas. The local Python 3.14.2 free-threading
+  build (`gil_enabled=False`) measured a 581.292 µs median. This is a workload
+  receipt without a before/after baseline or speed claim.
+- Collateral: public exports, schema/dispatch/MCP/llms/help behavior, verifier,
+  site and agent docs, README, changelog, benchmark catalog, and the pinned
+  Chirp adoption contract moved together. No scaffold change: generated
+  projects remain valid and the new presentation policies are opt-in.
+
+### #76 Parity Matrix
+
+| Surface | Presentation | Visibility | Lazy import | Result rendering |
+| --- | --- | --- | --- | --- |
+| CLI / `invoke` | positionals and aliases parsed | requires `"cli"` | stderr + exit 1 | renderer for plain terminal only |
+| `CLI.call` | Python parameter names | always callable | raises `M-CMD-004` | structured value |
+| `CLI.call_raw` | Python parameter names | always callable | raises `M-CMD-004` | structured/raw value |
+| MCP `tools/list` | same schema with ignorable extension | requires `"mcp"` | unresolved no-schema tool skipped | not applicable |
+| MCP `tools/call` | original property names | requires `"mcp"` | structured `errorData` | structured content |
+| llms.txt | positional labels and option names | requires `"llms"` | precomputed schema avoids import | not applicable |
+
+### #76 Proof
+
+- `tests/test_chirp_adoption_contract.py` covers the pinned Chirp-shaped
+  contract, including missing-module and missing-attribute failures.
+- `tests/test_command_contract.py`, `tests/test_schema_v2.py`,
+  `tests/test_lazy.py`, `tests/test_groups.py`, `tests/test_help.py`, and
+  `tests/test_verify.py` cover framework-level edge cases.
+- Final repository-wide lint, type, tests, docs snippets, site build, template
+  checks, and free-threading/xdist receipts are recorded after integration.
+
+## Steward Notes — Runtime Schema Round-Trip Audit
+
+Steward: Milo Core
+Area: JSON Schema `null` enforcement
+Severity: P1
+Invariant: Runtime dispatch must reject a value when every `anyOf` schema branch
+rejects it.
+Evidence: `_coerce_schema_type()` handled string, numeric, boolean, array, and
+object types but had no `null` branch, so `{"type": "null"}` returned any input
+unchanged. A nullable `anyOf` therefore accepted arbitrary values through its
+null branch.
+User Impact: Adapter-provided nullable schemas could allow an invalid value to
+reach a command handler despite the advertised schema.
+Required Fix: Accept only Python `None` for JSON Schema type `null`; preserve
+structured `M-INP-006` type mismatch errors when no union branch matches.
+Required Proof: Cover valid null, valid non-null, and invalid values through a
+nullable `anyOf`, then rerun command/schema/MCP parity tests.
+Collateral: #85 changelog fragment; no docs change because generated Optional
+schemas retain their documented unwrapped representation.
+Confidence: high
+Verification Status: machine-verified
+
+Resolution: Fixed on 2026-07-07. `type: "null"` now rejects every non-None
+value. The focused schema, command-contract, and AI-native lanes pass 204 tests
+under `PYTHON_GIL=0`.

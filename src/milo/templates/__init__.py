@@ -80,6 +80,7 @@ def get_env(
             cell_width,
             divider_line,
             frame_line,
+            max_cell_width,
             open_rule,
             open_rule_divider,
             open_rule_end,
@@ -106,6 +107,7 @@ def get_env(
         env._filters["divider_line"] = divider_line
         env._filters["bottom_rule"] = bottom_rule
         env._filters["frame_line"] = frame_line
+        env._filters["max_cell_width"] = max_cell_width
         env._filters["rail_line"] = rail_line
         env._filters["open_rule"] = open_rule
         env._filters["open_rule_divider"] = open_rule_divider

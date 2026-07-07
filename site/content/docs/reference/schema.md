@@ -94,9 +94,16 @@ class.
 | `Le(n)` | `maximum` |
 | `Pattern(regex)` | `pattern` |
 | `Description(text)` | `description` |
+| `Positional(metavar)` | `x-milo-cli.kind = "positional"` |
+| `Option(aliases=..., metavar=...)` | `x-milo-cli.kind = "option"` |
 
 Docstring parameter descriptions are used when no `Description(...)` marker is
 present. `milo verify` warns when public parameters are undocumented.
+
+`Positional` and `Option` are presentation markers, not a second schema model.
+MCP callers still send the original Python parameter name. The `x-milo-cli`
+extension is also valid in pre-computed lazy schemas and can be ignored by
+generic JSON Schema consumers.
 
 ## Output Schema
 
@@ -123,6 +130,31 @@ schema = function_to_schema(command, strict=True)
 Strict mode raises `TypeError` for unsupported annotations instead of falling
 back to `"string"`. Use it in tests when schema drift would be worse than a hard
 failure.
+
+## Runtime Validation
+
+`function_to_schema()` is also Milo's runtime argument contract. CLI,
+programmatic, and MCP dispatch enforce its required fields, types, enums,
+`Annotated` constraints, array items, and nested object fields before calling
+the handler. The public validator can be used by adapters such as web forms:
+
+```python milo-docs:compile
+from milo import validate_arguments
+
+schema = {
+    "type": "object",
+    "properties": {
+        "count": {"type": "integer"},
+        "enabled": {"type": "boolean"},
+    },
+}
+arguments = validate_arguments(schema, {"count": "2", "enabled": "true"})
+# {"count": 2, "enabled": True}
+```
+
+Validation raises `InputError` with an `M-INP-*` code, argument name,
+constraint, reason, and actionable suggestion. MCP serializes the same fields
+as `errorData` so clients can repair a call without parsing prose.
 
 ## Context Exclusion
 

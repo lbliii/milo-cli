@@ -35,7 +35,7 @@ template = env.get_template("my_screen.kida")
 |----------|-------------|
 | `form.kida` | Full form layout — iterates field specs and renders each field |
 | `field_text.kida` | Text/password input field with cursor |
-| `field_select.kida` | Select field with `[x]` / `[ ]` radio indicators |
+| `field_select.kida` | Select field with a themed check icon and dimmed alternatives |
 | `field_confirm.kida` | Yes/No confirm field |
 | `help.kida` | argparse help output styled with Kida |
 | `progress.kida` | Unicode progress bar (`█` / `░`) |

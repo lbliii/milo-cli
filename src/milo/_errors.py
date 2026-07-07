@@ -11,6 +11,10 @@ class ErrorCode(Enum):
     INP_RAW_MODE = "M-INP-001"
     INP_ESCAPE_PARSE = "M-INP-002"
     INP_READ = "M-INP-003"
+    INP_REQUIRED_ARGUMENT = "M-INP-004"
+    INP_UNEXPECTED_ARGUMENT = "M-INP-005"
+    INP_ARGUMENT_TYPE = "M-INP-006"
+    INP_ARGUMENT_CONSTRAINT = "M-INP-007"
 
     # State errors
     STA_REDUCER = "M-STA-001"
@@ -55,6 +59,8 @@ class ErrorCode(Enum):
     # Command errors
     CMD_NOT_FOUND = "M-CMD-001"
     CMD_AMBIGUOUS = "M-CMD-002"
+    CMD_HOOK = "M-CMD-003"
+    CMD_IMPORT = "M-CMD-004"
 
 
 class MiloError(Exception):

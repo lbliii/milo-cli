@@ -76,7 +76,7 @@
 
 {#- ── Command row: name + aliases + description + tags ─────────────── -#}
 {%- def command_row(name, description="", aliases=[], tags=[]) -%}
-  {{ name | green | bold }}{% if aliases %} {{ ("(" ~ aliases | join(", ") ~ ")") | dim }}{% endif %}{{ " " * (20 - name | length) }}{{ description }}{% if tags %} {{ tag_list(tags) }}{% endif %}
+  {{ name | green | bold }}{% if aliases %} {{ ("(" ~ aliases | join(", ") ~ ")") | dim }}{% endif %}{{ "" | cell_pad([20 - (name | cell_width), 0] | max) }}{{ description }}{% if tags %} {{ tag_list(tags) }}{% endif %}
 {%- enddef -%}
 
 {#- ── Header/banner ────────────────────────────────────────────────── -#}
@@ -138,7 +138,7 @@
 {%- def header_box(name, version="", description="") -%}
 {%- set b = box.round -%}
 {%- set title = name ~ (" " ~ version if version else "") -%}
-{%- set width = [title | length + 2, 40] | max -%}
+{%- set width = [title | cell_width + 2, 40] | max -%}
 {{ b.tl }}{{ b.h * width }}{{ b.tr }}
 {{ b.v }} {{ title | bold | cyan | cell_fit(width - 1) }}{{ b.v }}
 {%- if description %}
@@ -149,18 +149,21 @@
 
 {#- ── Panel: bordered box with optional title ─────────────────────── -#}
 {%- def panel(content, title="", border="round") -%}
-{%- set b = box[border] | default(box.round) -%}
+{%- match border -%}
+{%- case "ascii" -%}{%- set b = box.ascii -%}
+{%- case "double" -%}{%- set b = box.double -%}
+{%- case "heavy" -%}{%- set b = box.heavy -%}
+{%- case "light" -%}{%- set b = box.light -%}
+{%- case _ -%}{%- set b = box.round -%}
+{%- endmatch -%}
 {%- set lines = content.splitlines() -%}
-{%- set max_len = 0 -%}
-{%- for line in lines -%}
-{%- set line_len = line | length -%}
-{%- if line_len > max_len -%}{%- set max_len = line_len -%}{%- endif -%}
-{%- endfor -%}
-{%- set inner_w = [max_len + 2, 20] | max -%}
+{%- set max_len = content | max_cell_width -%}
+{%- set title_w = ((" " ~ title ~ " ") | cell_width) + 1 if title else 0 -%}
+{%- set inner_w = [max_len + 2, title_w, 20] | max -%}
 {%- if title -%}
 {%- set title_str = " " ~ title ~ " " -%}
-{%- set remaining = inner_w - (title_str | length) -%}
-{{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * [remaining, 1] | max }}{{ b.tr }}
+{%- set remaining = inner_w - (title_str | cell_width) - 1 -%}
+{{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * ([remaining, 1] | max) }}{{ b.tr }}
 {%- else -%}
 {{ b.tl }}{{ b.h * inner_w }}{{ b.tr }}
 {%- endif -%}
@@ -200,7 +203,7 @@
 {%- set title = phase.name ~ (" (FAILED)" if phase.status == "failed" else "") -%}
 {%- set title_str = " " ~ title ~ " " -%}
 {%- set inner_w = 50 -%}
-{%- set hdr_fill = [inner_w - (title_str | length) - 1, 0] | max -%}
+{%- set hdr_fill = [inner_w - (title_str | cell_width) - 1, 0] | max -%}
 {{ b.tl }}{{ b.h }}{{ title_str | bold }}{{ b.h * hdr_fill }}{{ b.tr }}
 {%- if phase.logs -%}
 {%- set visible_start = log_scroll -%}
@@ -243,13 +246,13 @@
 {%- match phase.status -%}
 {%- case "completed" -%}
 {%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.check | green }} {% else %}    {{ icons.check | green }} {% endif -%}
-{{ phase.name | bold }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
+{{ phase.name | bold }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
 {% case "running" -%}
 {%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.dot | cyan | bold }} {% else %}    {{ icons.dot | cyan | bold }} {% endif -%}
-{{ phase.name | bold | cyan }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ "..." | dim }}
+{{ phase.name | bold | cyan }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ "..." | dim }}
 {% case "failed" -%}
 {%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.cross | red | bold }} {% else %}    {{ icons.cross | red | bold }} {% endif -%}
-{{ phase.name | bold | red }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ phase.error | dim }}
+{{ phase.name | bold | red }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ phase.error | dim }}
 {% case _ -%}
 {%- if is_selected %}  {{ icons.arrow_r | cyan }} {{ icons.dot | dim }} {% else %}    {{ icons.dot | dim }} {% endif -%}
 {{ phase.name | dim }}
@@ -287,11 +290,11 @@
 {%- for phase in state.phases -%}
 {%- match phase.status -%}
 {%- case "completed" -%}
-  {{ icons.check | green }} {{ phase.name | bold }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
+  {{ icons.check | green }} {{ phase.name | bold }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ format_time(phase.elapsed) | dim }}
 {% case "running" -%}
-  {{ icons.dot | cyan | bold }} {{ phase.name | bold | cyan }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ "..." | dim }}
+  {{ icons.dot | cyan | bold }} {{ phase.name | bold | cyan }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ "..." | dim }}
 {% case "failed" -%}
-  {{ icons.cross | red | bold }} {{ phase.name | bold | red }}{{ " " * ([16 - (phase.name | length), 1] | max) }}{{ phase.error | dim }}
+  {{ icons.cross | red | bold }} {{ phase.name | bold | red }}{{ "" | cell_pad([16 - (phase.name | cell_width), 1] | max) }}{{ phase.error | dim }}
 {% case _ -%}
   {{ icons.dot | dim }} {{ phase.name | dim }}
 {% endmatch -%}
