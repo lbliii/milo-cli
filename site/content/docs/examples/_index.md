@@ -29,6 +29,12 @@ smallest example that matches the job, then run `milo verify` after adapting it.
 :description: Human confirmation, MCP annotations, resources, prompts, and progress
 :::{/card}
 
+:::{card} Interactive MCP App
+:icon: terminal
+:link: https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app
+:description: One typed command with dependency-free interactive HTML, a ui:// resource, gateway-safe tool calls, and structured fallback
+:::{/card}
+
 :::{card} Task Manager
 :icon: check
 :link: https://github.com/lbliii/milo-cli/tree/main/examples/taskman

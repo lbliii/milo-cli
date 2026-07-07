@@ -961,3 +961,68 @@ Collateral: README, agent/testing docs, scaffold guidance, public site,
 towncrier fragment, and Steward Notes.
 Confidence: high
 Verification Status: machine-verified
+
+## Steward Notes — Framework-Neutral Interactive MCP App (#82)
+
+- Consulted stewards: Examples, Milo Core, MCP And Protocol Correctness, Tests,
+  Agent Docs, Site And Reference Docs, Security And Subprocess Boundaries, and
+  Release And Dependency Surface.
+- Accepted implementation: the existing one-file `examples/mcp_app/app.py`
+  remains the smallest copy path and now owns a static HTML form plus a vanilla
+  JSON-RPC 2.0 `postMessage` bridge. It performs `ui/initialize`, sends
+  `ui/notifications/initialized`, consumes tool input/result notifications, and
+  invokes `tools/call` with the direct or gateway-provided tool name.
+- Dependency boundary: no web framework, JavaScript package, CDN, build step,
+  runtime dependency, or Milo core HTML was added. Chirp and other frameworks
+  that already own templates, assets, auth, or mutation semantics remain the
+  HTML owners; Milo supplies typed command/schema/protocol metadata.
+- Security: the view has no external assets or secrets, validates that incoming
+  messages came from `window.parent`, uses `textContent`/input values instead of
+  HTML injection, and leaves iframe sandbox, CSP, permissions, and host approval
+  to the MCP Apps host.
+- Concurrency: Python registration and the immutable HTML constant are
+  startup-local. Browser request IDs and pending promises are iframe-event-loop
+  state; no Python shared mutable state, lock, executor, cancellation, or
+  shutdown behavior changed.
+- Performance: this is a static example and test path, not a Milo runtime hot
+  path. No cache or framework bootstrap was added and no speed claim is made.
+- Collateral: example README, root/examples/site indexes, focused cross-surface
+  tests, docs snippets, changelog, and Steward Notes move together.
+- Verification: `make ci` passed 1,642 tests with one skip and 82.80% branch
+  coverage under `PYTHON_GIL=0`; the same four pre-existing `ty` warnings remain.
+  `make docs-test` passed strict templates and all 63 tagged snippets. Bengal
+  built the site without a new diagnostic; its existing autodoc, internal-link,
+  and analytics diagnostics remain.
+
+### #82 Example Parity Matrix
+
+| Surface | Proof |
+| --- | --- |
+| CLI | `forecast --city ... --format json` returns the typed structured value |
+| schema | `function_to_schema(forecast)` preserves the documented city default |
+| llms.txt | the same command and option/default appear in agent discovery |
+| MCP tool | negotiated `tools/list` links the UI; `tools/call` returns `structuredContent` |
+| resource | negotiated list/read preserves URI, MIME/profile, border metadata, and HTML |
+| browser lifecycle | stable initialize/initialized and tool input/result messages; form calls `tools/call` |
+| gateway | tool/resource URI rewriting, resource read, and namespaced call round-trip |
+| verifier | all three #81 MCP Apps identities pass against the example subprocess |
+| docs/free-threading | tagged README commands and the focused suite run under repository gates |
+
+Steward: Examples
+Area: Dependency-free interactive MCP Apps copy path
+Severity: P2
+Invariant: One typed function must remain the source for CLI, schema, MCP,
+llms.txt, resource, gateway, and verifier behavior while application HTML stays
+outside Milo core.
+Evidence: `examples/mcp_app/app.py`; `examples/mcp_app/README.md`;
+`tests/test_mcp_app_example.py`.
+User Impact: Users can copy one file to see and test the complete interactive
+MCP Apps lifecycle without adopting a web framework or JavaScript toolchain.
+Required Fix: Keep the view dependency-free, host-negotiated, gateway-safe,
+and backed by a useful structured fallback.
+Required Proof: CLI/schema/llms/MCP/resource/gateway/verifier/docs parity under
+`PYTHON_GIL=0`, plus strict docs and site checks.
+Collateral: Root/examples/site indexes, example guidance, changelog, and
+Steward Notes.
+Confidence: high
+Verification Status: machine-verified
