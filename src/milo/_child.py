@@ -12,11 +12,22 @@ from typing import Any
 from milo._jsonrpc import MCP_PROTOCOL_VERSION_META_KEY, MCP_VERSION, UNSUPPORTED_PROTOCOL_VERSION
 
 
+def _gateway_client_capabilities() -> dict[str, Any]:
+    """Capabilities the gateway can faithfully proxy from child servers."""
+    from milo.mcp_apps import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE
+
+    return {
+        "extensions": {
+            MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]},
+        }
+    }
+
+
 def _client_meta(protocol_version: str) -> dict[str, Any]:
     return {
         MCP_PROTOCOL_VERSION_META_KEY: protocol_version,
         "io.modelcontextprotocol/clientInfo": {"name": "milo-gateway", "version": "unknown"},
-        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientCapabilities": _gateway_client_capabilities(),
     }
 
 
@@ -83,7 +94,14 @@ class ChildProcess:
         if self._try_stateless_from_discover(probe):
             return
 
-        response = self._send_request("initialize", {})
+        response = self._send_request(
+            "initialize",
+            {
+                "protocolVersion": MCP_VERSION,
+                "capabilities": _gateway_client_capabilities(),
+                "clientInfo": {"name": "milo-gateway", "version": "unknown"},
+            },
+        )
         result = response.get("result")
         if isinstance(result, dict):
             protocol_version = result.get("protocolVersion")
@@ -247,16 +265,26 @@ class ChildProcess:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 self._graceful_kill()
-                return {"error": {"code": -32603, "message": f"No response from {self.name}"}}
+                return self._transport_error("child_timeout", f"No response from {self.name}")
 
             response_line = self._read_line(timeout=remaining)
+            if response_line is None:
+                return self._transport_error("child_timeout", f"No response from {self.name}")
             if not response_line:
-                return {"error": {"code": -32603, "message": f"No response from {self.name}"}}
+                return self._transport_error(
+                    "child_disconnected", f"Child {self.name} disconnected"
+                )
 
             try:
                 response = json.loads(response_line)
             except json.JSONDecodeError:
-                return {"error": {"code": -32700, "message": "Parse error from child"}}
+                return {
+                    "error": {
+                        "code": -32700,
+                        "message": "Parse error from child",
+                        "data": {"reason": "child_parse_error", "child": self.name},
+                    }
+                }
 
             # Notifications have no id and may be interleaved with streaming tool
             # results. They are intentionally ignored by the gateway transport.
@@ -265,7 +293,16 @@ class ChildProcess:
             if response.get("id") == req_id:
                 return response
 
-    def _read_line(self, *, timeout: float | None = None) -> str:
+    def _transport_error(self, reason: str, message: str) -> dict[str, Any]:
+        return {
+            "error": {
+                "code": -32603,
+                "message": message,
+                "data": {"reason": reason, "child": self.name},
+            }
+        }
+
+    def _read_line(self, *, timeout: float | None = None) -> str | None:
         """Read a line from the child's stdout with timeout.
 
         Uses a background thread so we can enforce a deadline even
@@ -285,5 +322,5 @@ class ChildProcess:
         if reader.is_alive():
             # Timed out — graceful shutdown: SIGTERM → grace → SIGKILL
             self._graceful_kill()
-            return ""
+            return None
         return result[0].strip() if result else ""

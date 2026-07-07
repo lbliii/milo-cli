@@ -836,3 +836,57 @@ Verification Status: machine-verified
 Resolution: Fixed on 2026-07-07. `type: "null"` now rejects every non-None
 value. The focused schema, command-contract, and AI-native lanes pass 204 tests
 under `PYTHON_GIL=0`.
+
+## Steward Notes — MCP Apps Gateway Preservation (#80)
+
+- Consulted stewards: Milo Core, MCP And Protocol Correctness, Tests, Agent
+  Docs, Site And Reference Docs, Benchmarks, Release And Dependency Surface,
+  and Security And Subprocess Boundaries.
+- Accepted contract: the gateway negotiates MCP Apps with each child, rewrites
+  UI resources to
+  `ui://milo-gateway/{encoded-child}/{encoded-original-uri}`, rewrites the
+  matching tool link and read response URI, and preserves MIME, resource
+  metadata, text/blob content, and structured tool results.
+- Compatibility: non-UI tools and resources retain their existing namespacing.
+  Upstream clients without UI negotiation receive the existing tool fallback,
+  with UI metadata and resources omitted. No new public Python name, runtime
+  dependency, registry field, or transport was added.
+- Collision policy: encoded child identity makes cross-child URI collisions
+  impossible. Duplicate tool, resource, or prompt entries within one child use
+  deterministic first-wins discovery and emit a warning. Invalid UI resources
+  are omitted; broken tool links are removed rather than advertised.
+- Lifecycle: unknown, unavailable, disconnected, timed-out, malformed, and
+  transport-failed UI reads return existing `M-UI-002`–`004` structured repair
+  data. Child stdout remains JSON-RPC-only, stderr remains isolated, and the
+  established SIGTERM-to-SIGKILL cleanup path is unchanged.
+- Concurrency and lock order: discovery workers own separate result values and
+  the caller merges them in registry order. Each `ChildProcess` continues to
+  serialize spawn, initialize, request, timeout cleanup, and idle-reaper kill
+  through its single `_lock`; no additional lock or cross-child lock ordering
+  was introduced. `_GatewayHandler` negotiation state is connection-owned and
+  the stdio dispatcher remains serialized. Repeated eight-child collision
+  discovery is covered under the repository's `PYTHON_GIL=0` suite.
+- Performance: `benchmarks/test_bench_gateway.py` includes four-child,
+  80-tool MCP Apps discovery and URI/link rewriting. A local Python 3.14.2
+  free-threading run with the GIL disabled measured a 601 microsecond median;
+  no speed claim is made.
+- Verification: `make ci` passed 1,625 tests with one skip and 82.82% branch
+  coverage under `PYTHON_GIL=0`; strict templates and all 61 tagged docs
+  snippets passed; and Bengal built 166 pages with the repository's existing
+  autodoc, internal-link, and analytics warnings. The same four existing `ty`
+  diagnostics remain unchanged.
+- Collateral: gateway and child transport code, single-/multi-child tests,
+  child lifecycle tests, public MCP and error docs, agent quickstart, README,
+  benchmark catalog, and changelog move together. No scaffold or example
+  change: the #79 example already supplies the child-side contract.
+
+### #80 Gateway Parity Matrix
+
+| Surface | Non-UI host | UI-capable host | Child boundary |
+| --- | --- | --- | --- |
+| `initialize` | core capabilities | UI extension advertised | gateway always negotiates UI |
+| `tools/list` | text/structured tool, no `_meta.ui` | namespaced tool + rewritten link | child metadata preserved |
+| `resources/list` | existing non-UI resources | collision-safe gateway UI URI | original URI retained in route |
+| `resources/read` | UI read rejected with `M-UI-003` | URI/content/metadata round trip | serialized child call under one lock |
+| `tools/call` | existing result | structured result unchanged | original child tool name |
+| child failure | non-UI behavior unchanged | `M-UI-004` repair data | timeout/disconnect/parse reason retained |

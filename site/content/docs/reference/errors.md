@@ -101,6 +101,12 @@ Constructor fields:
 | `M-UI-003` | `UI_UNSUPPORTED` | MCP Apps support was not negotiated for the connection |
 | `M-UI-004` | `UI_RESOURCE_READ` | A UI resource handler failed while producing content |
 
+Gateway UI errors add `resourceUri` and `reason`. Lifecycle failures also add
+`child`, `originalResourceUri`, and the child JSON-RPC code when available.
+Common reasons are `unknown_gateway_ui_resource`, `cli_unavailable`,
+`child_timeout`, `child_disconnected`, `child_parse_error`, and
+`child_transport_error`.
+
 ## Terminal Formatting
 
 `MiloError.format_compact()` keeps terminal output short and actionable:

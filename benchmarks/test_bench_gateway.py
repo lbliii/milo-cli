@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from milo import MCP_APPS_MIME_TYPE
 from milo._mcp_router import dispatch
 from milo.gateway import GatewayState, _discover_all, _GatewayHandler
 
@@ -22,7 +23,7 @@ class MockChildProcess:
     Avoids subprocess overhead so we measure only gateway logic.
     """
 
-    def __init__(self, name: str, num_tools: int = 3) -> None:
+    def __init__(self, name: str, num_tools: int = 3, *, include_ui: bool = False) -> None:
         self.name = name
         self.command = ["mock"]
         self.idle_timeout = 300.0
@@ -40,6 +41,23 @@ class MockChildProcess:
             }
             for i in range(num_tools)
         ]
+        self._resources: list[dict[str, Any]] = []
+        if include_ui:
+            resource_uri = f"ui://{name}/view"
+            self._resources.append(
+                {
+                    "uri": resource_uri,
+                    "name": f"{name} view",
+                    "mimeType": MCP_APPS_MIME_TYPE,
+                }
+            )
+            for tool in self._tools:
+                tool["_meta"] = {
+                    "ui": {
+                        "resourceUri": resource_uri,
+                        "visibility": ["model", "app"],
+                    }
+                }
         self._initialized = True
 
     def send_call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +78,7 @@ class MockChildProcess:
                     ],
                 }
             if method == "resources/list":
-                return {"resources": []}
+                return {"resources": self._resources}
             if method == "prompts/list":
                 return {"prompts": []}
             return {}
@@ -84,9 +102,17 @@ class MockChildProcess:
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_children(n: int, tools_per_cli: int = 3) -> dict[str, MockChildProcess]:
+def _make_mock_children(
+    n: int,
+    tools_per_cli: int = 3,
+    *,
+    include_ui: bool = False,
+) -> dict[str, MockChildProcess]:
     """Create N mock children with tools_per_cli tools each."""
-    return {f"cli-{i}": MockChildProcess(f"cli-{i}", tools_per_cli) for i in range(n)}
+    return {
+        f"cli-{i}": MockChildProcess(f"cli-{i}", tools_per_cli, include_ui=include_ui)
+        for i in range(n)
+    }
 
 
 def _make_clis_dict(n: int) -> dict[str, dict[str, Any]]:
@@ -131,6 +157,13 @@ def test_bench_discovery_many_tools(benchmark) -> None:
     """Discovery cost with 4 children, 20 tools each (80 total)."""
     clis = _make_clis_dict(4)
     children = _make_mock_children(4, tools_per_cli=20)
+    benchmark(_discover_all, clis, children)
+
+
+def test_bench_discovery_mcp_apps_links(benchmark) -> None:
+    """Discovery and URI rewriting for 4 children with 20 UI-linked tools each."""
+    clis = _make_clis_dict(4)
+    children = _make_mock_children(4, tools_per_cli=20, include_ui=True)
     benchmark(_discover_all, clis, children)
 
 

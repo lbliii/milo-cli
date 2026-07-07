@@ -343,6 +343,33 @@ grant permissions, validate a host-specific domain, or enforce browser CSP.
 Those are MCP Apps host responsibilities. Resource handlers should return
 static, reviewable HTML and avoid embedding secrets.
 
+### Gateway namespacing and lifecycle
+
+The Milo gateway acts as an MCP Apps-capable client to every child CLI, then
+exposes UI metadata only when the upstream host negotiated the extension. A
+child link such as `ui://weather/dashboard` is rewritten deterministically:
+
+```text
+ui://milo-gateway/weather/ui%3A%2F%2Fweather%2Fdashboard
+```
+
+Both `tools/list._meta.ui.resourceUri` and `resources/list[].uri` use that
+gateway URI. `resources/read` routes it to the owning child with the original
+URI, then rewrites the returned content URI back to the gateway URI. MIME,
+security metadata, text or blob content, and structured tool results pass
+through unchanged.
+
+The encoded child name makes identical child URIs collision-safe. Duplicate
+tool, resource, or prompt entries from one child use deterministic first-wins
+discovery and emit a gateway warning. Malformed UI resources are omitted, and a
+tool's broken UI link is removed instead of advertising an unresolvable URI.
+
+Without upstream negotiation, UI resources and `_meta.ui` are omitted while
+the tool's text and structured fallback remains available. Unknown gateway UI
+URIs return `M-UI-002`; unnegotiated reads return `M-UI-003`; and child
+disconnect, timeout, parse, or unavailable errors return `M-UI-004` with
+`child`, `reason`, and resource URI repair fields.
+
 See the runnable [minimal MCP Apps example](https://github.com/lbliii/milo-cli/tree/main/examples/mcp_app).
 
 ---
@@ -426,9 +453,10 @@ uv run python -m milo.gateway --mcp
 On startup, the gateway:
 
 1. Reads `registry.json` from Milo's platform data directory
-2. Spawns each registered CLI and calls `tools/list` to discover its tools
-3. Namespaces all tools as `cli_name.tool_name`
-4. Listens on stdin/stdout for MCP requests
+2. Spawns each registered CLI and negotiates supported child capabilities
+3. Discovers tools, resources, and prompts in parallel
+4. Namespaces tools as `cli_name.tool_name` and rewrites MCP Apps resource links
+5. Listens on stdin/stdout for MCP requests
 
 ```
 milo gateway ready

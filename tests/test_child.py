@@ -6,6 +6,7 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+from milo import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE
 from milo._child import ChildProcess
 
 
@@ -43,6 +44,11 @@ class TestChildProcess:
         child.ensure_alive()
 
         mock_popen_cls.assert_called_once()
+        popen_kwargs = mock_popen_cls.call_args.kwargs
+        assert popen_kwargs["stdin"] is subprocess.PIPE
+        assert popen_kwargs["stdout"] is subprocess.PIPE
+        assert popen_kwargs["stderr"] is subprocess.PIPE
+        assert popen_kwargs["text"] is True
         assert child._proc is mock_proc
         assert child._initialized is True
         assert child.protocol_mode == "legacy"
@@ -59,6 +65,11 @@ class TestChildProcess:
         result = child.send_call("tools/list", {})
 
         assert result == {"tools": [{"name": "greet"}]}
+        requests = [json.loads(call.args[0]) for call in mock_proc.stdin.write.call_args_list]
+        initialize = next(request for request in requests if request.get("method") == "initialize")
+        assert initialize["params"]["capabilities"]["extensions"] == {
+            MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}
+        }
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call_skips_progress_notifications(self, mock_popen_cls: MagicMock) -> None:
@@ -113,7 +124,9 @@ class TestChildProcess:
         written = [call.args[0] for call in mock_proc.stdin.write.call_args_list]
         request = json.loads(written[-1].strip())
         assert request["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] == "2026-07-28"
-        assert "io.modelcontextprotocol/clientCapabilities" in request["params"]["_meta"]
+        assert request["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"][
+            "extensions"
+        ] == {MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}}
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call_records_child_error(self, mock_popen_cls: MagicMock) -> None:
@@ -203,6 +216,32 @@ class TestRequestTimeout:
         # Use a per-call timeout — should still work since mock responds instantly
         result = child.send_call("test", {}, timeout=5.0)
         assert result == {"ok": True}
+
+    def test_timeout_and_disconnect_have_distinct_repair_data(self) -> None:
+        child = ChildProcess("weather", ["cmd"])
+        with patch.object(child, "_read_line", return_value=None):
+            timeout = child._read_response(1, timeout=1.0)
+        assert timeout["error"]["data"] == {
+            "reason": "child_timeout",
+            "child": "weather",
+        }
+
+        with patch.object(child, "_read_line", return_value=""):
+            disconnected = child._read_response(1, timeout=1.0)
+        assert disconnected["error"]["data"] == {
+            "reason": "child_disconnected",
+            "child": "weather",
+        }
+
+    def test_child_parse_error_has_repair_data(self) -> None:
+        child = ChildProcess("weather", ["cmd"])
+        with patch.object(child, "_read_line", return_value="not-json"):
+            result = child._read_response(1, timeout=1.0)
+        assert result["error"]["code"] == -32700
+        assert result["error"]["data"] == {
+            "reason": "child_parse_error",
+            "child": "weather",
+        }
 
 
 class TestGracefulKill:

@@ -272,7 +272,10 @@ uv run python -m milo.gateway --mcp
 claude mcp add --transport stdio milo -- uv run python -m milo.gateway --mcp
 ```
 
-The gateway namespaces tools automatically: `taskman.add`, `deployer.deploy`, etc. Implements MCP 2025-11-25 with `outputSchema`, `structuredContent`, tool `annotations`, and streaming `Progress` notifications.
+The gateway namespaces tools automatically (`taskman.add`, `deployer.deploy`) and
+rewrites negotiated MCP Apps `ui://` links without collisions. It preserves
+`outputSchema`, `structuredContent`, tool annotations, resource metadata, and
+streaming `Progress` notifications across child CLIs.
 
 Built-in `milo://stats` resource exposes request latency, error counts, and throughput.
 

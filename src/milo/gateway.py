@@ -21,8 +21,10 @@ import logging
 import sys
 import threading
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from milo import __version__ as _server_version
 from milo._child import ChildProcess
@@ -35,8 +37,20 @@ from milo.registry import list_clis
 _logger = logging.getLogger("milo.gateway")
 
 
-def _gateway_capabilities() -> dict[str, Any]:
-    return {"tools": {}, "resources": {}, "prompts": {}}
+def _gateway_capabilities(*, include_ui: bool = False) -> dict[str, Any]:
+    capabilities: dict[str, Any] = {"tools": {}, "resources": {}, "prompts": {}}
+    if include_ui:
+        from milo.mcp_apps import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE
+
+        capabilities["extensions"] = {MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}}
+    return capabilities
+
+
+def _gateway_ui_uri(cli_name: str, resource_uri: str) -> str:
+    """Return a collision-free stable UI URI for one child resource."""
+    encoded_cli = quote(cli_name, safe="")
+    encoded_resource = quote(resource_uri, safe="")
+    return f"ui://milo-gateway/{encoded_cli}/{encoded_resource}"
 
 
 def _gateway_server_info() -> dict[str, Any]:
@@ -231,6 +245,12 @@ def _idle_reaper(children: dict[str, ChildProcess]) -> None:
 
 
 def _classify_gateway_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
+    from milo._errors import MiloError
+
+    if isinstance(exc, MiloError):
+        from milo.mcp import _classify_exception
+
+        return _classify_exception(exc)
     if isinstance(exc, MethodNotFoundError):
         return -32601, {"type": type(exc).__name__}
     if isinstance(exc, UnsupportedProtocolVersionError):
@@ -252,6 +272,7 @@ class GatewayState:
     resource_routing: dict[str, tuple[str, str]]
     prompts: list[dict[str, Any]]
     prompt_routing: dict[str, tuple[str, str]]
+    ui_resource_uris: frozenset[str] = frozenset()
 
 
 def _discover_one_child(
@@ -290,12 +311,15 @@ def _discover_all(
     """Discover tools, resources, and prompts from all CLIs in parallel."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from milo.mcp_apps import MCP_APPS_MIME_TYPE
+
     all_tools: list[dict[str, Any]] = []
     tool_routing: dict[str, tuple[str, str]] = {}
     all_resources: list[dict[str, Any]] = []
     resource_routing: dict[str, tuple[str, str]] = {}
     all_prompts: list[dict[str, Any]] = []
     prompt_routing: dict[str, tuple[str, str]] = {}
+    ui_resource_uris: set[str] = set()
 
     # Discover all children in parallel
     valid_children = {name: children[name] for name in clis if name in children}
@@ -322,27 +346,98 @@ def _discover_all(
             continue
         _, tools, resources, prompts = results[cli_name]
 
+        child_ui_resource_uris: dict[str, str] = {}
+        for resource in resources:
+            original_uri = resource.get("uri")
+            if not isinstance(original_uri, str) or not original_uri:
+                _logger.warning("Ignoring resource without a valid URI from %s", cli_name)
+                continue
+
+            mime_type = resource.get("mimeType")
+            ui_candidate = original_uri.startswith("ui://") or mime_type == MCP_APPS_MIME_TYPE
+            if ui_candidate and not (
+                original_uri.startswith("ui://") and mime_type == MCP_APPS_MIME_TYPE
+            ):
+                _logger.warning(
+                    "Ignoring malformed MCP Apps resource from %s: %s", cli_name, original_uri
+                )
+                continue
+
+            namespaced_uri = (
+                _gateway_ui_uri(cli_name, original_uri)
+                if ui_candidate
+                else f"{cli_name}/{original_uri}"
+            )
+            if namespaced_uri in resource_routing:
+                _logger.warning("Ignoring duplicate resource from %s: %s", cli_name, original_uri)
+                continue
+
+            exposed_resource = deepcopy(resource)
+            exposed_resource["uri"] = namespaced_uri
+            all_resources.append(exposed_resource)
+            resource_routing[namespaced_uri] = (cli_name, original_uri)
+            if ui_candidate:
+                child_ui_resource_uris[original_uri] = namespaced_uri
+                ui_resource_uris.add(namespaced_uri)
+
         for tool in tools:
-            original_name = tool["name"]
+            original_name = tool.get("name")
+            if not isinstance(original_name, str) or not original_name:
+                _logger.warning("Ignoring tool without a valid name from %s", cli_name)
+                continue
             namespaced = f"{cli_name}.{original_name}"
-            tool["name"] = namespaced
-            if "title" not in tool:
-                tool["title"] = f"{cli_name}: {tool.get('description', original_name)}"
-            all_tools.append(tool)
+            if namespaced in tool_routing:
+                _logger.warning("Ignoring duplicate tool from %s: %s", cli_name, original_name)
+                continue
+
+            exposed_tool = deepcopy(tool)
+            exposed_tool["name"] = namespaced
+            if "title" not in exposed_tool:
+                exposed_tool["title"] = (
+                    f"{cli_name}: {exposed_tool.get('description', original_name)}"
+                )
+            meta = exposed_tool.get("_meta")
+            if isinstance(meta, dict):
+                ui = meta.get("ui")
+                if "ui" in meta and not isinstance(ui, dict):
+                    meta.pop("ui")
+                elif isinstance(ui, dict) and "resourceUri" in ui:
+                    resource_uri = ui.get("resourceUri")
+                    gateway_uri = (
+                        child_ui_resource_uris.get(resource_uri)
+                        if isinstance(resource_uri, str)
+                        else None
+                    )
+                    if gateway_uri is None:
+                        _logger.warning(
+                            "Removing broken MCP Apps link from %s.%s: %s",
+                            cli_name,
+                            original_name,
+                            resource_uri,
+                        )
+                        ui.pop("resourceUri", None)
+                        if not ui:
+                            meta.pop("ui", None)
+                    else:
+                        ui["resourceUri"] = gateway_uri
+                if not meta:
+                    exposed_tool.pop("_meta", None)
+
+            all_tools.append(exposed_tool)
             tool_routing[namespaced] = (cli_name, original_name)
 
-        for resource in resources:
-            original_uri = resource["uri"]
-            namespaced_uri = f"{cli_name}/{original_uri}"
-            resource["uri"] = namespaced_uri
-            all_resources.append(resource)
-            resource_routing[namespaced_uri] = (cli_name, original_uri)
-
         for prompt in prompts:
-            original_name = prompt["name"]
+            original_name = prompt.get("name")
+            if not isinstance(original_name, str) or not original_name:
+                _logger.warning("Ignoring prompt without a valid name from %s", cli_name)
+                continue
             namespaced = f"{cli_name}.{original_name}"
-            prompt["name"] = namespaced
-            all_prompts.append(prompt)
+            if namespaced in prompt_routing:
+                _logger.warning("Ignoring duplicate prompt from %s: %s", cli_name, original_name)
+                continue
+            exposed_prompt = deepcopy(prompt)
+            exposed_prompt["name"] = namespaced
+            all_prompts.append(exposed_prompt)
             prompt_routing[namespaced] = (cli_name, original_name)
 
     return GatewayState(
@@ -352,6 +447,7 @@ def _discover_all(
         resource_routing=resource_routing,
         prompts=all_prompts,
         prompt_routing=prompt_routing,
+        ui_resource_uris=frozenset(ui_resource_uris),
     )
 
 
@@ -367,11 +463,21 @@ class _GatewayHandler:
         self._clis = clis
         self._state = state
         self._children = children
+        self._ui_enabled = False
+        self._fallback_tools = [_without_ui_metadata(tool) for tool in state.tools]
+        self._fallback_resources = [
+            resource
+            for resource in state.resources
+            if resource.get("uri") not in state.ui_resource_uris
+        ]
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+        from milo.mcp import _client_supports_ui
+
+        self._ui_enabled = _client_supports_ui(params)
         return {
             "protocolVersion": _MCP_VERSION,
-            "capabilities": _gateway_capabilities(),
+            "capabilities": _gateway_capabilities(include_ui=self._ui_enabled),
             "serverInfo": _gateway_server_info(),
             "instructions": self._instructions(),
         }
@@ -379,7 +485,7 @@ class _GatewayHandler:
     def server_discover(self, params: dict[str, Any]) -> dict[str, Any]:
         return {
             "supportedVersions": list(_SUPPORTED_MCP_VERSIONS),
-            "capabilities": _gateway_capabilities(),
+            "capabilities": _gateway_capabilities(include_ui=True),
             "serverInfo": _gateway_server_info(),
             "instructions": self._instructions(),
         }
@@ -392,15 +498,36 @@ class _GatewayHandler:
         )
 
     def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"tools": self._state.tools}
+        tools = self._state.tools if self._ui_enabled_for(params) else self._fallback_tools
+        return {"tools": tools}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
         return _proxy_call(self._children, self._state.tool_routing, params)
 
     def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"resources": self._state.resources}
+        resources = (
+            self._state.resources if self._ui_enabled_for(params) else self._fallback_resources
+        )
+        return {"resources": resources}
 
     def read_resource(self, params: dict[str, Any]) -> dict[str, Any]:
+        uri = params.get("uri", "")
+        is_gateway_ui = isinstance(uri, str) and uri.startswith("ui://milo-gateway/")
+        if is_gateway_ui and not self._ui_enabled_for(params):
+            from milo._errors import ErrorCode, MCPAppError
+
+            raise MCPAppError(
+                ErrorCode.UI_UNSUPPORTED,
+                "MCP Apps UI support was not negotiated for this gateway connection.",
+                context={
+                    "reason": "ui_extension_not_negotiated",
+                    "resourceUri": uri,
+                },
+                suggestion=(
+                    "Initialize with the io.modelcontextprotocol/ui extension and "
+                    "text/html;profile=mcp-app MIME type."
+                ),
+            )
         return _proxy_resource(self._children, self._state.resource_routing, params)
 
     def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -408,6 +535,27 @@ class _GatewayHandler:
 
     def get_prompt(self, params: dict[str, Any]) -> dict[str, Any]:
         return _proxy_prompt(self._children, self._state.prompt_routing, params)
+
+    def _ui_enabled_for(self, params: dict[str, Any]) -> bool:
+        """Use connection state, or per-request capabilities for stateless clients."""
+        meta = params.get("_meta")
+        if isinstance(meta, dict) and "io.modelcontextprotocol/clientCapabilities" in meta:
+            from milo.mcp import _client_supports_ui
+
+            return _client_supports_ui(params)
+        return self._ui_enabled
+
+
+def _without_ui_metadata(tool: dict[str, Any]) -> dict[str, Any]:
+    """Copy a tool descriptor while preserving non-UI metadata."""
+    fallback = deepcopy(tool)
+    meta = fallback.get("_meta")
+    if not isinstance(meta, dict):
+        return fallback
+    meta.pop("ui", None)
+    if not meta:
+        fallback.pop("_meta", None)
+    return fallback
 
 
 def _proxy_call(
@@ -463,15 +611,90 @@ def _proxy_resource(
 ) -> dict[str, Any]:
     """Proxy a resources/read to the appropriate child process."""
     uri = params.get("uri", "")
+    is_ui = isinstance(uri, str) and uri.startswith("ui://milo-gateway/")
     if uri not in resource_routing:
+        if is_ui:
+            from milo._errors import ErrorCode, MCPAppError
+
+            raise MCPAppError(
+                ErrorCode.UI_RESOURCE_NOT_FOUND,
+                f"Unknown gateway MCP Apps resource: {uri!r}.",
+                context={
+                    "reason": "unknown_gateway_ui_resource",
+                    "resourceUri": uri,
+                },
+                suggestion="Call resources/list and use an advertised ui:// URI.",
+            )
         return {"contents": []}
 
     cli_name, original_uri = resource_routing[uri]
     child = children.get(cli_name)
     if not child:
+        if is_ui:
+            from milo._errors import ErrorCode, MCPAppError
+
+            raise MCPAppError(
+                ErrorCode.UI_RESOURCE_READ,
+                f"MCP Apps child {cli_name!r} is not available.",
+                context={
+                    "reason": "cli_unavailable",
+                    "child": cli_name,
+                    "resourceUri": uri,
+                    "originalResourceUri": original_uri,
+                },
+                suggestion="Restart the gateway or repair the registered CLI command.",
+            )
         return {"contents": []}
 
-    return child.send_call("resources/read", {"uri": original_uri})
+    try:
+        result = child.send_call("resources/read", {"uri": original_uri})
+    except Exception as exc:
+        if not is_ui:
+            raise
+        from milo._errors import ErrorCode, MCPAppError
+
+        raise MCPAppError(
+            ErrorCode.UI_RESOURCE_READ,
+            f"MCP Apps child {cli_name!r} failed during resource read: {exc}",
+            context={
+                "reason": "child_transport_error",
+                "child": cli_name,
+                "resourceUri": uri,
+                "originalResourceUri": original_uri,
+            },
+            suggestion="Retry the read or inspect the child CLI's gateway status.",
+        ) from exc
+    error = result.get("error")
+    if is_ui and isinstance(error, dict):
+        from milo._errors import ErrorCode, MCPAppError
+
+        child_data = error.get("data")
+        reason = (
+            child_data.get("reason")
+            if isinstance(child_data, dict) and isinstance(child_data.get("reason"), str)
+            else "child_resource_error"
+        )
+        raise MCPAppError(
+            ErrorCode.UI_RESOURCE_READ,
+            error.get("message", f"MCP Apps child {cli_name!r} failed to read the resource."),
+            context={
+                "reason": reason,
+                "child": cli_name,
+                "childCode": error.get("code"),
+                "resourceUri": uri,
+                "originalResourceUri": original_uri,
+            },
+            suggestion="Retry the read or inspect the child CLI's gateway status.",
+        )
+
+    if not is_ui:
+        return result
+
+    exposed = deepcopy(result)
+    for content in exposed.get("contents", []):
+        if isinstance(content, dict):
+            content["uri"] = uri
+    return exposed
 
 
 def _proxy_prompt(
