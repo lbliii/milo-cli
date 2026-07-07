@@ -285,6 +285,99 @@ class TestCLILazy:
                 sys.modules[mod_name] = saved
 
 
+class TestLazyParserIsolation:
+    @staticmethod
+    def _write_handlers(tmp_path, suffix: str) -> tuple[str, str]:
+        selected = f"selected_{suffix}"
+        broken = f"broken_{suffix}"
+        (tmp_path / f"{selected}.py").write_text(
+            "def run(name: str = 'Milo') -> str:\n    return f'Hello, {name}!'\n"
+        )
+        (tmp_path / f"{broken}.py").write_text("raise RuntimeError('lazy sibling imported')\n")
+        return selected, broken
+
+    @staticmethod
+    def _make_cli(selected: str, broken: str, *, grouped: bool = False) -> CLI:
+        cli = CLI(name="app", description="Lazy app")
+        owner = cli.group("ops", description="Operations") if grouped else cli
+        owner.lazy_command("selected", f"{selected}:run", description="Selected command")
+        owner.lazy_command("broken", f"{broken}:run", description="Broken sibling")
+        return cli
+
+    def test_root_help_does_not_import_lazy_leaves(self, tmp_path, monkeypatch):
+        selected, broken = self._write_handlers(tmp_path, "root")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        cli = self._make_cli(selected, broken)
+
+        result = cli.invoke(["--help"])
+
+        assert result.exit_code == 0
+        assert "selected" in result.output
+        assert selected not in sys.modules
+        assert broken not in sys.modules
+
+    def test_group_help_does_not_import_lazy_leaves(self, tmp_path, monkeypatch):
+        selected, broken = self._write_handlers(tmp_path, "group")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        cli = self._make_cli(selected, broken, grouped=True)
+
+        result = cli.invoke(["ops", "--help"])
+
+        assert result.exit_code == 0
+        assert "selected" in result.output
+        assert selected not in sys.modules
+        assert broken not in sys.modules
+
+    def test_leaf_help_imports_only_selected_leaf(self, tmp_path, monkeypatch):
+        selected, broken = self._write_handlers(tmp_path, "leaf_help")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        cli = self._make_cli(selected, broken, grouped=True)
+
+        result = cli.invoke(["ops", "selected", "--help"])
+
+        assert result.exit_code == 0
+        assert "--name" in result.output
+        assert selected in sys.modules
+        assert broken not in sys.modules
+
+    def test_execution_imports_only_selected_leaf(self, tmp_path, monkeypatch):
+        selected, broken = self._write_handlers(tmp_path, "execution")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        cli = self._make_cli(selected, broken, grouped=True)
+
+        result = cli.invoke(["ops", "selected", "--name", "Ada"])
+
+        assert result.exit_code == 0
+        assert result.result == "Hello, Ada!"
+        assert selected in sys.modules
+        assert broken not in sys.modules
+
+    def test_precomputed_schema_keeps_full_tree_modes_import_free(self):
+        cli = CLI(name="app")
+        cli.lazy_command(
+            "remote",
+            "missing_full_tree_handler:run",
+            description="Remote command",
+            schema={
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+            },
+        )
+
+        llms = cli.invoke(["--llms-txt"])
+        completions = cli.invoke(["--completions", "bash"])
+
+        from milo.mcp import _list_tools
+
+        tools = _list_tools(cli)
+        assert llms.exit_code == 0
+        assert "remote" in llms.output
+        assert completions.exit_code == 0
+        assert "remote" in completions.output
+        assert [tool["name"] for tool in tools] == ["remote"]
+        assert "missing_full_tree_handler" not in sys.modules
+
+
 # ---------------------------------------------------------------------------
 # Groups with lazy commands
 # ---------------------------------------------------------------------------

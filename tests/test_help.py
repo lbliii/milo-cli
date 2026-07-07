@@ -242,6 +242,35 @@ class TestHelpRendererTemplateRendering:
         out = capsys.readouterr().out.strip()
         assert out == "myapp 2.3.4"
 
+    def test_cli_subclass_can_render_all_help_levels_without_templates(self):
+        calls: list[tuple[str, str]] = []
+
+        class PlainHelpCLI(CLI):
+            def _format_root_help(self) -> None:
+                calls.append(("root", self.name))
+                print("plain root")
+
+            def _format_group_help(self, group, prog: str) -> None:
+                calls.append(("group", prog))
+                print("plain group")
+
+            def _format_command_help(self, command, prog: str) -> None:
+                calls.append(("command", prog))
+                print("plain command")
+
+        cli = PlainHelpCLI(name="app")
+        ops = cli.group("ops")
+        ops.lazy_command("run", "missing_help_handler:run", description="Run")
+
+        assert cli.invoke(["--help"]).output == "plain root\n"
+        assert cli.invoke(["ops", "--help"]).output == "plain group\n"
+        assert cli.invoke(["ops", "run", "--help"]).output == "plain command\n"
+        assert calls == [
+            ("root", "app"),
+            ("group", "app ops"),
+            ("command", "app ops run"),
+        ]
+
     def test_custom_version_report_is_lazy_and_supports_aliases(self):
         calls = 0
 

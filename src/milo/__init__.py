@@ -82,6 +82,7 @@ _LAZY_IMPORTS = {
     "Group": "groups",
     "GroupDef": "groups",
     "GlobalOption": "commands",
+    "RootOptionSpec": "commands",
     # Context
     "Context": "context",
     "get_context": "context",
@@ -265,6 +266,7 @@ __all__ = [
     "RequestLogger",
     "ResourceDef",
     "Retry",
+    "RootOptionSpec",
     "SagaContext",
     "Screen",
     "Select",

@@ -15,6 +15,7 @@ from milo._command_defs import (
     LazyImportError,
     PromptDef,
     ResourceDef,
+    RootOptionSpec,
     _is_context_param,
     _make_command_def,
 )
@@ -75,6 +76,15 @@ class TestGlobalOption:
         assert opt.option_type is str
         assert opt.default is None
         assert opt.is_flag is False
+
+
+class TestRootOptionSpec:
+    def test_defaults_are_immutable_parser_metadata(self) -> None:
+        spec = RootOptionSpec(flags=("--profile",), dest="profile")
+        assert spec.action == "store"
+        assert spec.choices == ()
+        with pytest.raises(AttributeError):
+            spec.dest = "other"  # type: ignore[misc]
 
 
 class TestInvokeResult:

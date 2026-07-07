@@ -13,6 +13,10 @@ icon: question
 
 Milo provides `HelpRenderer`, a drop-in `argparse.HelpFormatter` subclass that renders help output through [[ext:kida:|Kida]] templates for styled terminal output.
 
+`CLI` renders root and group help from registration metadata, without building
+every leaf parser or resolving lazy command schemas. Leaf help resolves only the
+selected command.
+
 ## Usage
 
 ```python
@@ -34,6 +38,25 @@ When the user runs `myapp --help`, the output is rendered through the `help.kida
 ## Customization
 
 Override the built-in `help.kida` template by placing your own in your template directory. The template receives the full argparse structure as context.
+
+Custom CLI renderers can read Milo's root options without copying built-in flag
+definitions:
+
+```python
+from milo import CLI, RootOptionSpec
+
+cli = CLI(name="myapp", version="1.0.0")
+cli.global_option("profile", short="-p", default="dev")
+
+for spec in cli.root_option_specs():
+    assert isinstance(spec, RootOptionSpec)
+    print(", ".join(spec.flags), spec.metavar, spec.description)
+```
+
+Each immutable spec includes `flags`, `dest`, `description`, `action`,
+`default`, `option_type`, `choices`, and `metavar`. Milo's full parser,
+metadata-only navigation parser, root help, and generated all-command help use
+the same definitions.
 
 :::{dropdown} Template context variables
 :icon: code

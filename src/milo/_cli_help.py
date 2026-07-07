@@ -24,17 +24,12 @@ def generate_help_all(cli: CLI) -> str:
     lines.append("## Global Options\n")
     lines.append("| Flag | Description | Default |")
     lines.append("|------|-------------|---------|")
-    lines.append("| `-v, --verbose` | Increase verbosity | `0` |")
-    lines.append("| `-q, --quiet` | Suppress non-error output | `false` |")
-    lines.append("| `--no-color` | Disable color output | `false` |")
-    lines.append("| `-n, --dry-run` | Preview without changes | `false` |")
-    lines.append("| `-o, --output FILE` | Write output to file | |")
-    for opt in cli._global_options:
-        flag = f"`--{opt.name.replace('_', '-')}`"
-        if opt.short:
-            flag = f"`{opt.short}, --{opt.name.replace('_', '-')}`"
-        default = f"`{opt.default}`" if opt.default is not None else ""
-        lines.append(f"| {flag} | {opt.description} | {default} |")
+    for spec in cli.root_option_specs():
+        flag_text = ", ".join(spec.flags)
+        if spec.metavar:
+            flag_text = f"{flag_text} {spec.metavar}"
+        default = f"`{spec.default}`" if spec.default not in (None, "") else ""
+        lines.append(f"| `{flag_text}` | {spec.description} | {default} |")
     lines.append("")
 
     # Commands

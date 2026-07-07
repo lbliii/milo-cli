@@ -57,6 +57,85 @@ commands beneath hidden groups before lazy resolution or handler execution,
 with `M-CMD-001` repair data. Gateway routing remains derived solely from
 discovery and now returns the same structured identity for unroutable names.
 
+## Steward Notes — Lazy Command Parser Fast Path (#70)
+
+- Consulted stewards: Milo Core, Schema Truth, Performance And Startup Cost,
+  Tests, Agent Docs, Site And Reference Docs, Release And Dependency Surface,
+  and Free-Threading And Concurrency.
+- Approval: the maintainer approved the command-dispatch and public root-option
+  metadata changes on 2026-07-07.
+- Accepted dispatch contract: `CLI.run()` first builds a schema-free navigation
+  parser, then builds the parser for only the selected canonical command path.
+  Root/group help stays registry-only; leaf help and execution resolve at most
+  the selected leaf. The explicit public `build_parser()` remains the full-tree
+  path for tooling and parser-conflict validation.
+- Public API: immutable, lazy-exported `RootOptionSpec` values returned by
+  `CLI.root_option_specs()` are now the shared source for built-in root flags,
+  user global options, parser construction, root help, and generated full help.
+  Existing `_format_root_help`, plus aligned `_format_group_help` and
+  `_format_command_help` hooks, let application renderers avoid Kida on cheap
+  metadata paths without copying Milo's option definitions.
+- Schema/discovery: a supplied `schema=` remains ordinary JSON Schema and the
+  stable persisted cache shape. llms.txt, completions, and MCP tool listing use
+  it without importing handlers; an omitted schema explicitly resolves only
+  where leaf/full-tree schema inspection is required.
+- Compatibility: aliases, nested group aliases, global options, context,
+  confirms, middleware, hooks, generator consumption, terminal renderers,
+  output files, and `--format` continue through the existing execution path.
+  Root-option and command-envelope conflicts remain explicit full-parser
+  errors.
+- Concurrency: navigation and selected parsers are invocation-local values.
+  No shared mutable state, lock order, listener, cancellation, executor, or
+  shutdown behavior changed. Existing `LazyCommandDef` resolution retains its
+  per-command lock and cached `CommandDef`; the free-threaded suite covers the
+  integrated path.
+- Performance: on Python 3.14.2 free-threading with `PYTHON_GIL=0`, the local
+  100-command precomputed-schema benchmark measured 3.55 ms median navigation
+  plus 0.40 ms selected-parser construction, versus 10.46 ms for the explicit
+  full parser. Workload and both baselines live in
+  `benchmarks/test_bench_commands.py`; no end-to-end Bengal speed claim is made.
+- Collateral: focused isolation/public-metadata/renderer/conflict tests, lazy
+  and help site docs, the Chirp adoption contract, benchmark baselines,
+  towncrier fragment, and these Steward Notes move together. No scaffold
+  change: generated projects do not customize parser/help internals. No example
+  change: `examples/lazyapp` already demonstrates precomputed schemas.
+- Verification: `make ci` passed 1,652 tests with one skip and 82.90% branch
+  coverage under `PYTHON_GIL=0`; the same four pre-existing `ty` warnings remain.
+  `make docs-test` passed strict templates and all 63 tagged snippets. Bengal
+  built 132 production pages with its existing autodoc, internal-link, and
+  analytics diagnostics.
+
+### #70 Command And Discovery Parity Matrix
+
+| Surface | Schema/import behavior | Execution/renderer behavior |
+| --- | --- | --- |
+| root help/version | registry/root-option metadata only | application root hook; no leaf import |
+| group help | immediate registry children only | application group hook; no leaf import |
+| leaf help | selected precomputed schema or selected leaf resolution | application command hook |
+| selected CLI execution | navigation tree plus one leaf parser | existing context/confirm/hooks/middleware/output path |
+| `build_parser()` | explicit full-tree schema resolution | existing argparse conflict behavior |
+| llms.txt/completions | all schemas; precomputed schemas stay import-free | unchanged generated output |
+| MCP `tools/list`/call | all list schemas; selected call resolves handler | unchanged schema/dispatch serialization |
+
+Steward: Performance And Startup Cost
+Area: Large lazy-command CLI metadata and selected execution
+Severity: P1
+Invariant: Root/group metadata and one selected command must not resolve lazy
+sibling schemas or import their modules.
+Evidence: `src/milo/commands.py`; `tests/test_lazy.py`;
+`benchmarks/test_bench_commands.py`.
+User Impact: Cheap help/version paths and ordinary commands no longer pay full
+command-tree parser and import cost as the CLI grows.
+Required Fix: Keep navigation schema-free, resolve only the selected leaf, and
+retain an explicit full-parser path for tooling and conflict proof.
+Required Proof: A crashing lazy sibling stays unimported across root help,
+group help, leaf help, and selected execution; discovery, alias, option,
+renderer, conflict, free-threading, and benchmark coverage pass.
+Collateral: Public option metadata, help/lazy docs, Chirp contract, changelog,
+benchmark baseline, and Steward Notes.
+Confidence: high
+Verification Status: machine-verified
+
 Steward: Milo Core
 Area: Shared dispatch argument semantics
 Severity: P2
