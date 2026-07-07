@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from milo.mcp_apps import MCPAppToolMeta
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +72,7 @@ class Group:
         hidden: bool = False,
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
     ) -> Callable:
         """Register a function as a command within this group."""
@@ -84,6 +88,7 @@ class Group:
                 hidden=hidden,
                 examples=tuple(examples),
                 confirm=confirm,
+                ui=ui,
                 display_result=display_result,
             )
             self._commands[name] = cmd
@@ -108,6 +113,7 @@ class Group:
         examples: tuple[dict[str, Any], ...] | list[dict[str, Any]] = (),
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
+        ui: MCPAppToolMeta | None = None,
         display_result: bool = True,
     ) -> Any:
         """Register a lazy-loaded command within this group.
@@ -127,6 +133,7 @@ class Group:
             examples=examples,
             confirm=confirm,
             annotations=annotations,
+            ui=ui,
             display_result=display_result,
         )
         self._commands[name] = cmd

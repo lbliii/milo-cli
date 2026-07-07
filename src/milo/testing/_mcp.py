@@ -7,7 +7,7 @@ from typing import Any
 
 from milo._mcp_router import dispatch
 from milo.commands import CLI
-from milo.mcp import _call_tool, _CLIHandler, _list_tools
+from milo.mcp import _call_tool, _CLIHandler
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +18,7 @@ class ToolInfo:
     description: str
     input_schema: dict[str, Any]
     output_schema: dict[str, Any] | None
+    meta: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,21 +37,23 @@ class MCPClient:
         self._cli = cli
         self._handler = _CLIHandler(cli)
 
-    def initialize(self) -> dict[str, Any]:
+    def initialize(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send ``initialize`` and return the server info dict."""
-        result = dispatch(self._handler, "initialize", {})
+        result = dispatch(self._handler, "initialize", params or {})
         assert result is not None, "initialize must return a result"
         return result
 
     def list_tools(self) -> list[ToolInfo]:
         """Return all visible tools as ToolInfo objects."""
-        raw = _list_tools(self._cli)
+        result = dispatch(self._handler, "tools/list", {})
+        raw = result.get("tools", []) if result else []
         return [
             ToolInfo(
                 name=t["name"],
                 description=t.get("description", ""),
                 input_schema=t.get("inputSchema", {}),
                 output_schema=t.get("outputSchema"),
+                meta=t.get("_meta"),
             )
             for t in raw
         ]

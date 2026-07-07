@@ -7,7 +7,10 @@ import inspect
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from milo.mcp_apps import MCPAppToolMeta
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +64,8 @@ class CommandDef:
     """MCP tool annotations (readOnlyHint, destructiveHint, etc.)."""
     display_result: bool = True
     """If False, suppress plain-format output (return value still available for --format json)."""
+    ui: MCPAppToolMeta | None = None
+    """Optional stable MCP Apps metadata linking this tool to a UI resource."""
 
 
 class LazyCommandDef:
@@ -88,6 +93,7 @@ class LazyCommandDef:
         "import_path",
         "name",
         "tags",
+        "ui",
     )
 
     def __init__(
@@ -104,6 +110,7 @@ class LazyCommandDef:
         confirm: str = "",
         annotations: dict[str, Any] | None = None,
         display_result: bool = True,
+        ui: MCPAppToolMeta | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -115,6 +122,7 @@ class LazyCommandDef:
         self.confirm = confirm
         self.annotations = annotations or {}
         self.display_result = display_result
+        self.ui = ui
         self._schema = schema
         self._resolved: CommandDef | None = None
         self._lock = threading.Lock()
@@ -171,6 +179,7 @@ class LazyCommandDef:
                 examples=self.examples,
                 confirm=self.confirm,
                 annotations=self.annotations,
+                ui=self.ui,
                 display_result=self.display_result,
             )
             return self._resolved
@@ -213,6 +222,7 @@ def _make_command_def(
     confirm: str = "",
     annotations: dict[str, Any] | None = None,
     display_result: bool = True,
+    ui: MCPAppToolMeta | None = None,
 ) -> CommandDef:
     """Build a CommandDef from a function and decorator kwargs."""
     from milo.schema import function_to_schema
@@ -233,6 +243,7 @@ def _make_command_def(
         confirm=confirm,
         annotations=annotations or {},
         display_result=display_result,
+        ui=ui,
     )
 
 

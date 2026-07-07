@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import sys
@@ -21,8 +22,30 @@ if TYPE_CHECKING:
 _SERVER_NAME = "milo"
 
 
-def _server_capabilities() -> dict[str, Any]:
-    return {"tools": {}, "resources": {}, "prompts": {}}
+def _server_capabilities(*, include_ui: bool = False) -> dict[str, Any]:
+    capabilities: dict[str, Any] = {"tools": {}, "resources": {}, "prompts": {}}
+    if include_ui:
+        from milo.mcp_apps import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE
+
+        capabilities["extensions"] = {MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}}
+    return capabilities
+
+
+def _client_supports_ui(params: dict[str, Any]) -> bool:
+    """Return whether initialize params negotiate Milo's MCP Apps MIME type."""
+    from milo.mcp_apps import MCP_APPS_EXTENSION_ID, MCP_APPS_MIME_TYPE
+
+    capabilities = params.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return False
+    extensions = capabilities.get("extensions")
+    if not isinstance(extensions, dict):
+        return False
+    ui = extensions.get(MCP_APPS_EXTENSION_ID)
+    if not isinstance(ui, dict):
+        return False
+    mime_types = ui.get("mimeTypes")
+    return isinstance(mime_types, list) and MCP_APPS_MIME_TYPE in mime_types
 
 
 def _server_info(cli: CLI) -> dict[str, Any]:
@@ -45,12 +68,17 @@ class _CLIHandler:
         self._cli = cli
         self._cached_tools = cached_tools
         self._cached_version: int = cli._command_version
+        self._ui_enabled = False
         self._logger = RequestLogger()
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
+        ui_enabled = _client_supports_ui(params)
+        if ui_enabled != self._ui_enabled:
+            self._cached_tools = None
+        self._ui_enabled = ui_enabled
         return {
             "protocolVersion": _MCP_VERSION,
-            "capabilities": _server_capabilities(),
+            "capabilities": _server_capabilities(include_ui=ui_enabled),
             "serverInfo": _server_info(self._cli),
             "instructions": self._cli.description,
         }
@@ -58,7 +86,7 @@ class _CLIHandler:
     def server_discover(self, params: dict[str, Any]) -> dict[str, Any]:
         return {
             "supportedVersions": list(_SUPPORTED_MCP_VERSIONS),
-            "capabilities": _server_capabilities(),
+            "capabilities": _server_capabilities(include_ui=True),
             "serverInfo": _server_info(self._cli),
             "instructions": self._cli.description,
         }
@@ -68,7 +96,7 @@ class _CLIHandler:
         start = time.monotonic()
         # Invalidate cache when commands have been added or removed
         if self._cached_tools is None or self._cached_version != self._cli._command_version:
-            self._cached_tools = _list_tools(self._cli)
+            self._cached_tools = _list_tools(self._cli, include_ui=self._ui_enabled)
             self._cached_version = self._cli._command_version
         log_request(self._logger, "tools/list", "", start)
         return {"tools": self._cached_tools}
@@ -90,7 +118,10 @@ class _CLIHandler:
     def list_resources(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
         start = time.monotonic()
-        resources = _list_resources(self._cli) + _builtin_resources()
+        resources = _list_resources(self._cli)
+        if self._ui_enabled:
+            resources += _list_ui_resources(self._cli)
+        resources += _builtin_resources()
         log_request(self._logger, "resources/list", "", start)
         return {"resources": resources}
 
@@ -103,7 +134,10 @@ class _CLIHandler:
         new_correlation_id()
         start = time.monotonic()
         try:
-            result = _read_resource(self._cli, params)
+            if isinstance(uri, str) and uri.startswith("ui://"):
+                result = _read_ui_resource(self._cli, params, enabled=self._ui_enabled)
+            else:
+                result = _read_resource(self._cli, params)
         except Exception as e:
             log_request(self._logger, "resources/read", uri, start, error=str(e))
             raise
@@ -139,13 +173,13 @@ def run_mcp_server(cli: CLI) -> None:
     Implements the MCP protocol (initialize, tools/list, tools/call,
     resources/list, resources/read, prompts/list, prompts/get).
     """
-    tools = _list_tools(cli)
+    tools = _list_tools(cli, include_ui=False)
     tool_names = [t["name"] for t in tools]
 
     _stderr(f"MCP server ready — {cli.name}")
     _stderr(f"  Protocol:  {_MCP_VERSION}")
     _stderr(f"  Tools:     {len(tools)} ({', '.join(tool_names)})")
-    _stderr(f"  Resources: {len(cli._resources)}")
+    _stderr(f"  Resources: {len(cli._resources) + len(cli._ui_resources)}")
     _stderr(f"  Prompts:   {len(cli._prompts)}")
     _stderr("  Transport: stdin/stdout (JSON-RPC, one request per line)")
     _stderr("")
@@ -168,7 +202,7 @@ def run_mcp_server(cli: CLI) -> None:
     _stderr("Press Ctrl+C to stop.")
     _stderr("")
 
-    handler = _CLIHandler(cli, cached_tools=tools)
+    handler = _CLIHandler(cli)
 
     for line in sys.stdin:
         line = line.strip()
@@ -210,7 +244,7 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
         code_val = exc.code.value
         data = _milo_error_data(exc)
         # Validation-related error codes -> Invalid params
-        if code_val.startswith(("M-CFG-", "M-FRM-", "M-INP-")):
+        if code_val.startswith(("M-CFG-", "M-FRM-", "M-INP-", "M-UI-")):
             return -32602, data
         # Not-found codes -> Method not found
         if code_val in ("M-CMD-001",):
@@ -250,6 +284,8 @@ def _milo_error_data(exc: Any) -> dict[str, Any]:
         example = _constraint_example(exc.constraint)
         if example is not None:
             data["example"] = example
+    for key, value in getattr(exc, "context", {}).items():
+        data.setdefault(key, value)
     return data
 
 
@@ -313,7 +349,7 @@ def _pipeline_timeline_resource() -> dict[str, Any]:
     }
 
 
-def _list_tools(cli: CLI) -> list[dict[str, Any]]:
+def _list_tools(cli: CLI, *, include_ui: bool = True) -> list[dict[str, Any]]:
     """Generate MCP tools/list response from all commands including groups.
 
     Group commands use dot-notation names: ``site.build``, ``site.config.show``.
@@ -325,6 +361,9 @@ def _list_tools(cli: CLI) -> list[dict[str, Any]]:
     tools = []
     for dotted_name, cmd in cli.walk_commands():
         if cmd.hidden:
+            continue
+        ui = getattr(cmd, "ui", None)
+        if ui is not None and "model" not in ui.visibility:
             continue
         try:
             input_schema = cmd.schema
@@ -351,8 +390,32 @@ def _list_tools(cli: CLI) -> list[dict[str, Any]]:
         if cmd.annotations:
             tool["annotations"] = cmd.annotations
 
+        if ui is not None and include_ui:
+            _validate_ui_link(cli, dotted_name, ui.resource_uri)
+            from milo.mcp_apps import _tool_meta_to_protocol
+
+            tool["_meta"] = _tool_meta_to_protocol(ui)
+
         tools.append(tool)
     return tools
+
+
+def _validate_ui_link(cli: CLI, tool_name: str, resource_uri: str) -> None:
+    """Require every advertised tool UI link to resolve on this server."""
+    if resource_uri in cli._ui_resources:
+        return
+    from milo._errors import ErrorCode, MCPAppError
+
+    raise MCPAppError(
+        ErrorCode.UI_RESOURCE_NOT_FOUND,
+        f"Tool {tool_name!r} references missing MCP Apps resource {resource_uri!r}.",
+        context={
+            "reason": "missing_ui_resource",
+            "tool": tool_name,
+            "resourceUri": resource_uri,
+        },
+        suggestion=f"Register {resource_uri!r} with cli.ui_resource().",
+    )
 
 
 def _tool_title(cmd: CommandDef | LazyCommandDef) -> str:
@@ -517,9 +580,127 @@ def _list_resources(cli: CLI) -> list[dict[str, Any]]:
     return resources
 
 
+def _list_ui_resources(cli: CLI) -> list[dict[str, Any]]:
+    """Generate negotiated MCP Apps resources/list entries."""
+    from milo.mcp_apps import _resource_meta_to_protocol
+
+    resources: list[dict[str, Any]] = []
+    for _uri, resource in cli.walk_ui_resources():
+        item: dict[str, Any] = {
+            "uri": resource.uri,
+            "name": resource.name,
+            "description": resource.description,
+            "mimeType": resource.mime_type,
+        }
+        meta = _resource_meta_to_protocol(resource.meta)
+        if meta:
+            item["_meta"] = meta
+        resources.append(item)
+    return resources
+
+
+def _ui_resource_error(
+    code_name: str,
+    message: str,
+    *,
+    reason: str,
+    uri: str,
+    suggestion: str,
+):
+    """Build a structured MCP Apps boundary error without exposing internals."""
+    from milo._errors import ErrorCode, MCPAppError
+
+    return MCPAppError(
+        ErrorCode[code_name],
+        message,
+        context={"reason": reason, "resourceUri": uri},
+        suggestion=suggestion,
+    )
+
+
+def _read_ui_resource(
+    cli: CLI,
+    params: dict[str, Any],
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    """Read a negotiated MCP Apps HTML resource as text or a base64 blob."""
+    from milo.mcp_apps import _resource_meta_to_protocol
+
+    uri = params.get("uri")
+    if not isinstance(uri, str) or not uri.startswith("ui://") or not uri[5:]:
+        raise _ui_resource_error(
+            "UI_INVALID_RESOURCE",
+            "MCP Apps resource reads require a 'ui://' URI.",
+            reason="invalid_ui_resource_uri",
+            uri=str(uri or ""),
+            suggestion="Call resources/list and use an advertised ui:// URI.",
+        )
+    if not enabled:
+        raise _ui_resource_error(
+            "UI_UNSUPPORTED",
+            "MCP Apps UI support was not negotiated for this connection.",
+            reason="ui_extension_not_negotiated",
+            uri=uri,
+            suggestion=(
+                "Initialize with the io.modelcontextprotocol/ui extension and "
+                "text/html;profile=mcp-app MIME type."
+            ),
+        )
+    resource = cli._ui_resources.get(uri)
+    if resource is None:
+        raise _ui_resource_error(
+            "UI_RESOURCE_NOT_FOUND",
+            f"Unknown MCP Apps resource: {uri!r}.",
+            reason="missing_ui_resource",
+            uri=uri,
+            suggestion="Call resources/list and use an advertised ui:// URI.",
+        )
+
+    try:
+        if cli._middleware:
+            from milo.context import Context as ContextClass
+            from milo.middleware import MCPCall
+
+            ctx = ContextClass()
+            call = MCPCall(method="resources/read", name=uri, arguments={})
+            result = cli._middleware.execute(ctx, call, lambda _call: resource.handler())
+        else:
+            result = resource.handler()
+    except Exception as exc:
+        raise _ui_resource_error(
+            "UI_RESOURCE_READ",
+            f"MCP Apps resource {uri!r} failed to render: {type(exc).__name__}: {exc}",
+            reason="ui_resource_read_failed",
+            uri=uri,
+            suggestion="Fix the UI resource handler and retry resources/read.",
+        ) from exc
+
+    content: dict[str, Any] = {"uri": uri, "mimeType": resource.mime_type}
+    if isinstance(result, str):
+        content["text"] = result
+    elif isinstance(result, bytes):
+        content["blob"] = base64.b64encode(result).decode("ascii")
+    else:
+        raise _ui_resource_error(
+            "UI_INVALID_RESOURCE",
+            f"MCP Apps resource {uri!r} returned {type(result).__name__}, not str or bytes.",
+            reason="invalid_ui_resource_content",
+            uri=uri,
+            suggestion="Return a valid HTML5 document as str or UTF-8 bytes.",
+        )
+    meta = _resource_meta_to_protocol(resource.meta)
+    if meta:
+        content["_meta"] = meta
+    return {"contents": [content]}
+
+
 def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
     """Handle resources/read by calling the resource handler."""
     uri = params.get("uri", "")
+
+    if isinstance(uri, str) and uri.startswith("ui://"):
+        return _read_ui_resource(cli, params, enabled=True)
 
     res = cli._resources.get(uri)
     if not res:
