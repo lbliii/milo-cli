@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "claims": [
+    {
+      "id": "one-definition-three-surfaces",
+      "type": "behavior",
+      "status": "repository-proven",
+      "files": [
+        "README.md",
+        "site/content/docs/about/comparisons.md"
+      ],
+      "patterns": [
+        "One typed Python function",
+        "CLI + MCP + llms.txt"
+      ],
+      "proof": "tests/test_ai_native.py and tests/test_command_contract.py exercise CLI, direct-call, MCP, and llms.txt projections from registered commands.",
+      "evidence": [
+        "tests/test_ai_native.py",
+        "tests/test_command_contract.py",
+        "benchmarks/comparison/milo_app.py"
+      ],
+      "notes": "This is a local stdio MCP claim. Hosted streamable HTTP remains tracked by issue #106."
+    },
+    {
+      "id": "verify-ten-check-conformance",
+      "type": "behavior",
+      "status": "repository-proven",
+      "files": [
+        "README.md",
+        "docs/launch-post.md",
+        "site/content/docs/about/comparisons.md"
+      ],
+      "patterns": [
+        "ten-check",
+        "milo verify"
+      ],
+      "proof": "src/milo/verify.py defines the ten checks; tests/test_verify.py covers success, failure, discovery, MCP Apps, gateway, and subprocess transport outcomes.",
+      "evidence": [
+        "src/milo/verify.py",
+        "tests/test_verify.py",
+        "site/content/docs/get-started/quickstart.md"
+      ],
+      "notes": "FastMCP inspect exposes server metadata and protocol views; the comparison does not mislabel inspection as absence of verification capability."
+    },
+    {
+      "id": "free-threaded-runtime",
+      "type": "behavior",
+      "status": "ci-proven",
+      "files": [
+        "README.md"
+      ],
+      "patterns": [
+        "Free-threading ready"
+      ],
+      "proof": ".github/workflows/ci.yml runs the suite on CPython 3.14t with PYTHON_GIL=0 on Linux and macOS, plus a GIL-on compatibility lane.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "tests/test_effects_stress.py",
+        "tests/test_state.py"
+      ],
+      "notes": "This proves Milo's runtime lanes, not the pending hosted parallel-tool-call comparison."
+    },
+    {
+      "id": "one-runtime-dependency",
+      "type": "packaging",
+      "status": "metadata-proven",
+      "files": [
+        "README.md"
+      ],
+      "patterns": [
+        "One runtime dependency"
+      ],
+      "proof": "pyproject.toml declares only kida-templates in project.dependencies; uv.lock is the lock receipt.",
+      "evidence": [
+        "pyproject.toml",
+        "uv.lock"
+      ],
+      "notes": "Development, documentation, and benchmark dependency groups are outside the runtime claim."
+    },
+    {
+      "id": "local-hot-path-baseline",
+      "type": "performance",
+      "status": "scoped-snapshot",
+      "files": [
+        "site/content/docs/about/comparisons.md"
+      ],
+      "patterns": [
+        "233ns",
+        "125ns"
+      ],
+      "proof": "benchmarks/BASELINE.md records workload, platform, Python version, medians, and explicit post-baseline spot-check context.",
+      "evidence": [
+        "benchmarks/BASELINE.md",
+        "benchmarks/test_bench_mcp.py",
+        "benchmarks/test_bench_render.py"
+      ],
+      "notes": "These are Milo-local workload snapshots, not comparative Typer or FastMCP speed claims."
+    },
+    {
+      "id": "parallel-http-tool-calls",
+      "type": "performance",
+      "status": "pending",
+      "files": [],
+      "patterns": [],
+      "proof": "No public product claim is authorized until issue #106 provides streamable HTTP and the pounce #229 workload produces an artifact-backed chart.",
+      "evidence": [],
+      "notes": "Do not promote this claim from issue #110 before its dependencies land."
+    }
+  ]
+}

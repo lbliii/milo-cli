@@ -111,13 +111,17 @@ def test_readme_front_door_is_clean_machine_and_verify_first():
 
 def test_comparison_page_names_honest_decision_boundaries_and_sources():
     text = (_DOCS_DIR / "about" / "comparisons.md").read_text(encoding="utf-8")
+    normalized = " ".join(text.split())
 
-    assert "Choose FastMCP When MCP Is the Product" in text
-    assert "Choose Typer When the CLI Is the Product" in text
-    assert "Choose Milo When One Definition Must Serve Both" in text
+    assert "What FastMCP and Typer Do Better" in text
+    assert "Same Deploy App, Complete Entrypoints" in text
+    assert "The Verification Difference" in text
     assert "https://gofastmcp.com/getting-started/welcome" in text
+    assert "https://gofastmcp.com/cli/inspecting" in text
     assert "https://typer.tiangolo.com/" in text
-    assert "not currently the broadest remote MCP platform" in text
+    assert "not currently the broadest remote MCP platform" in normalized
+    assert "Parallel HTTP Proof Is Still Pending" in text
+    assert "issues/106" in text
 
 
 def test_launch_assets_are_public_safe_and_share_one_demo_contract():
