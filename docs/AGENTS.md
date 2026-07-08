@@ -49,8 +49,8 @@ When this domain changes, check:
 - `README.md` - links into agent docs and quickstart claims.
 - `src/milo/_scaffold/default/README.md` - generated onboarding parity.
 - `examples/greet/**` - smallest agent-facing runnable example.
-- `scripts/check_docs_snippets.py`, `tests/test_docs_snippets.py`,
-  `tests/test_migration_docs.py` - snippet verification behavior.
+- `scripts/check_docs_snippets.py`, `tests/docs/test_snippets.py`,
+  `tests/docs/test_migration.py` - snippet verification behavior.
 - `site/content/docs/**` - deeper reference pages linked from short docs.
 
 ## Advocate
@@ -79,7 +79,7 @@ When this domain changes, check:
 **Code:** no runtime code; coordinate with `scripts/check_docs_snippets.py`
 when agent docs need new verification modes.
 
-**Tests:** `tests/test_docs_snippets.py`, `tests/test_migration_docs.py`,
+**Tests:** `tests/docs/test_snippets.py`, `tests/docs/test_migration.py`,
 and scaffold/example tests that prove documented paths.
 
 **Docs:** `docs/agent-quickstart.md`, `docs/testing.md`, README links,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _MIGRATE_DIR = _REPO_ROOT / "site" / "content" / "docs" / "get-started" / "migrate-existing-cli"
 _INDEX = _MIGRATE_DIR / "_index.md"
 _FRAMEWORK_GUIDE = _MIGRATE_DIR / "framework-adoption.md"

@@ -530,6 +530,10 @@ PYTHON_GIL=0 uv run --python 3.14t pytest tests/
 make ci   # optional: ruff + ty + tests with coverage
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository setup, proof, changelog,
+and pull-request expectations. Report suspected vulnerabilities through the
+private contact in [SECURITY.md](SECURITY.md), not a public issue.
+
 ---
 
 ## The Bengal Ecosystem

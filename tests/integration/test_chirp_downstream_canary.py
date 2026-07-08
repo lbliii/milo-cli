@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = Path(__file__).resolve().parents[2]
 _CONTRACT = _ROOT / "tests" / "downstream" / "chirp_canary" / "contract.json"
 _RUNNER = _ROOT / "scripts" / "check_chirp_canary.py"
 
@@ -44,10 +44,14 @@ def test_canary_pins_released_immutable_contract() -> None:
 
 
 def test_current_milo_passes_the_chirp_shaped_fixture() -> None:
+    free_threaded = not sys._is_gil_enabled()
     env = os.environ.copy()
-    env["PYTHON_GIL"] = "0"
+    env["PYTHON_GIL"] = "0" if free_threaded else "1"
+    command = [sys.executable, str(_RUNNER), "--fixture-only"]
+    if free_threaded:
+        command.append("--require-free-threaded")
     completed = subprocess.run(
-        (sys.executable, str(_RUNNER), "--fixture-only", "--require-free-threaded"),
+        command,
         cwd=_ROOT,
         env=env,
         capture_output=True,
@@ -58,7 +62,7 @@ def test_current_milo_passes_the_chirp_shaped_fixture() -> None:
     receipt = json.loads(completed.stdout)
 
     assert receipt["status"] == "passed"
-    assert receipt["free_threaded"] is True
+    assert receipt["free_threaded"] is free_threaded
     assert receipt["commands"] == 11
     assert receipt["mcp_tools"] == ["check", "diff", "routes", "security-check"]
     assert receipt["versions"] == _contract()["versions"]

@@ -79,7 +79,7 @@ jobs:
         run: uv run ty check src/milo/
 
   test:
-    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    name: Test (Python ${{ matrix.python-version }}, GIL ${{ matrix.gil-label }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     permissions:
       pull-requests: write
@@ -87,8 +87,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python-version: ["3.14t"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.14t"
+            python-gil: "0"
+            gil-label: "off"
+          - os: macos-latest
+            python-version: "3.14t"
+            python-gil: "0"
+            gil-label: "off"
+          - os: ubuntu-latest
+            python-version: "3.14"
+            python-gil: "1"
+            gil-label: "on"
 
     steps:
       - uses: actions/checkout@v4
@@ -104,7 +115,7 @@ jobs:
       - name: Run tests with coverage
         env:
           CI: true
-          PYTHON_GIL: "0"
+          PYTHON_GIL: ${{ matrix.python-gil }}
         run: |
           uv run pytest tests/ -ra -q --maxfail=5 --tb=short \
             --cov=milo --cov-report=xml --cov-report=lcov --cov-fail-under=80 \
@@ -137,9 +148,11 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
-      - name: Verify GIL status (free-threaded only)
-        if: matrix.python-version == '3.14t'
-        run: uv run python -c "import sys; assert not sys._is_gil_enabled(), 'GIL should be disabled on 3.14t'"
+      - name: Verify runtime GIL status
+        env:
+          EXPECTED_GIL: ${{ matrix.python-gil }}
+        run: |
+          uv run python -c "import os, sys; expected = os.environ['EXPECTED_GIL'] == '1'; actual = sys._is_gil_enabled(); assert actual is expected, f'expected GIL enabled={expected}, got {actual}'"
 
       - name: Verify Waypoint showcase
         run: uv run milo verify showcase/waypoint/app.py

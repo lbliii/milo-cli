@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _README = _REPO_ROOT / "README.md"
 _EXAMPLES_DIR = _REPO_ROOT / "examples"
 _EXAMPLES_README = _EXAMPLES_DIR / "README.md"
