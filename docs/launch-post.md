@@ -89,6 +89,13 @@ application platform. Typer is a stronger fit when the product is solely a
 polished CLI and MCP is not part of its contract. Milo is for the seam: one
 operation, two audiences, one source of truth.
 
+The public
+[Typer + FastMCP comparison](https://lbliii.github.io/milo-cli/docs/about/comparisons/)
+shows the complete same-app source, line-count method, verification boundary,
+and scoped Milo benchmark receipts. The repository's
+[claims ledger](../public-claims.json) records which launch claims are proven,
+scoped snapshots, or still pending.
+
 ## The Small Bet
 
 Take one internal CLI command that an agent should be able to use. Give its

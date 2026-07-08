@@ -7,6 +7,7 @@
 
 **One typed Python function becomes a human CLI command, an MCP tool, and an
 agent-readable discovery entry.**
+([evidence: one-definition-three-surfaces](./public-claims.json))
 
 <!--
 Launch video: replace this comment with the final 60–90 second recording.
@@ -25,10 +26,11 @@ uv run --python 3.14 --with milo-cli python hello_milo/app.py greet --name World
 uv run --python 3.14 --with milo-cli milo verify hello_milo/app.py
 ```
 
-The second command prints `Hello, World!`. The verifier then exercises import,
-schema generation, MCP discovery, MCP Apps tool/resource/gateway conformance,
-and a real subprocess JSON-RPC handshake with resource reads. Do not register a
-new tool until it reports zero failures.
+The second command prints `Hello, World!`. The ten-check verifier
+([evidence: verify-ten-check-conformance](./public-claims.json)) then exercises
+import, schema generation, MCP discovery, MCP Apps tool/resource/gateway
+conformance, and a real subprocess JSON-RPC handshake with resource reads. Do
+not register a new tool until it reports zero failures.
 
 Now give Claude Code the same file as a local stdio MCP server:
 
@@ -57,8 +59,8 @@ Milo is a Python framework where every CLI is simultaneously a terminal app, a c
 - **Annotated schemas** — Type hints + `Annotated` constraints generate rich JSON Schema, and Milo enforces it before handlers run.
 - **Streaming progress** — Commands that yield `Progress` objects stream notifications to MCP clients in real time.
 - **Elm Architecture** — Immutable state, pure reducers, declarative views. Every state transition is explicit and testable.
-- **Free-threading ready** — Built for Python 3.14t (PEP 703). Sagas run on `ThreadPoolExecutor` with no GIL contention.
-- **One runtime dependency** — Just `kida-templates`. No click, no rich, no curses.
+- **Free-threading ready** — Built for Python 3.14t (PEP 703). Sagas run on `ThreadPoolExecutor` with no GIL contention. ([evidence: free-threaded-runtime](./public-claims.json))
+- **One runtime dependency** — Just `kida-templates`. No click, no rich, no curses. ([evidence: one-runtime-dependency](./public-claims.json))
 
 ## Use Milo For
 
