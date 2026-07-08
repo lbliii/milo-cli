@@ -1,0 +1,29 @@
+{% from "components/_defs.kida" import header, key_hints %}
+{{ header("Waypoint timeline") }}
+{{ hr() }}
+
+{% if state.rows | length == 0 %}
+  {{ "No checkpoints yet." | dim }}
+{% else %}
+{% for row in state.rows %}
+{% if row.show_group %}
+  {{ row.group | cyan | bold }}
+{% endif %}
+{% if loop.index0 == state.selected %}
+  {{ icons.arrow_r | green }} {{ row.checkpoint | bold }}  {{ row.created_at | dim }}  {{ ("@" ~ row.agent) | yellow }}
+{% else %}
+    {{ row.checkpoint | dim }}  {{ row.created_at | dim }}  {{ ("@" ~ row.agent) | dim }}
+{% endif %}
+{% if loop.index0 == state.selected and state.expanded %}
+      {{ row.why }}
+      {{ row.diffstat | dim }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{{ hr() }}
+{{ key_hints([
+  {"key": "j/k", "action": "navigate"},
+  {"key": "enter", "action": "expand why + diffstat"},
+  {"key": "q/esc", "action": "quit"},
+]) }}

@@ -17,13 +17,29 @@ import subprocess
 import sys
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Final
 
-from milo import CLI, Ge, Le, MaxLen, MinLen, Option, Pattern, Positional
+from kida import FileSystemLoader
+
+from milo import (
+    CLI,
+    Action,
+    Context,
+    Ge,
+    Le,
+    MaxLen,
+    MinLen,
+    Option,
+    Pattern,
+    Positional,
+    Quit,
+    SpecialKey,
+)
 from milo.streaming import Progress
+from milo.templates import get_env
 
 _ID_EXPRESSION: Final = r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?"
 _ID_PATTERN: Final = re.compile(_ID_EXPRESSION)
@@ -33,6 +49,7 @@ _TRAILER_PREFIX: Final = "Waypoint-"
 _META_REF_NAME: Final = "meta"
 _DEFAULT_TIMEOUT: Final = 10.0
 _AUTO_INPUT_LIMIT: Final = 1_000_000
+_TEMPLATE_DIR: Final = Path(__file__).parent / "templates"
 _AGENT_ENV_KEYS: Final = (
     "WAYPOINT_AGENT",
     "CONDUCTOR_AGENT_ID",
@@ -330,6 +347,58 @@ class Checkpoint:
     oid: str
     parent_oid: str
     metadata: CheckpointMetadata
+
+
+@dataclass(frozen=True, slots=True)
+class TimelineRow:
+    """One display-ready checkpoint row in the interactive timeline."""
+
+    group: str
+    show_group: bool
+    checkpoint: str
+    created_at: str
+    agent: str
+    why: str
+    diffstat: str
+
+
+@dataclass(frozen=True, slots=True)
+class TimelineState:
+    """Pure navigation state for the Waypoint timeline."""
+
+    rows: tuple[TimelineRow, ...]
+    selected: int = 0
+    expanded: bool = False
+
+    @property
+    def selected_row(self) -> TimelineRow | None:
+        if not self.rows:
+            return None
+        return self.rows[self.selected]
+
+
+def timeline_reducer(state: TimelineState | None, action: Action) -> TimelineState | Quit:
+    """Navigate with j/k or arrows, expand with Enter, and quit with q/Escape."""
+    if state is None:
+        return TimelineState(rows=())
+    if action.type != "@@KEY":
+        return state
+    key = action.payload
+    if key.name == SpecialKey.ESCAPE or key.char == "q":
+        return Quit(state)
+    if not state.rows:
+        return state
+    if key.name == SpecialKey.DOWN or key.char == "j":
+        return replace(
+            state,
+            selected=min(len(state.rows) - 1, state.selected + 1),
+            expanded=False,
+        )
+    if key.name == SpecialKey.UP or key.char == "k":
+        return replace(state, selected=max(0, state.selected - 1), expanded=False)
+    if key.name == SpecialKey.ENTER:
+        return replace(state, expanded=not state.expanded)
+    return state
 
 
 @dataclass(frozen=True, slots=True)
@@ -798,6 +867,11 @@ def _journal_events(repo: GitRepository) -> list[dict]:
         )
     for checkpoint in repo.all_checkpoints():
         metadata = checkpoint.metadata
+        diffstat = (
+            repo.run("diff", "--stat", "--format=", checkpoint.parent_oid, checkpoint.oid)
+            .stdout.strip()
+            .replace("\n", " · ")
+        )
         events.append(
             (
                 metadata.created_at,
@@ -809,12 +883,90 @@ def _journal_events(repo: GitRepository) -> list[dict]:
                     "parent": checkpoint.parent_oid,
                     "agent": metadata.agent,
                     "why": metadata.why,
+                    "diffstat": diffstat,
                     "task_ref": metadata.task_ref,
                     "created_at": _timestamp_text(metadata.created_at),
                 },
             )
         )
     return [event for _, event in sorted(events, key=lambda item: (item[0], str(item[1])))]
+
+
+def _timeline_rows(repo: GitRepository) -> tuple[TimelineRow, ...]:
+    checkpoint_events = [event for event in _journal_events(repo) if event["type"] == "checkpoint"]
+    checkpoint_events.sort(
+        key=lambda event: (str(event["intent"]), str(event["attempt"]), str(event["created_at"]))
+    )
+    rows: list[TimelineRow] = []
+    previous_group = ""
+    for event in checkpoint_events:
+        group = f"{event['intent']} / {event['attempt']}"
+        rows.append(
+            TimelineRow(
+                group=group,
+                show_group=group != previous_group,
+                checkpoint=str(event["checkpoint"])[:12],
+                created_at=str(event["created_at"]),
+                agent=str(event["agent"]),
+                why=str(event["why"]),
+                diffstat=str(event["diffstat"]).replace("\n", " · ") or "no diffstat",
+            )
+        )
+        previous_group = group
+    return tuple(rows)
+
+
+def _timeline_env():
+    return get_env(loader=FileSystemLoader(str(_TEMPLATE_DIR)))
+
+
+def _render_intents_plain(result: list[dict], _ctx: Context) -> str:
+    if not result:
+        return 'No intents yet. Start with: wp intent "Describe the goal"'
+    lines = [f"INTENTS  {len(result)}"]
+    for item in result:
+        task = f"  [{item['task_ref']}]" if item.get("task_ref") else ""
+        lines.append(f"  {item['id']:<20} {item['title']}  @{item['agent']}{task}")
+    lines.append(f"Next: wp attempts {result[0]['id']}")
+    return "\n".join(lines)
+
+
+def _render_attempts_plain(result: list[dict], _ctx: Context) -> str:
+    if not result:
+        return "No attempts yet. Edit files, then run wp checkpoint."
+    lines = [f"ATTEMPTS  {result[0]['intent']}  ({len(result)} competing)"]
+    for item in result:
+        lines.append(
+            f"  {item['attempt']:<20} {item['checkpoints']} checkpoint(s)  "
+            f"{str(item['checkpoint'])[:12]}  {item['why']}"
+        )
+        if item.get("diffstat"):
+            lines.append(f"    {str(item['diffstat']).replace(chr(10), ' · ')}")
+    lines.append(f"Pick: wp pick {result[0]['intent']}/<attempt>")
+    return "\n".join(lines)
+
+
+def _render_log_plain(result: list[dict], ctx: Context) -> str:
+    if ctx.is_interactive:
+        return ""
+    checkpoints = [event for event in result if event["type"] == "checkpoint"]
+    if not checkpoints:
+        return "No checkpoints yet. Edit files, then run wp checkpoint."
+    lines = [f"WAYPOINT TIMELINE  {len(checkpoints)} checkpoint(s)"]
+    previous_group = ""
+    for event in checkpoints:
+        group = f"{event['intent']} / {event['attempt']}"
+        if group != previous_group:
+            lines.append(f"\n{group}")
+            previous_group = group
+        lines.append(
+            f"  {str(event['checkpoint'])[:12]}  {event['created_at']}  "
+            f"@{event['agent']}  {event['why']}"
+        )
+        if event.get("diffstat"):
+            lines.append(f"    {str(event['diffstat']).replace(chr(10), ' · ')}")
+    lines.append("\nUse --format table or --format json for non-interactive consumers.")
+    return "\n".join(lines)
 
 
 def _intent_payload(intent_value: Intent) -> dict[str, str | None]:
@@ -921,7 +1073,12 @@ def create_intent(
     return {**_intent_payload(intent_value), "commit": oid}
 
 
-@cli.command("intents", description="List declared intents", annotations={"readOnlyHint": True})
+@cli.command(
+    "intents",
+    description="List declared intents",
+    annotations={"readOnlyHint": True},
+    terminal_renderer=_render_intents_plain,
+)
 def list_intents() -> list[dict[str, str | None]]:
     """List all declared intents in creation order."""
     repo = GitRepository.discover()
@@ -1016,7 +1173,10 @@ def create_checkpoint(
 
 
 @cli.command(
-    "attempts", description="List attempts for an intent", annotations={"readOnlyHint": True}
+    "attempts",
+    description="List attempts for an intent",
+    annotations={"readOnlyHint": True},
+    terminal_renderer=_render_attempts_plain,
 )
 def list_attempts(intent_id: IntentArgument) -> list[dict[str, str | int]]:
     """List competing attempt heads with cumulative diffstats.
@@ -1031,7 +1191,9 @@ def list_attempts(intent_id: IntentArgument) -> list[dict[str, str | int]]:
         history = repo.checkpoint_history(intent_id, attempt_id, oid)
         latest = history[0]
         base = history[-1].parent_oid
-        diffstat = repo.run("diff", "--stat", "--format=", base, oid).stdout.strip()
+        diffstat = (
+            repo.run("diff", "--stat", "--format=", base, oid).stdout.strip().replace("\n", " · ")
+        )
         results.append(
             {
                 "intent": intent_id,
@@ -1047,15 +1209,31 @@ def list_attempts(intent_id: IntentArgument) -> list[dict[str, str | int]]:
 
 
 @cli.command(
-    "log", description="Read the append-only intent journal", annotations={"readOnlyHint": True}
+    "log",
+    description="Read the append-only intent journal",
+    annotations={"readOnlyHint": True},
+    terminal_renderer=_render_log_plain,
 )
-def journal_log(limit: Annotated[int, Ge(1), Le(1000)] = 100) -> list[dict]:
+def journal_log(
+    limit: Annotated[int, Ge(1), Le(1000)] = 100,
+    ctx: Context = None,
+) -> list[dict]:
     """Read intent and checkpoint events in append order.
 
     Args:
         limit: Maximum number of newest events to return.
     """
-    events = _journal_events(GitRepository.discover())
+    repo = GitRepository.discover()
+    events = _journal_events(repo)
+    if ctx is not None and ctx.is_interactive and ctx.format == "plain":
+        rows = _timeline_rows(repo)
+        if rows:
+            ctx.run_app(
+                reducer=timeline_reducer,
+                template="timeline.kida",
+                initial_state=TimelineState(rows=rows),
+                env=_timeline_env(),
+            )
     return events[-limit:]
 
 
@@ -1064,7 +1242,11 @@ def journal_log(limit: Annotated[int, Ge(1), Le(1000)] = 100) -> list[dict]:
     description="Apply a winning attempt to the working tree",
     annotations={"destructiveHint": True},
 )
-def pick_attempt(attempt: AttemptArgument, force: bool = False) -> dict:
+def pick_attempt(
+    attempt: AttemptArgument,
+    force: bool = False,
+    ctx: Context = None,
+) -> dict:
     """Apply an attempt without changing HEAD or the index.
 
     Args:
@@ -1073,6 +1255,18 @@ def pick_attempt(attempt: AttemptArgument, force: bool = False) -> dict:
     """
     repo = GitRepository.discover()
     intent_id, attempt_id, oid = repo.resolve_attempt(attempt)
+    if (
+        ctx is not None
+        and ctx.is_interactive
+        and not ctx.confirm(f"Pick {intent_id}/{attempt_id} and update the working tree?")
+    ):
+        return {
+            "status": "cancelled",
+            "intent": intent_id,
+            "attempt": attempt_id,
+            "checkpoint": oid,
+            "paths": [],
+        }
     yield Progress(status=f"Inspecting {intent_id}/{attempt_id}", step=0, total=2)
     history = repo.checkpoint_history(intent_id, attempt_id, oid)
     yield Progress(status=f"Applying {len(history)} checkpoint(s)", step=1, total=2)
@@ -1092,7 +1286,7 @@ def pick_attempt(attempt: AttemptArgument, force: bool = False) -> dict:
     description="Reverse one checkpoint delta in the working tree",
     annotations={"destructiveHint": True},
 )
-def undo_checkpoint(checkpoint: CheckpointArgument) -> dict:
+def undo_checkpoint(checkpoint: CheckpointArgument, ctx: Context = None) -> dict:
     """Reverse one checkpoint without changing HEAD or the index.
 
     Args:
@@ -1101,6 +1295,18 @@ def undo_checkpoint(checkpoint: CheckpointArgument) -> dict:
     repo = GitRepository.discover()
     yield Progress(status=f"Resolving checkpoint {checkpoint}", step=0, total=2)
     resolved = repo.resolve_checkpoint(checkpoint)
+    if (
+        ctx is not None
+        and ctx.is_interactive
+        and not ctx.confirm(f"Undo checkpoint {resolved.oid[:12]} ({resolved.metadata.why})?")
+    ):
+        return {
+            "status": "cancelled",
+            "checkpoint": resolved.oid,
+            "intent": resolved.metadata.intent_id,
+            "attempt": resolved.metadata.attempt_id,
+            "paths": [],
+        }
     yield Progress(status=f"Reversing {resolved.metadata.why}", step=1, total=2)
     paths = repo.reverse_checkpoint(resolved)
     return {
