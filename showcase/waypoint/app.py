@@ -31,6 +31,8 @@ from milo import (
     Ge,
     Le,
     MaxLen,
+    MCPAppResourceMeta,
+    MCPAppToolMeta,
     MinLen,
     Option,
     Pattern,
@@ -1208,6 +1210,65 @@ def list_attempts(intent_id: IntentArgument) -> list[dict[str, str | int]]:
     return results
 
 
+def _attempt_graph_data(
+    repo: GitRepository,
+    *,
+    intent_id: str | None = None,
+    attempt_id: str | None = None,
+) -> dict:
+    """Build a nested intent → attempt → checkpoint graph for every host."""
+    intents = repo.list_intents()
+    if intent_id is not None:
+        repo.read_intent(intent_id)
+        intents = [item for item in intents if item.id == intent_id]
+    graph_attempts: list[dict] = []
+    for intent_value in intents:
+        for _, current_attempt, oid in sorted(
+            repo.attempt_refs(intent_value.id), key=lambda item: item[1]
+        ):
+            if attempt_id is not None and current_attempt != attempt_id:
+                continue
+            history = repo.checkpoint_history(intent_value.id, current_attempt, oid)
+            lineage = []
+            for checkpoint in reversed(history):
+                metadata = checkpoint.metadata
+                diffstat = (
+                    repo.run(
+                        "diff",
+                        "--stat",
+                        "--format=",
+                        checkpoint.parent_oid,
+                        checkpoint.oid,
+                    )
+                    .stdout.strip()
+                    .replace("\n", " · ")
+                )
+                lineage.append(
+                    {
+                        "checkpoint": checkpoint.oid,
+                        "agent": metadata.agent,
+                        "why": metadata.why,
+                        "created_at": _timestamp_text(metadata.created_at),
+                        "diffstat": diffstat,
+                    }
+                )
+            graph_attempts.append(
+                {
+                    "intent": intent_value.id,
+                    "intent_title": intent_value.title,
+                    "attempt": current_attempt,
+                    "checkpoint": oid,
+                    "checkpoints": lineage,
+                }
+            )
+    return {
+        "intents": [_intent_payload(item) for item in intents],
+        "attempts": graph_attempts,
+        "selected_intent": intent_id,
+        "selected_attempt": attempt_id,
+    }
+
+
 @cli.command(
     "log",
     description="Read the append-only intent journal",
@@ -1347,6 +1408,260 @@ def explain_why(target: TargetArgument) -> dict:
             }
     location = f"{path}:{line}" if line is not None else path
     raise WaypointError(f"No Waypoint checkpoint touches {location!r}")
+
+
+ATTEMPT_GRAPH_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Waypoint attempt graph</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        --accent: #7c5cff;
+        --muted: color-mix(in srgb, CanvasText 58%, transparent);
+        --line: color-mix(in srgb, CanvasText 22%, transparent);
+        --panel: color-mix(in srgb, Canvas 88%, CanvasText 12%);
+        --winner: #2da44e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 1rem; background: Canvas; color: CanvasText; }
+      main { display: grid; gap: 1rem; min-width: 18rem; }
+      header { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; }
+      h1 { margin: 0; font-size: 1.15rem; }
+      label { display: grid; gap: .25rem; font-size: .75rem; color: var(--muted); }
+      select, button { font: inherit; }
+      select { min-width: 12rem; padding: .4rem; }
+      button { border: 1px solid var(--line); border-radius: .4rem; padding: .4rem .6rem; background: var(--panel); color: inherit; cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: .55; }
+      #lanes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(12rem, 1fr); gap: .75rem; overflow-x: auto; padding-bottom: .25rem; }
+      .lane { position: relative; display: grid; align-content: start; gap: .55rem; min-height: 11rem; padding: .75rem; border: 1px solid var(--line); border-radius: .6rem; background: var(--panel); }
+      .lane[data-winner="true"] { border-color: var(--winner); box-shadow: 0 0 0 1px var(--winner); }
+      .lane h2 { margin: 0; font-size: .95rem; }
+      .checkpoint { position: relative; display: grid; gap: .12rem; width: 100%; text-align: left; background: Canvas; }
+      .checkpoint::before { content: ""; position: absolute; left: -.42rem; top: 50%; width: .36rem; height: .36rem; border-radius: 50%; background: var(--accent); }
+      .checkpoint small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .actions { display: flex; gap: .4rem; margin-top: auto; }
+      #convergence { display: grid; place-items: center; min-height: 3rem; border-top: 2px solid var(--line); color: var(--muted); font-size: .85rem; }
+      #convergence[data-picked="true"] { border-color: var(--winner); color: var(--winner); font-weight: 700; }
+      #detail { min-height: 5rem; padding: .75rem; border: 1px solid var(--line); border-radius: .6rem; }
+      #detail h2 { margin: 0 0 .5rem; font-size: .95rem; }
+      #detail p { margin: .25rem 0; }
+      #status { margin: 0; color: var(--muted); font-size: .8rem; }
+      @media (max-width: 34rem) { #lanes { grid-auto-flow: row; grid-auto-columns: auto; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><h1>Waypoint attempt race</h1><p id="status" aria-live="polite">Connecting to the host…</p></div>
+        <label>Intent <select id="intent" disabled></select></label>
+        <button id="refresh" type="button" disabled>Refresh</button>
+      </header>
+      <section id="lanes" aria-label="Parallel attempts"></section>
+      <div id="convergence" aria-live="polite">Pick an attempt to converge the race.</div>
+      <section id="detail" aria-live="polite"><h2>Checkpoint detail</h2><p>Select a checkpoint to inspect why it exists.</p></section>
+    </main>
+    <script>
+      (() => {
+        const pending = new Map();
+        const intentSelect = document.querySelector("#intent");
+        const lanes = document.querySelector("#lanes");
+        const detail = document.querySelector("#detail");
+        const convergence = document.querySelector("#convergence");
+        const refresh = document.querySelector("#refresh");
+        const status = document.querySelector("#status");
+        let nextId = 1;
+        let toolName = "attempt-graph";
+        let pickToolName = "pick";
+        let serverTools = false;
+        let graph = { intents: [], attempts: [] };
+        let winnerAttempt = "";
+
+        function post(message) { window.parent.postMessage({ jsonrpc: "2.0", ...message }, "*"); }
+        function request(method, params) {
+          const id = nextId++;
+          post({ id, method, params });
+          return new Promise((resolve, reject) => {
+            const timer = window.setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out`)); }, 10000);
+            pending.set(id, { resolve, reject, timer });
+          });
+        }
+        function notify(method, params = {}) { post({ method, params }); }
+        function siblingTool(name, sibling) {
+          const split = name.lastIndexOf(".");
+          return split < 0 ? sibling : `${name.slice(0, split + 1)}${sibling}`;
+        }
+        function text(tag, value, className = "") {
+          const node = document.createElement(tag);
+          node.textContent = value;
+          if (className) node.className = className;
+          return node;
+        }
+        function showDetail(attempt, checkpoint) {
+          detail.replaceChildren();
+          detail.append(text("h2", `${attempt.attempt} · ${checkpoint.checkpoint.slice(0, 12)}`));
+          detail.append(text("p", checkpoint.why));
+          detail.append(text("p", `${checkpoint.agent} · ${checkpoint.created_at}`));
+          detail.append(text("p", checkpoint.diffstat || "No diffstat"));
+        }
+        async function inspectAttempt(attempt) {
+          if (!serverTools) return;
+          status.textContent = `Inspecting ${attempt.attempt}…`;
+          try {
+            const result = await request("tools/call", { name: toolName, arguments: { intent_id: attempt.intent, attempt_id: attempt.attempt } });
+            renderToolResult(result);
+            status.textContent = `Showing ${attempt.attempt}.`;
+          } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+        }
+        async function pickAttempt(attempt) {
+          if (!serverTools) return;
+          status.textContent = `Requesting pick for ${attempt.attempt}…`;
+          try {
+            const result = await request("tools/call", { name: pickToolName, arguments: { attempt: `${attempt.intent}/${attempt.attempt}` } });
+            const data = result && result.structuredContent;
+            if (data && data.status === "picked") {
+              winnerAttempt = attempt.attempt;
+              renderGraph(graph);
+              status.textContent = `${attempt.attempt} picked.`;
+            } else status.textContent = "Pick was cancelled or returned no structured result.";
+          } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+        }
+        function renderGraph(data) {
+          graph = data && typeof data === "object" ? data : { intents: [], attempts: [] };
+          const currentIntent = graph.selected_intent || intentSelect.value || graph.intents?.[0]?.id || "";
+          intentSelect.replaceChildren();
+          for (const item of graph.intents || []) {
+            const option = text("option", item.title || item.id);
+            option.value = item.id;
+            option.selected = item.id === currentIntent;
+            intentSelect.append(option);
+          }
+          lanes.replaceChildren();
+          const visible = (graph.attempts || []).filter((item) => !currentIntent || item.intent === currentIntent);
+          for (const attempt of visible) {
+            const lane = document.createElement("article");
+            lane.className = "lane";
+            lane.dataset.winner = String(attempt.attempt === winnerAttempt);
+            lane.append(text("h2", attempt.attempt));
+            for (const checkpoint of attempt.checkpoints || []) {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "checkpoint";
+              button.append(text("strong", checkpoint.checkpoint.slice(0, 12)));
+              button.append(text("small", checkpoint.why));
+              button.addEventListener("click", () => showDetail(attempt, checkpoint));
+              lane.append(button);
+            }
+            const actions = document.createElement("div");
+            actions.className = "actions";
+            const inspect = text("button", "Inspect");
+            inspect.type = "button";
+            inspect.disabled = !serverTools;
+            inspect.addEventListener("click", () => inspectAttempt(attempt));
+            const pick = text("button", "Pick");
+            pick.type = "button";
+            pick.disabled = !serverTools;
+            pick.addEventListener("click", () => pickAttempt(attempt));
+            actions.append(inspect, pick);
+            lane.append(actions);
+            lanes.append(lane);
+          }
+          convergence.dataset.picked = String(Boolean(winnerAttempt));
+          convergence.textContent = winnerAttempt ? `Winner: ${winnerAttempt}` : "Parallel attempts converge here after pick.";
+          if (!visible.length) lanes.append(text("p", "No attempts for this intent."));
+        }
+        function renderToolResult(result) {
+          const data = result && result.structuredContent;
+          if (!data || typeof data !== "object") { status.textContent = "The tool returned no structured graph."; return; }
+          renderGraph(data);
+        }
+        async function refreshGraph() {
+          if (!serverTools) return;
+          status.textContent = "Refreshing graph…";
+          try {
+            const args = intentSelect.value ? { intent_id: intentSelect.value } : {};
+            const result = await request("tools/call", { name: toolName, arguments: args });
+            renderToolResult(result);
+            status.textContent = "Graph refreshed.";
+          } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+        }
+
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent) return;
+          const message = event.data;
+          if (!message || message.jsonrpc !== "2.0") return;
+          if (Object.hasOwn(message, "id") && pending.has(message.id)) {
+            const entry = pending.get(message.id);
+            pending.delete(message.id);
+            window.clearTimeout(entry.timer);
+            if (message.error) entry.reject(new Error(message.error.message || "Host error"));
+            else entry.resolve(message.result);
+            return;
+          }
+          if (message.method === "ui/notifications/tool-input") {
+            const selected = message.params && message.params.arguments?.intent_id;
+            if (typeof selected === "string") intentSelect.value = selected;
+          } else if (message.method === "ui/notifications/tool-result") renderToolResult(message.params);
+        });
+        refresh.addEventListener("click", refreshGraph);
+        intentSelect.addEventListener("change", refreshGraph);
+        request("ui/initialize", {
+          protocolVersion: "2026-01-26",
+          appInfo: { name: "Waypoint attempt graph", version: "1.0.0" },
+          appCapabilities: {},
+        }).then((result) => {
+          toolName = result?.hostContext?.toolInfo?.tool?.name || toolName;
+          pickToolName = siblingTool(toolName, "pick");
+          serverTools = Boolean(result?.hostCapabilities?.serverTools);
+          refresh.disabled = !serverTools;
+          intentSelect.disabled = !serverTools;
+          notify("ui/notifications/initialized");
+          renderGraph(graph);
+          status.textContent = serverTools ? "Connected. Refresh or inspect an attempt." : "Connected with structured fallback; host tool calls unavailable.";
+        }).catch((error) => { status.textContent = error instanceof Error ? error.message : String(error); });
+      })();
+    </script>
+  </body>
+</html>"""
+
+
+@cli.ui_resource(
+    "ui://waypoint/attempts",
+    name="Waypoint attempt graph",
+    description="Dependency-free parallel attempt DAG",
+    meta=MCPAppResourceMeta(prefers_border=True),
+)
+def attempt_graph_view() -> str:
+    """Return the static MCP Apps document for the attempt graph."""
+    return ATTEMPT_GRAPH_HTML
+
+
+@cli.command(
+    "attempt-graph",
+    description="Inspect the intent, attempt, and checkpoint graph",
+    annotations={"readOnlyHint": True},
+    ui=MCPAppToolMeta("ui://waypoint/attempts"),
+)
+def attempt_graph(
+    intent_id: Identifier | None = None,
+    attempt_id: Identifier | None = None,
+) -> dict:
+    """Return a nested graph for plain agents and optional Apps hosts.
+
+    Args:
+        intent_id: Optional intent to focus.
+        attempt_id: Optional attempt to inspect within the selected intent.
+    """
+    if attempt_id is not None and intent_id is None:
+        raise ValueError("intent_id is required when attempt_id is provided")
+    return _attempt_graph_data(
+        GitRepository.discover(),
+        intent_id=intent_id,
+        attempt_id=attempt_id,
+    )
 
 
 @cli.resource(

@@ -81,6 +81,19 @@ calls always receive the same structured records. Interactive terminals ask
 before `pick` or `undo`, while non-interactive and MCP dispatch rely on the
 existing destructive tool annotations instead of reading stdin.
 
+## MCP Apps attempt graph
+
+`attempt-graph` returns the complete intent → attempt → checkpoint graph as
+structured JSON in every host. Clients that negotiate MCP Apps also receive
+the linked `ui://waypoint/attempts` view: parallel attempt lanes, checkpoint
+inspection, refresh, and a pick action that converges the selected winner.
+
+The HTML is dependency-free and uses no external assets. It discovers the
+host- or gateway-rewritten tool identity during `ui/initialize`, so refresh,
+inspect, and pick calls remain valid behind a Milo gateway. Hosts without Apps
+support keep the same read-only tool and structured fallback without seeing a
+UI resource.
+
 ## Verify the showcase
 
 ```bash
