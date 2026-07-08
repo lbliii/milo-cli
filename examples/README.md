@@ -2,6 +2,11 @@
 
 These examples are copy paths, not side demos. Every example directory has a runnable `app.py`; focused READMEs exist for the examples that are best starting points for new projects.
 
+Want the complete product demonstration instead? The
+[Waypoint showcase](../showcase/waypoint/) deliberately combines hooks, CLI,
+MCP, a terminal app, and an MCP Apps view; use the examples below when you want
+small code to copy into your own project.
+
 ## Fastest Starting Points
 
 | Start here when you need | Example | Why |

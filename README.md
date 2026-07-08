@@ -163,6 +163,11 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 
 Pick the example closest to your use case, copy its `app.py`, and adapt. See [examples/README.md](examples/README.md) for run commands, copy paths, and tested starting points.
 
+For a recording-ready integration demo instead of a copy path, run the
+[Waypoint showcase](showcase/waypoint/): three parallel agents journal a race
+through hooks and CLI, a shell-less agent reads and picks through MCP, and a
+human gets the same history as a TUI and MCP Apps DAG.
+
 **CLIs (typed function → CLI + MCP + llms.txt)**
 
 | What you want to build | Example | Key APIs |

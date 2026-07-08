@@ -1,47 +1,86 @@
 # Waypoint
 
-Waypoint is a showcase application for an agent-native intent journal layered
-over Git. Git records what changed; Waypoint records why it changed, which
-agent made the change, and which parallel attempt produced it.
+Git records what changed; agents need why. Waypoint is an intent journal layered
+over Git that records the goal, agent, attempt, and reason behind parallel work
+without moving `HEAD`, staging files, or rewriting a worktree.
 
-This directory is intentionally under `showcase/`, not `examples/`: Waypoint
-is a full demonstration of Milo's CLI and MCP contract. The examples remain
-small copy paths.
+This directory is intentionally under `showcase/`, not `examples/`: Waypoint is
+a complete demonstration of Milo's shared CLI, MCP, and terminal-app contract.
+The examples remain small, focused copy paths.
 
-## Try the core loop
+## Prove it in 60 seconds
 
-Run these commands inside a Git repository with an initial commit:
+From a clean Milo checkout with [`uv`](https://docs.astral.sh/uv/) and Git:
 
-```bash
-APP=/path/to/milo-cli/showcase/waypoint/app.py
-
-uv run python "$APP" intent "Improve the parser" \
-  --intent-id improve-parser --agent codex
-
-# Edit files, then record why this attempt exists.
-uv run python "$APP" checkpoint \
-  --intent improve-parser \
-  --attempt-id no-cache \
-  --agent codex \
-  --why "remove the stale parser cache"
-
-uv run python "$APP" attempts improve-parser --format table
-uv run python "$APP" why src/parser.py:42 --format json
-uv run python "$APP" pick improve-parser/no-cache
+```bash milo-docs:run cwd=.
+uv run python showcase/waypoint/replay.py
 ```
 
-For zero-touch journaling from an agent harness, use
-[`checkpoint --auto`](HOOKS.md). It consumes Claude Code-compatible hook JSON
-from stdin, infers the session identity and intent, and safely skips clean
-turns.
+The replay creates a retained temporary fixture repository, then runs one race
+in three acts:
 
-`pick` refuses a patch that conflicts with the current working tree. Review
-local changes first, or use `--force` to overwrite only paths changed by the
-selected attempt. Reverse one checkpoint's delta with its printed id:
+1. Three simulated harness sessions edit the same file. Claude Code-compatible
+   stop-hook payloads create `fast`, `safe`, and `balanced` checkpoints through
+   the CLI without an explicit agent checkpoint call.
+2. A real stdio MCP session asks why the line exists, reads the attempt graph,
+   and picks `safe`. The transcript shows the read-only and destructive tool
+   hints a shell-less host uses for approval policy.
+3. The same journal becomes the human timeline and the MCP Apps attempt DAG.
 
-```bash
-uv run python "$APP" undo 0123456789ab
+The command normally completes in under ten seconds and prints the fixture
+path so you can inspect it. To choose the destination yourself, pass an empty
+or nonexistent directory:
+
+```bash milo-docs:skip reason=creates-a-git-fixture-at-a-user-selected-path
+uv run python showcase/waypoint/replay.py --repo /tmp/waypoint-demo
 ```
+
+Then explore the retained fixture from that directory:
+
+```bash milo-docs:skip reason=requires-the-replay-fixture-path
+APP=/absolute/path/to/milo-cli/showcase/waypoint/app.py
+uv run python "$APP" attempts plan-race --format table
+uv run python "$APP" why planner.py:2 --format json
+uv run python "$APP" log
+uv run python "$APP" attempt-graph --intent-id plan-race --format json
+```
+
+## The three consumption modes
+
+### Act 1: hook → CLI
+
+Inside a shell-capable harness, install the
+[Claude Code/Conductor hook recipe](HOOKS.md). Hooks pipe edit and stop events
+to `checkpoint --auto`; agents use `why` and `attempts` through the CLI. Nothing
+is registered as MCP, and the automatic write path costs no prompt context.
+
+### Act 2: agent → MCP
+
+In a shell-less host, register the same file as a stdio MCP server:
+
+```bash milo-docs:skip reason=requires-a-host-specific-mcp-registration
+uv run python showcase/waypoint/app.py --mcp
+```
+
+`why`, `attempts`, and `attempt-graph` advertise `readOnlyHint`, so a host can
+approve inspection automatically. `pick` and `undo` advertise
+`destructiveHint`, so the host can ask before changing the worktree. Types,
+docstrings, and annotations on the existing functions produce those schemas;
+there is no adapter layer.
+
+### Act 3: human → TUI / MCP Apps
+
+Run `wp log` in a terminal for the interactive timeline. Checkpoints are
+grouped by intent and attempt; use `j`/`k` (or arrow keys) to navigate, Enter
+to inspect why and the diffstat, and `q`/Escape to quit.
+
+An MCP Apps-capable host links `attempt-graph` to
+`ui://waypoint/attempts`. The dependency-free view renders parallel lanes,
+checkpoint detail, refresh, and the destructive pick action. Hosts without
+Apps support receive the same structured graph.
+
+Hook → CLI, agent → MCP, and human → TUI/Apps all come from the same typed
+functions. **CLI for depth, MCP for reach.**
 
 ## Storage and safety contract
 
@@ -51,52 +90,26 @@ uv run python "$APP" undo 0123456789ab
   worktree files and whose trailers record intent, attempt, agent, timestamp,
   task reference, and why.
 - Snapshotting uses a temporary `GIT_INDEX_FILE`; `intent` and `checkpoint`
-  never change HEAD, the real index, or working-tree files.
+  never change `HEAD`, the real index, or working-tree files.
 - Ref updates use Git compare-and-swap semantics. Concurrent writers cannot
   silently replace one another under free-threaded Python.
 - Every Git subprocess captures stdout/stderr and has a ten-second timeout.
-- Only `pick` and `undo` mutate files, and both leave HEAD and the index alone.
+- Only `pick` and `undo` mutate files, and both leave `HEAD` and the index alone.
 
-## Agent resources
+## Packaging decision
 
-The same journal is readable without shell access:
-
-- `waypoint://intents` — declared intents.
-- `waypoint://attempts/<intent>` — competing attempts for one intent.
-- `waypoint://journal` — immutable intent/checkpoint events in append order.
-
-`pick` and `undo` stream progress and are the only tools marked destructive.
-`intents`, `attempts`, `log`, and `why` are marked read-only so an MCP host can
-apply the appropriate approval policy.
-
-## Human timeline
-
-Run `wp log` in a terminal to open the interactive timeline. Checkpoints are
-grouped by intent and attempt; use `j`/`k` (or arrow keys) to navigate, Enter
-to expand the selected checkpoint's why and diffstat, and `q`/Escape to quit.
-
-In CI or a non-interactive shell, plain output becomes a compact text timeline.
-Every list command supports `--format plain|table|json`; MCP and programmatic
-calls always receive the same structured records. Interactive terminals ask
-before `pick` or `undo`, while non-interactive and MCP dispatch rely on the
-existing destructive tool annotations instead of reading stdin.
-
-## MCP Apps attempt graph
-
-`attempt-graph` returns the complete intent → attempt → checkpoint graph as
-structured JSON in every host. Clients that negotiate MCP Apps also receive
-the linked `ui://waypoint/attempts` view: parallel attempt lanes, checkpoint
-inspection, refresh, and a pick action that converges the selected winner.
-
-The HTML is dependency-free and uses no external assets. It discovers the
-host- or gateway-rewritten tool identity during `ui/initialize`, so refresh,
-inspect, and pick calls remain valid behind a Milo gateway. Hosts without Apps
-support keep the same read-only tool and structured fallback without seeing a
-UI resource.
+Keep Waypoint in-tree through Milo's launch. It is an integration showcase,
+not a promised standalone product, and colocating it keeps framework changes
+and the cross-surface proof atomic. Reassess after launch: graduate it to a
+sibling repository consuming `milo-cli` from PyPI when it needs an independent
+release cadence or gains users outside Milo development. That graduation would
+be valuable second-consumer dogfood rather than a prerequisite for launch.
 
 ## Verify the showcase
 
 ```bash
-uv run milo verify showcase/waypoint/app.py
-PYTHON_GIL=0 uv run pytest tests/test_waypoint_showcase.py -q
+make showcase-test
 ```
+
+That target runs every `tests/test_waypoint*.py` contract under free-threading
+and executes `milo verify showcase/waypoint/app.py`. It is part of `make ci`.

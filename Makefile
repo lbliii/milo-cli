@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov lint format ty bench docs-test ci clean build release-status gh-release changelog changelog-draft
+.PHONY: all help setup install test test-cov showcase-test lint format ty bench docs-test ci clean build release-status gh-release changelog changelog-draft
 
 all: help
 
@@ -16,6 +16,7 @@ help:
 	@echo "  make install   - uv sync --group dev"
 	@echo "  make test      - pytest (tests/ only)"
 	@echo "  make test-cov  - pytest + coverage (fail under 80%)"
+	@echo "  make showcase-test - Waypoint tests + Milo verifier"
 	@echo "  make bench     - pytest-benchmark (benchmarks/)"
 	@echo "  make lint      - ruff check"
 	@echo "  make format    - ruff format"
@@ -49,19 +50,24 @@ docs-test:
 	uv run python scripts/check_templates.py
 	uv run python scripts/check_docs_snippets.py
 
+showcase-test:
+	PYTHON_GIL=0 uv run pytest tests/test_waypoint*.py -q --tb=short --timeout=120
+	uv run milo verify showcase/waypoint/app.py
+
 lint:
-	uv run ruff check src/ tests/ benchmarks/
+	uv run ruff check src/ tests/ benchmarks/ showcase/waypoint/
 
 format:
-	uv run ruff format src/ tests/ benchmarks/
+	uv run ruff format src/ tests/ benchmarks/ showcase/waypoint/
 
 ty:
 	uv run ty check src/milo/
 
 ci: lint
-	uv run ruff format src/ tests/ benchmarks/ --check
+	uv run ruff format src/ tests/ benchmarks/ showcase/waypoint/ --check
 	$(MAKE) ty
 	$(MAKE) test-cov
+	$(MAKE) showcase-test
 
 clean:
 	rm -rf dist/ .pytest_cache .coverage coverage.xml htmlcov/
