@@ -293,7 +293,9 @@ Verification Status: machine-verified
 8. **Add #77 downstream canary.** Completed with exact `milo-cli==0.4.1` and
    `bengal-chirp==0.9.0` pins; help, parsing, exit, stdout/stderr, structured
    calls, MCP, llms.txt, and lazy imports run under Python 3.14 free-threading.
-9. **Publish #78 migration guide.** Only after the canary proves the path.
+9. **Publish #78 migration guide.** Completed as the public
+   [mature-CLI adoption guide](https://lbliii.github.io/milo-cli/docs/get-started/migrate-existing-cli/framework-adoption/),
+   grounded in this inventory and the released canary.
 
 ## Proof and Risk Plan
 
