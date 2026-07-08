@@ -1,0 +1,44 @@
+name: Downstream Chirp Canary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/downstream-chirp.yml"
+      - "Makefile"
+      - "scripts/check_chirp_canary.py"
+      - "tests/downstream/chirp_canary/**"
+      - "docs/chirp-downstream-canary.md"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/downstream-chirp.yml"
+      - "Makefile"
+      - "scripts/check_chirp_canary.py"
+      - "tests/downstream/chirp_canary/**"
+      - "docs/chirp-downstream-canary.md"
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: downstream-chirp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  released-contract:
+    name: Milo 0.4.1 / Chirp 0.9.0 (Python 3.14t)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHON_GIL: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14t"
+          enable-cache: true
+
+      - name: Run exact-release canary
+        run: make chirp-canary

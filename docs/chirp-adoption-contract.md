@@ -1,6 +1,6 @@
 # Chirp CLI Adoption Contract
 
-Status: **five generic contracts approved and implemented; release required before downstream migration**
+Status: **five generic contracts approved and implemented; released exact-version downstream canary active**
 Milo issue: [#75](https://github.com/lbliii/milo-cli/issues/75)
 Chirp source audited: [`9d2279f`](https://github.com/lbliii/chirp/commit/9d2279fc6f30b4b4c61e8bc658adf9296afd1e17)
 on July 7, 2026
@@ -9,6 +9,11 @@ This document defines what Chirp owns, what Milo can express today through
 public APIs, and which generic Milo contracts Chirp needs before replacing its
 argparse entrypoint. The maintainer approved all five contracts on July 7,
 2026; Milo's #76 implementation contains no Chirp-specific runtime behavior.
+The original gate was **release required before downstream migration**. Milo
+0.4.1 and the exact-version canary clear that gate; Chirp's adapter and
+dependency decision remain downstream work.
+See [Chirp Downstream Canary](chirp-downstream-canary.md) for the pinned pair,
+machine receipt, CI lane, and version-advance policy.
 
 ## Compatibility Promise
 
@@ -285,9 +290,9 @@ Verification Status: machine-verified
    explicit terminal confirmation policy where appropriate.
 7. **Migrate CLI-only servers last.** `run` and `dev` prove per-surface
    visibility and shutdown behavior without entering MCP discovery.
-8. **Add #77 downstream canary.** Pin released versions and assert help,
-   parsing, exit, stdout/stderr, structured calls, MCP, llms.txt, and lazy
-   imports under Python 3.14 free-threading.
+8. **Add #77 downstream canary.** Completed with exact `milo-cli==0.4.1` and
+   `bengal-chirp==0.9.0` pins; help, parsing, exit, stdout/stderr, structured
+   calls, MCP, llms.txt, and lazy imports run under Python 3.14 free-threading.
 9. **Publish #78 migration guide.** Only after the canary proves the path.
 
 ## Proof and Risk Plan
@@ -312,5 +317,6 @@ Verification Status: machine-verified
 
 The inventory originally disproved “Chirp can migrate today with public Milo
 APIs only.” The five framework-neutral blockers now have executable Milo
-contracts. Chirp still must wait for a released Milo version, then prove its
-own adapter, golden terminal output, dependency range, and downstream canary.
+contracts and the released pair has an isolated downstream canary. Chirp still
+owns its adapter, golden terminal output, and reviewed dependency range before
+switching the packaged entry point.

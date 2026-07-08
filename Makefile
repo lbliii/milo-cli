@@ -3,7 +3,7 @@
 PYTHON_VERSION ?= 3.14t
 VENV_DIR ?= .venv
 
-.PHONY: all help setup install test test-cov showcase-test lint format ty bench docs-test ci clean build release-status gh-release changelog changelog-draft
+.PHONY: all help setup install test test-cov showcase-test chirp-canary lint format ty bench docs-test ci clean build release-status gh-release changelog changelog-draft
 
 all: help
 
@@ -17,6 +17,7 @@ help:
 	@echo "  make test      - pytest (tests/ only)"
 	@echo "  make test-cov  - pytest + coverage (fail under 80%)"
 	@echo "  make showcase-test - Waypoint tests + Milo verifier"
+	@echo "  make chirp-canary - exact released Milo/Chirp downstream contract"
 	@echo "  make bench     - pytest-benchmark (benchmarks/)"
 	@echo "  make lint      - ruff check"
 	@echo "  make format    - ruff format"
@@ -53,6 +54,11 @@ docs-test:
 showcase-test:
 	PYTHON_GIL=0 uv run pytest tests/test_waypoint*.py -q --tb=short --timeout=120
 	uv run milo verify showcase/waypoint/app.py
+
+chirp-canary:
+	PYTHON_GIL=0 uv run --no-project --isolated --python 3.14t \
+		--with milo-cli==0.4.1 --with bengal-chirp==0.9.0 \
+		python scripts/check_chirp_canary.py --require-free-threaded
 
 lint:
 	uv run ruff check src/ tests/ benchmarks/ showcase/waypoint/

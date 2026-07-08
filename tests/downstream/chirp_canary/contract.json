@@ -1,0 +1,191 @@
+{
+  "versions": {
+    "milo": "0.4.1",
+    "chirp": "0.9.0",
+    "chirp_tag": "v0.9.0",
+    "chirp_commit": "9ada3ba4b26ed37fbfde0ef69b60c3897830d3d3"
+  },
+  "root_usage": "usage: chirp [-h] [-V] {new,run,dev,check,diff,routes,security-check,freeze,makemigrations,migrate,shapes-codegen} ...",
+  "commands": {
+    "new": {
+      "description": "Create a new project",
+      "usage": "usage: chirp new [-h] [--minimal] [--stream] [--sse] [--shell] [--ai] [--with-chirpui] name",
+      "surfaces": ["cli"],
+      "annotations": {"destructiveHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "NAME"}},
+          "minimal": {"type": "boolean", "default": false},
+          "stream": {"type": "boolean", "default": false},
+          "sse": {"type": "boolean", "default": false},
+          "shell": {"type": "boolean", "default": false},
+          "ai": {"type": "boolean", "default": false},
+          "with_chirpui": {"type": "boolean", "default": false}
+        },
+        "required": ["name"]
+      }
+    },
+    "run": {
+      "description": "Start dev or production server",
+      "usage": "usage: chirp run [-h] [--host HOST] [--port PORT] [--production] [--workers WORKERS] [--metrics] [--rate-limit] [--queue] [--sentry-dsn SENTRY_DSN] app",
+      "surfaces": ["cli"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}},
+          "host": {"type": "string", "default": "127.0.0.1"},
+          "port": {"type": "integer", "default": 8000},
+          "production": {"type": "boolean", "default": false},
+          "workers": {"type": "integer", "default": 1},
+          "metrics": {"type": "boolean", "default": false},
+          "rate_limit": {"type": "boolean", "default": false},
+          "queue": {"type": "boolean", "default": false},
+          "sentry_dsn": {"type": "string", "default": null}
+        },
+        "required": ["app"]
+      }
+    },
+    "dev": {
+      "description": "Start development server with reload",
+      "usage": "usage: chirp dev [-h] [--host HOST] [--port PORT] [--production] [--workers WORKERS] [--metrics] [--rate-limit] [--queue] [--sentry-dsn SENTRY_DSN] app",
+      "surfaces": ["cli"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}},
+          "host": {"type": "string", "default": "127.0.0.1"},
+          "port": {"type": "integer", "default": 8000},
+          "production": {"type": "boolean", "default": false},
+          "workers": {"type": "integer", "default": 1},
+          "metrics": {"type": "boolean", "default": false},
+          "rate_limit": {"type": "boolean", "default": false},
+          "queue": {"type": "boolean", "default": false},
+          "sentry_dsn": {"type": "string", "default": null}
+        },
+        "required": ["app"]
+      }
+    },
+    "check": {
+      "description": "Validate hypermedia contracts",
+      "usage": "usage: chirp check [-h] [--warnings-as-errors] [--coverage] [--deploy] [--json] [--baseline PATH] [--include-info] app",
+      "surfaces": ["cli", "mcp", "llms"],
+      "annotations": {"readOnlyHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}},
+          "warnings_as_errors": {"type": "boolean", "default": false},
+          "coverage": {"type": "boolean", "default": false},
+          "deploy": {"type": "boolean", "default": false},
+          "json": {"type": "boolean", "default": false},
+          "baseline": {"type": "string", "default": null},
+          "include_info": {"type": "boolean", "default": false}
+        },
+        "required": ["app"]
+      }
+    },
+    "diff": {
+      "description": "Compare hypermedia contracts",
+      "usage": "usage: chirp diff [-h] --base REF [--json] [--warnings-as-errors] [--deploy] [--include-info] app",
+      "surfaces": ["cli", "mcp", "llms"],
+      "annotations": {"readOnlyHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}},
+          "base": {"type": "string", "x-milo-cli": {"kind": "option", "metavar": "REF"}},
+          "json": {"type": "boolean", "default": false},
+          "warnings_as_errors": {"type": "boolean", "default": false},
+          "deploy": {"type": "boolean", "default": false},
+          "include_info": {"type": "boolean", "default": false}
+        },
+        "required": ["app", "base"]
+      }
+    },
+    "routes": {
+      "description": "List registered routes",
+      "usage": "usage: chirp routes [-h] app",
+      "surfaces": ["cli", "mcp", "llms"],
+      "annotations": {"readOnlyHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}}
+        },
+        "required": ["app"]
+      }
+    },
+    "security-check": {
+      "description": "Audit app security",
+      "usage": "usage: chirp security-check [-h] app",
+      "surfaces": ["cli", "mcp", "llms"],
+      "annotations": {"readOnlyHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}}
+        },
+        "required": ["app"]
+      }
+    },
+    "freeze": {
+      "description": "Render static output",
+      "usage": "usage: chirp freeze [-h] [--exclude EXCLUDE [EXCLUDE ...]] app output",
+      "surfaces": ["cli"],
+      "annotations": {"destructiveHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "app": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "APP"}},
+          "output": {"type": "string", "x-milo-cli": {"kind": "positional", "metavar": "OUTPUT"}},
+          "exclude": {"type": "array", "items": {"type": "string"}, "minItems": 1, "default": null}
+        },
+        "required": ["app", "output"]
+      }
+    },
+    "makemigrations": {
+      "description": "Generate schema migrations",
+      "usage": "usage: chirp makemigrations [-h] --db DB --schema SCHEMA [--migrations-dir MIGRATIONS_DIR]",
+      "surfaces": ["cli"],
+      "annotations": {"destructiveHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "db": {"type": "string"},
+          "schema": {"type": "string"},
+          "migrations_dir": {"type": "string", "default": "migrations"}
+        },
+        "required": ["db", "schema"]
+      }
+    },
+    "migrate": {
+      "description": "Apply schema migrations",
+      "usage": "usage: chirp migrate [-h] --db DB [--migrations-dir MIGRATIONS_DIR]",
+      "surfaces": ["cli"],
+      "annotations": {"destructiveHint": true, "idempotentHint": true},
+      "schema": {
+        "type": "object",
+        "properties": {
+          "db": {"type": "string"},
+          "migrations_dir": {"type": "string", "default": "migrations"}
+        },
+        "required": ["db"]
+      }
+    },
+    "shapes-codegen": {
+      "description": "Inspect or generate Shapes migrations",
+      "usage": "usage: chirp shapes-codegen [-h] [--dry-run] [--audit] [--migrations MIGRATIONS_DIR] [path]",
+      "surfaces": ["cli"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "default": ".", "x-milo-cli": {"kind": "positional", "metavar": "PATH"}},
+          "dry_run": {"type": "boolean", "default": false},
+          "audit": {"type": "boolean", "default": false},
+          "migrations_dir": {"type": "string", "default": "migrations", "x-milo-cli": {"kind": "option", "aliases": ["--migrations"], "metavar": "MIGRATIONS_DIR"}}
+        }
+      }
+    }
+  }
+}
