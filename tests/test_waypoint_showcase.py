@@ -210,12 +210,12 @@ def test_full_loop_three_checkpoints_two_attempts_pick_undo_and_why(
     assert why["why"] == "try the beta design"
 
     with pytest.raises(module.WaypointError, match="conflicts"):
-        module.pick_attempt("choose/alpha")
-    picked = module.pick_attempt("choose/alpha", force=True)
+        module.cli.call("pick", attempt="choose/alpha")
+    picked = module.cli.call("pick", attempt="choose/alpha", force=True)
     assert picked["paths"] == ["story.txt"]
     assert story.read_text(encoding="utf-8") == "alpha one\nalpha two\n"
 
-    undone = module.undo_checkpoint(alpha_two["checkpoint"][:12])
+    undone = module.cli.call("undo", checkpoint=alpha_two["checkpoint"][:12])
     assert undone["checkpoint"] == alpha_two["checkpoint"]
     assert story.read_text(encoding="utf-8") == "alpha one\n"
     assert alpha_one["checkpoint"] != alpha_two["checkpoint"]
@@ -237,7 +237,7 @@ def test_non_force_pick_applies_clean_delta_and_preserves_unrelated_changes(
     unrelated = repo / "notes.txt"
     unrelated.write_text("keep me\n", encoding="utf-8")
 
-    result = module.pick_attempt("winner")
+    result = module.cli.call("pick", attempt="winner")
     assert result["force"] is False
     assert story.read_text(encoding="utf-8") == "winning change\n"
     assert unrelated.read_text(encoding="utf-8") == "keep me\n"
@@ -263,7 +263,7 @@ def test_force_pick_reproduces_added_and_deleted_paths_without_staging(
 
     _git_run(repo, "restore", "--worktree", "--", "removed.txt")
     added.unlink()
-    result = module.pick_attempt("replacement", force=True)
+    result = module.cli.call("pick", attempt="replacement", force=True)
     assert result["paths"] == ["added.txt", "removed.txt"]
     assert added.read_text(encoding="utf-8") == "new file\n"
     assert not removed.exists()

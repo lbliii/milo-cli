@@ -30,6 +30,11 @@ uv run python "$APP" why src/parser.py:42 --format json
 uv run python "$APP" pick improve-parser/no-cache
 ```
 
+For zero-touch journaling from an agent harness, use
+[`checkpoint --auto`](HOOKS.md). It consumes Claude Code-compatible hook JSON
+from stdin, infers the session identity and intent, and safely skips clean
+turns.
+
 `pick` refuses a patch that conflicts with the current working tree. Review
 local changes first, or use `--force` to overwrite only paths changed by the
 selected attempt. Reverse one checkpoint's delta with its printed id:
@@ -51,6 +56,18 @@ uv run python "$APP" undo 0123456789ab
   silently replace one another under free-threaded Python.
 - Every Git subprocess captures stdout/stderr and has a ten-second timeout.
 - Only `pick` and `undo` mutate files, and both leave HEAD and the index alone.
+
+## Agent resources
+
+The same journal is readable without shell access:
+
+- `waypoint://intents` — declared intents.
+- `waypoint://attempts/<intent>` — competing attempts for one intent.
+- `waypoint://journal` — immutable intent/checkpoint events in append order.
+
+`pick` and `undo` stream progress and are the only tools marked destructive.
+`intents`, `attempts`, `log`, and `why` are marked read-only so an MCP host can
+apply the appropriate approval policy.
 
 ## Verify the showcase
 

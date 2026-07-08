@@ -9,17 +9,21 @@ files, and neither stages those changes.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Final
 
-from milo import CLI, MaxLen, MinLen, Option, Pattern, Positional
+from milo import CLI, Ge, Le, MaxLen, MinLen, Option, Pattern, Positional
+from milo.streaming import Progress
 
 _ID_EXPRESSION: Final = r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?"
 _ID_PATTERN: Final = re.compile(_ID_EXPRESSION)
@@ -28,6 +32,18 @@ _HUNK_PATTERN: Final = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
 _TRAILER_PREFIX: Final = "Waypoint-"
 _META_REF_NAME: Final = "meta"
 _DEFAULT_TIMEOUT: Final = 10.0
+_AUTO_INPUT_LIMIT: Final = 1_000_000
+_AGENT_ENV_KEYS: Final = (
+    "WAYPOINT_AGENT",
+    "CONDUCTOR_AGENT_ID",
+    "CLAUDE_AGENT_ID",
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_SESSION_ID",
+    "CODEX_THREAD_ID",
+    "CODEX_SESSION_ID",
+    "GITHUB_ACTOR",
+    "USER",
+)
 REF_NAMESPACE: Final = "refs/waypoint"
 
 Identifier = Annotated[
@@ -37,7 +53,15 @@ Identifier = Annotated[
     Pattern(f"^{_ID_EXPRESSION}$"),
 ]
 Title = Annotated[str, Positional("TITLE"), MinLen(1), MaxLen(200)]
-IntentArgument = Annotated[str, Positional("INTENT"), MinLen(1), MaxLen(64)]
+TaskReference = Annotated[str, MinLen(1), MaxLen(200)]
+Why = Annotated[str, MinLen(1), MaxLen(500)]
+IntentArgument = Annotated[
+    str,
+    Positional("INTENT"),
+    MinLen(1),
+    MaxLen(64),
+    Pattern(f"^{_ID_EXPRESSION}$"),
+]
 IntentOption = Annotated[
     str,
     MinLen(1),
@@ -45,7 +69,13 @@ IntentOption = Annotated[
     Pattern(f"^{_ID_EXPRESSION}$"),
     Option(aliases=("--intent",), metavar="ID"),
 ]
-AttemptArgument = Annotated[str, Positional("ATTEMPT"), MinLen(1), MaxLen(129)]
+AttemptArgument = Annotated[
+    str,
+    Positional("ATTEMPT"),
+    MinLen(1),
+    MaxLen(129),
+    Pattern(f"^{_ID_EXPRESSION}(?:/{_ID_EXPRESSION})?$"),
+]
 CheckpointArgument = Annotated[
     str,
     Positional("CHECKPOINT"),
@@ -53,7 +83,7 @@ CheckpointArgument = Annotated[
     MaxLen(64),
     Pattern(r"^[0-9a-f]{7,64}$"),
 ]
-TargetArgument = Annotated[str, Positional("PATH[:LINE]"), MinLen(1)]
+TargetArgument = Annotated[str, Positional("PATH[:LINE]"), MinLen(1), MaxLen(500)]
 
 
 class WaypointError(RuntimeError):
@@ -669,6 +699,124 @@ def _slugify(value: str) -> str:
     return (slug or "intent")[:64].rstrip("-")
 
 
+def _payload_text(payload: dict[str, object], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _resolve_agent(explicit: str | None, payload: dict[str, object] | None = None) -> str:
+    """Resolve agent identity from an override, hook payload, or environment."""
+    if explicit is not None:
+        return validate_id(explicit, field="agent id")
+    if payload is not None:
+        payload_agent = _payload_text(payload, "agent_id", "agent", "session_id")
+        if payload_agent is not None:
+            return validate_id(_slugify(payload_agent), field="agent id")
+    for key in _AGENT_ENV_KEYS:
+        value = os.environ.get(key)
+        if value:
+            return validate_id(_slugify(value), field="agent id")
+    return "unknown-agent"
+
+
+def _read_auto_payload() -> dict[str, object]:
+    """Read one bounded hook payload without blocking an interactive terminal."""
+    if sys.stdin.isatty():
+        return {}
+    raw = sys.stdin.read(_AUTO_INPUT_LIMIT + 1)
+    if len(raw) > _AUTO_INPUT_LIMIT:
+        raise WaypointError("Automatic checkpoint input exceeds the 1 MB safety limit")
+    if not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"summary": raw.strip()}
+    if not isinstance(parsed, dict):
+        raise WaypointError("Automatic checkpoint input must be a JSON object or plain text")
+    return parsed
+
+
+def _auto_why(payload: dict[str, object]) -> str:
+    explicit = os.environ.get("WAYPOINT_WHY") or _payload_text(
+        payload,
+        "why",
+        "summary",
+        "turn_summary",
+        "last_assistant_message",
+    )
+    if explicit:
+        return _single_line(explicit[:500], field="checkpoint why")
+    tool_name = _payload_text(payload, "tool_name")
+    if tool_name:
+        tool_input = payload.get("tool_input")
+        detail = ""
+        if tool_input is not None:
+            detail = json.dumps(tool_input, sort_keys=True, separators=(",", ":"), default=str)
+        text = f"{tool_name}: {detail}" if detail else f"completed {tool_name}"
+        return _single_line(text[:500], field="checkpoint why")
+    event = _payload_text(payload, "hook_event_name") or "agent turn"
+    return f"automatic checkpoint after {event}"[:500]
+
+
+def _auto_intent(payload: dict[str, object]) -> tuple[str, str, str | None]:
+    intent_source = os.environ.get("WAYPOINT_INTENT") or _payload_text(
+        payload, "intent_id", "task_id", "session_id"
+    )
+    if intent_source is None:
+        raise WaypointError(
+            "Automatic checkpoint could not infer an intent; set WAYPOINT_INTENT or provide "
+            "intent_id, task_id, or session_id in the hook payload"
+        )
+    intent_id = validate_id(_slugify(intent_source), field="intent id")
+    title = os.environ.get("WAYPOINT_TASK") or _payload_text(
+        payload, "task", "task_description", "prompt"
+    )
+    task_ref = os.environ.get("WAYPOINT_TASK_REF") or _payload_text(payload, "task_id")
+    return intent_id, (title or f"Agent session {intent_source}")[:200], task_ref
+
+
+def _journal_events(repo: GitRepository) -> list[dict]:
+    """Return immutable intent/checkpoint events in append order."""
+    events: list[tuple[datetime, dict]] = []
+    for _intent_id, name, oid in repo.refs():
+        if name != _META_REF_NAME:
+            continue
+        intent_value = parse_intent_message(repo.commit_message(oid))
+        events.append(
+            (
+                intent_value.created_at,
+                {
+                    "type": "intent",
+                    **_intent_payload(intent_value),
+                    "commit": oid,
+                },
+            )
+        )
+    for checkpoint in repo.all_checkpoints():
+        metadata = checkpoint.metadata
+        events.append(
+            (
+                metadata.created_at,
+                {
+                    "type": "checkpoint",
+                    "intent": metadata.intent_id,
+                    "attempt": metadata.attempt_id,
+                    "checkpoint": checkpoint.oid,
+                    "parent": checkpoint.parent_oid,
+                    "agent": metadata.agent,
+                    "why": metadata.why,
+                    "task_ref": metadata.task_ref,
+                    "created_at": _timestamp_text(metadata.created_at),
+                },
+            )
+        )
+    return [event for _, event in sorted(events, key=lambda item: (item[0], str(item[1])))]
+
+
 def _intent_payload(intent_value: Intent) -> dict[str, str | None]:
     return {
         "id": intent_value.id,
@@ -699,7 +847,10 @@ def _parse_target(repo: GitRepository, target: str) -> tuple[str, int | None]:
 
 cli = CLI(
     name="wp",
-    description="Record why agents changed a Git working tree.",
+    description=(
+        "Declare an intent, checkpoint competing attempts, compare them, pick a winner, "
+        "and explain why each change exists."
+    ),
     version="0.1.0",
 )
 
@@ -721,8 +872,8 @@ def about() -> dict[str, str]:
 def create_intent(
     title: Title,
     intent_id: Identifier | None = None,
-    agent: Identifier = "human",
-    task_ref: str | None = None,
+    agent: Identifier | None = None,
+    task_ref: TaskReference | None = None,
 ) -> dict[str, str | None]:
     """Declare a goal that one or more agents may attempt.
 
@@ -733,6 +884,7 @@ def create_intent(
         task_ref: Optional external issue or task reference.
     """
     repo = GitRepository.discover()
+    resolved_agent = _resolve_agent(agent)
     parent = repo.head()
     existing = {item.id for item in repo.list_intents()}
     if intent_id is None:
@@ -753,7 +905,7 @@ def create_intent(
     intent_value = Intent(
         id=intent_id,
         title=title,
-        agent=agent,
+        agent=resolved_agent,
         task_ref=task_ref,
         created_at=created_at,
     )
@@ -761,10 +913,11 @@ def create_intent(
         repo.tree_oid(parent),
         intent_value.commit_message(),
         parent_oid=parent,
-        agent=agent,
+        agent=resolved_agent,
         created_at=created_at,
     )
     repo.update_ref(_intent_ref(intent_id), oid, None)
+    _register_attempt_resource(intent_id)
     return {**_intent_payload(intent_value), "commit": oid}
 
 
@@ -777,27 +930,60 @@ def list_intents() -> list[dict[str, str | None]]:
 
 @cli.command("checkpoint", description="Snapshot the worktree with intent metadata")
 def create_checkpoint(
-    intent_id: IntentOption,
-    why: Annotated[str, MinLen(1), MaxLen(500)],
+    intent_id: IntentOption | None = None,
+    why: Why | None = None,
     attempt_id: Identifier | None = None,
-    agent: Identifier = "human",
+    agent: Identifier | None = None,
+    auto: bool = False,
 ) -> dict[str, str]:
     """Snapshot dirty work without changing HEAD, the index, or files.
 
     Args:
-        intent_id: Existing intent receiving this checkpoint.
-        why: Single-line reason for the changes.
+        intent_id: Existing intent receiving this checkpoint; inferred in auto mode.
+        why: Single-line reason for the changes; inferred in auto mode.
         attempt_id: Parallel attempt lineage; defaults to the agent id.
-        agent: Agent or person creating the checkpoint.
+        agent: Agent or person creating the checkpoint; inferred when omitted.
+        auto: Read a hook payload from stdin and infer missing metadata.
     """
     repo = GitRepository.discover()
+    payload = _read_auto_payload() if auto else {}
+    resolved_agent = _resolve_agent(agent, payload)
+    if auto:
+        if intent_id is None:
+            intent_id, intent_title, task_ref = _auto_intent(payload)
+        else:
+            intent_title = os.environ.get("WAYPOINT_TASK") or _payload_text(
+                payload, "task", "task_description", "prompt"
+            )
+            intent_title = (intent_title or f"Automatic intent {intent_id}")[:200]
+            task_ref = os.environ.get("WAYPOINT_TASK_REF") or _payload_text(payload, "task_id")
+        why = why or _auto_why(payload)
+        if repo.ref_oid(_intent_ref(intent_id)) is None:
+            create_intent(
+                intent_title,
+                intent_id=intent_id,
+                agent=resolved_agent,
+                task_ref=task_ref,
+            )
+    if intent_id is None:
+        raise ValueError("intent_id is required unless --auto can infer it")
+    if why is None:
+        raise ValueError("why is required unless --auto can infer it")
     intent_value = repo.read_intent(intent_id)
-    attempt = attempt_id or agent
+    attempt = attempt_id or os.environ.get("WAYPOINT_ATTEMPT") or resolved_agent
+    validate_id(attempt, field="attempt id")
     ref = waypoint_ref(intent_id, attempt)
     previous = repo.ref_oid(ref)
     parent = previous or repo.head()
     tree = repo.snapshot_tree()
     if tree == repo.tree_oid(parent):
+        if auto:
+            return {
+                "status": "skipped",
+                "intent": intent_id,
+                "attempt": attempt,
+                "reason": "no worktree changes since the previous checkpoint",
+            }
         raise WaypointError(
             f"No worktree changes since the previous {intent_id}/{attempt} checkpoint"
         )
@@ -805,7 +991,7 @@ def create_checkpoint(
     metadata = CheckpointMetadata(
         intent_id=intent_id,
         attempt_id=attempt,
-        agent=agent,
+        agent=resolved_agent,
         why=why,
         created_at=created_at,
         task_ref=intent_value.task_ref,
@@ -814,7 +1000,7 @@ def create_checkpoint(
         tree,
         metadata.commit_message(),
         parent_oid=parent,
-        agent=agent,
+        agent=resolved_agent,
         created_at=created_at,
     )
     repo.update_ref(ref, oid, previous)
@@ -823,8 +1009,9 @@ def create_checkpoint(
         "attempt": attempt,
         "checkpoint": oid,
         "why": metadata.why,
-        "agent": agent,
+        "agent": resolved_agent,
         "ref": ref,
+        "status": "checkpointed",
     }
 
 
@@ -860,6 +1047,19 @@ def list_attempts(intent_id: IntentArgument) -> list[dict[str, str | int]]:
 
 
 @cli.command(
+    "log", description="Read the append-only intent journal", annotations={"readOnlyHint": True}
+)
+def journal_log(limit: Annotated[int, Ge(1), Le(1000)] = 100) -> list[dict]:
+    """Read intent and checkpoint events in append order.
+
+    Args:
+        limit: Maximum number of newest events to return.
+    """
+    events = _journal_events(GitRepository.discover())
+    return events[-limit:]
+
+
+@cli.command(
     "pick",
     description="Apply a winning attempt to the working tree",
     annotations={"destructiveHint": True},
@@ -873,7 +1073,9 @@ def pick_attempt(attempt: AttemptArgument, force: bool = False) -> dict:
     """
     repo = GitRepository.discover()
     intent_id, attempt_id, oid = repo.resolve_attempt(attempt)
+    yield Progress(status=f"Inspecting {intent_id}/{attempt_id}", step=0, total=2)
     history = repo.checkpoint_history(intent_id, attempt_id, oid)
+    yield Progress(status=f"Applying {len(history)} checkpoint(s)", step=1, total=2)
     paths = repo.apply_attempt(history[-1].parent_oid, oid, force=force)
     return {
         "status": "picked",
@@ -897,7 +1099,9 @@ def undo_checkpoint(checkpoint: CheckpointArgument) -> dict:
         checkpoint: Unique Waypoint checkpoint id or prefix.
     """
     repo = GitRepository.discover()
+    yield Progress(status=f"Resolving checkpoint {checkpoint}", step=0, total=2)
     resolved = repo.resolve_checkpoint(checkpoint)
+    yield Progress(status=f"Reversing {resolved.metadata.why}", step=1, total=2)
     paths = repo.reverse_checkpoint(resolved)
     return {
         "status": "undone",
@@ -937,6 +1141,65 @@ def explain_why(target: TargetArgument) -> dict:
             }
     location = f"{path}:{line}" if line is not None else path
     raise WaypointError(f"No Waypoint checkpoint touches {location!r}")
+
+
+@cli.resource(
+    "waypoint://intents",
+    name="Waypoint intents",
+    description="Declared Waypoint intents in creation order",
+    mime_type="application/json",
+)
+def intents_resource() -> list[dict[str, str | None]]:
+    """Read all declared intents."""
+    return list_intents()
+
+
+@cli.resource(
+    "waypoint://journal",
+    name="Waypoint journal",
+    description="Append-only intent and checkpoint event view",
+    mime_type="application/json",
+)
+def journal_resource() -> list[dict]:
+    """Read the complete append-only journal."""
+    return _journal_events(GitRepository.discover())
+
+
+_ATTEMPT_RESOURCE_LOCK = threading.Lock()
+_ATTEMPT_RESOURCE_URIS: set[str] = set()
+
+
+def _register_attempt_resource(intent_id: str) -> None:
+    """Register one stable per-intent resource under an explicit lock."""
+    validate_id(intent_id, field="intent id")
+    uri = f"waypoint://attempts/{intent_id}"
+    with _ATTEMPT_RESOURCE_LOCK:
+        if uri in _ATTEMPT_RESOURCE_URIS:
+            return
+
+        def read_attempts() -> list[dict[str, str | int]]:
+            return list_attempts(intent_id)
+
+        read_attempts.__name__ = f"attempts_{intent_id.replace('-', '_')}"
+        cli.resource(
+            uri,
+            name=f"Attempts for {intent_id}",
+            description=f"Competing Waypoint attempts for intent {intent_id}",
+            mime_type="application/json",
+        )(read_attempts)
+        _ATTEMPT_RESOURCE_URIS.add(uri)
+
+
+def _register_existing_attempt_resources() -> None:
+    try:
+        repo = GitRepository.discover()
+    except WaypointError:
+        return  # silent: importing for schema/verification is valid outside a Git repository
+    for intent_value in repo.list_intents():
+        _register_attempt_resource(intent_value.id)
+
+
+_register_existing_attempt_resources()
 
 
 if __name__ == "__main__":
