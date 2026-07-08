@@ -62,8 +62,8 @@ When this domain changes, check:
 - `site/config/**`, `site/data/**`, `site/assets/**` - site build,
   navigation, external refs, and assets.
 - `scripts/check_docs_snippets.py`,
-  `tests/test_docs_information_architecture.py`,
-  `tests/test_docs_snippets.py`, `tests/test_migration_docs.py` -
+  `tests/docs/test_information_architecture.py`,
+  `tests/docs/test_snippets.py`, `tests/docs/test_migration.py` -
   verification gates.
 
 ## Advocate

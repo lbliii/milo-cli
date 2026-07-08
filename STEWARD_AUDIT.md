@@ -395,7 +395,7 @@ Verification Status: machine-verified
 
 Resolution: Fixed on 2026-07-06. Direct registration now instructs the
 reader to call `greet`, while the gateway alternative explicitly uses
-`my_cli.greet`. `tests/test_mcp_compat_docs.py` locks both names to their
+`my_cli.greet`. `tests/docs/test_mcp_compat.py` locks both names to their
 respective setup paths.
 
 Steward: Agent Docs
@@ -442,7 +442,7 @@ Verification Status: machine-verified
 
 Resolution: Fixed on 2026-07-06. Python fences in both agent guides are
 compiled, environment-dependent shell fences carry explicit skip reasons,
-and `tests/test_docs_snippets.py` rejects future untagged Python or shell
+and `tests/docs/test_snippets.py` rejects future untagged Python or shell
 fences in either guide.
 
 ### Templates And Default UX
@@ -648,11 +648,11 @@ Evidence: Existing tests only check link substrings, so stale Key API
 descriptions can pass.
 User Impact: README descriptions can drift while the index test remains
 green.
-Required Fix: Strengthen `tests/test_readme_example_index.py` to validate
+Required Fix: Strengthen `tests/docs/test_readme_example_index.py` to validate
 structured rows or known Key API text.
 Required Proof: A failing fixture or assertion that catches the stale
 README rows.
-Collateral: `tests/test_readme_example_index.py`; `README.md` once stale
+Collateral: `tests/docs/test_readme_example_index.py`; `README.md` once stale
 rows are corrected.
 Confidence: high
 Verification Status: machine-verified

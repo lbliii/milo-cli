@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "check_docs_snippets.py"
 _SPEC = importlib.util.spec_from_file_location("check_docs_snippets", _SCRIPT)
 assert _SPEC is not None

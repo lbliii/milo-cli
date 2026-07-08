@@ -50,7 +50,7 @@ When this domain changes, check:
 - `examples/greet/**` - agent-facing smallest CLI and testing pattern.
 - `examples/outputgallery/**` - advanced terminal rendering and adoption
   guidance.
-- `tests/test_readme_example_index.py`,
+- `tests/docs/test_readme_example_index.py`,
   `tests/test_outputgallery_example.py`, `tests/test_verify.py` -
   drift and verifier gates.
 - `scripts/check_templates.py`, `scripts/check_docs_snippets.py` -
@@ -84,7 +84,7 @@ When this domain changes, check:
 **Code:** `examples/**`, including `examples/*/app.py`,
 `examples/*/templates/**`, and example READMEs.
 
-**Tests:** `tests/test_readme_example_index.py`,
+**Tests:** `tests/docs/test_readme_example_index.py`,
 `tests/test_outputgallery_example.py`, verifier coverage for examples,
 and example-local tests.
 

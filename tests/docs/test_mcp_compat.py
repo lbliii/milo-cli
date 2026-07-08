@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_mcp_reference_documents_compatibility_matrix() -> None:

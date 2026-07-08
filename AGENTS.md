@@ -366,7 +366,7 @@ paths, config reads/writes, version checks, docs commands, and examples.
   `tests/test_verify.py`.
 - **Docs-example index drift.** Shape: an example exists but README or
   examples README no longer points to it. Evidence:
-  `tests/test_readme_example_index.py`.
+  `tests/docs/test_readme_example_index.py`.
 
 ## Done Criteria
 
