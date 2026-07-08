@@ -69,6 +69,18 @@ The same journal is readable without shell access:
 `intents`, `attempts`, `log`, and `why` are marked read-only so an MCP host can
 apply the appropriate approval policy.
 
+## Human timeline
+
+Run `wp log` in a terminal to open the interactive timeline. Checkpoints are
+grouped by intent and attempt; use `j`/`k` (or arrow keys) to navigate, Enter
+to expand the selected checkpoint's why and diffstat, and `q`/Escape to quit.
+
+In CI or a non-interactive shell, plain output becomes a compact text timeline.
+Every list command supports `--format plain|table|json`; MCP and programmatic
+calls always receive the same structured records. Interactive terminals ask
+before `pick` or `undo`, while non-interactive and MCP dispatch rely on the
+existing destructive tool annotations instead of reading stdin.
+
 ## Verify the showcase
 
 ```bash
