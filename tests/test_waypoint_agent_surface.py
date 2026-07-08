@@ -179,6 +179,7 @@ def test_resources_log_and_annotations_share_the_journal_contract(
         "pick",
         "undo",
         "why",
+        "attempt-graph",
     }
     destructive = {
         name for name, tool in tools.items() if tool.get("annotations", {}).get("destructiveHint")
@@ -187,7 +188,7 @@ def test_resources_log_and_annotations_share_the_journal_contract(
         name for name, tool in tools.items() if tool.get("annotations", {}).get("readOnlyHint")
     }
     assert destructive == {"pick", "undo"}
-    assert readonly == {"about", "intents", "attempts", "log", "why"}
+    assert readonly == {"about", "intents", "attempts", "log", "why", "attempt-graph"}
 
     resources = {item["uri"]: item for item in handler.list_resources({})["resources"]}
     expected = {
@@ -293,6 +294,7 @@ def test_real_jsonrpc_agent_loop_lists_calls_resources_and_progress(tmp_path: Pa
         "pick",
         "undo",
         "why",
+        "attempt-graph",
     }
     assert _response(first, 3)["result"]["structuredContent"]["id"] == "rpc-intent"
     listed_resources = {item["uri"] for item in _response(first, 4)["result"]["resources"]}
@@ -405,6 +407,12 @@ def test_real_jsonrpc_agent_loop_lists_calls_resources_and_progress(tmp_path: Pa
             "method": "tools/call",
             "params": {"name": "undo", "arguments": {"checkpoint": second_oid}},
         },
+        {
+            "jsonrpc": "2.0",
+            "id": 17,
+            "method": "tools/call",
+            "params": {"name": "attempt-graph", "arguments": {"intent_id": "rpc-intent"}},
+        },
     )
     assert _response(final, 7)["result"]["structuredContent"][0]["checkpoints"] == 2
     assert _response(final, 8)["result"]["structuredContent"]["status"] == "picked"
@@ -423,6 +431,9 @@ def test_real_jsonrpc_agent_loop_lists_calls_resources_and_progress(tmp_path: Pa
     assert len(_response(final, 14)["result"]["structuredContent"]) == 3
     assert _response(final, 15)["result"]["structuredContent"]["why"] == ("first RPC checkpoint")
     assert _response(final, 16)["result"]["structuredContent"]["status"] == "undone"
+    assert (
+        _response(final, 17)["result"]["structuredContent"]["attempts"][0]["attempt"] == "rpc-agent"
+    )
     assert story.read_text(encoding="utf-8") == "first rpc edit\n"
 
 
