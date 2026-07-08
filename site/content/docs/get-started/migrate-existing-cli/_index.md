@@ -37,11 +37,16 @@ are derived from that signature.
 
 ## Recipes
 
+- [[docs/get-started/migrate-existing-cli/framework-adoption|Adopt Milo in a Mature CLI]]
 - [[docs/get-started/migrate-existing-cli/from-argparse|From argparse]]
 - [[docs/get-started/migrate-existing-cli/from-click|From Click]]
 - [[docs/get-started/migrate-existing-cli/from-typer|From Typer]]
 - [[docs/get-started/migrate-existing-cli/from-fire|From Python Fire]]
 - [[docs/get-started/migrate-existing-cli/from-cobra|From Cobra]]
+
+The mature-CLI guide adds the inventory, phased cutover, output/exit contract,
+agent-surface allowlist, exact-version canary, and downstream release policy
+needed when preserving an established command tree.
 
 ## Official References Checked
 

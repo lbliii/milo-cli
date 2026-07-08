@@ -90,6 +90,11 @@ The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The
 > for a 5-minute walkthrough from `@cli.command` to a verified Claude MCP tool call.
 > See also [`docs/testing.md`](./docs/testing.md) for the test template.
 
+Migrating an established framework or developer CLI? Use the
+[mature-CLI adoption guide](https://lbliii.github.io/milo-cli/docs/get-started/migrate-existing-cli/framework-adoption/)
+to inventory compatibility, phase the cutover, and add an exact-version
+downstream canary before switching entry points.
+
 ### AI-Native CLI
 
 | Function | Description |
