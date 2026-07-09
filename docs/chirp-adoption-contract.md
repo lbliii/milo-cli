@@ -1,17 +1,17 @@
 # Chirp CLI Adoption Contract
 
-Status: **five generic contracts approved and implemented; released exact-version downstream canary active**
+Status: **Chirp 0.10.0 migration released; exact-version downstream canary active**
 Milo issue: [#75](https://github.com/lbliii/milo-cli/issues/75)
 Chirp source audited: [`9d2279f`](https://github.com/lbliii/chirp/commit/9d2279fc6f30b4b4c61e8bc658adf9296afd1e17)
 on July 7, 2026
 
-This document defines what Chirp owns, what Milo can express today through
-public APIs, and which generic Milo contracts Chirp needs before replacing its
-argparse entrypoint. The maintainer approved all five contracts on July 7,
-2026; Milo's #76 implementation contains no Chirp-specific runtime behavior.
-The original gate was **release required before downstream migration**. Milo
-0.4.1 and the exact-version canary clear that gate; Chirp's adapter and
-dependency decision remain downstream work.
+This document records what Chirp owns, what Milo expresses through public APIs,
+and the generic contracts required to replace Chirp's argparse entrypoint. It
+records five generic contracts approved and implemented on July 7, 2026;
+Milo's #76 implementation contains no Chirp-specific runtime behavior. Milo
+0.4.1 cleared the original **release required before downstream migration**
+gate, and Chirp 0.10.0 now ships the adapter, direct
+`milo-cli>=0.4.1,<0.5` dependency, and reviewed read-only agent allowlist.
 See [Chirp Downstream Canary](chirp-downstream-canary.md) for the pinned pair,
 machine receipt, CI lane, and version-advance policy.
 
@@ -279,20 +279,20 @@ Verification Status: machine-verified
    together.
 3. **Release Milo.** Milo 0.4.1 is the Kida 0.11 compatibility release; do not
    make Chirp depend on an unreleased branch.
-4. **Build a Chirp adapter branch.** Register all eleven commands lazily with
-   precomputed schemas. Keep `resolve_app`, scaffolds, and domain logic in
-   Chirp.
-5. **Migrate finite read-only commands first.** `routes`, `check`, `diff`, and
-   `security-check` prove output/error parity before filesystem, database, or
-   long-running commands move.
-6. **Migrate mutations with annotations.** `new`, `freeze`,
-   `makemigrations`, and `migrate` receive destructive/idempotent hints and
-   explicit terminal confirmation policy where appropriate.
-7. **Migrate CLI-only servers last.** `run` and `dev` prove per-surface
-   visibility and shutdown behavior without entering MCP discovery.
-8. **Add #77 downstream canary.** Completed with exact `milo-cli==0.4.1` and
-   `bengal-chirp==0.9.0` pins; help, parsing, exit, stdout/stderr, structured
-   calls, MCP, llms.txt, and lazy imports run under Python 3.14 free-threading.
+4. **Build a Chirp adapter branch.** Completed in Chirp #572 with all eleven
+   commands registered lazily from precomputed, parity-tested schemas while
+   app resolution, scaffolds, and domain logic remain in Chirp.
+5. **Migrate finite read-only commands first.** Completed in Chirp #573 for
+   `check`, `diff`, and `routes`; `security-check` remains CLI-only until it has
+   a stable structured contract.
+6. **Migrate mutations with annotations.** Completed for CLI registration;
+   mutation and lifecycle commands remain excluded from agent discovery.
+7. **Migrate CLI-only servers last.** Completed for `run` and `dev`, preserving
+   the released shutdown and output contract without entering MCP discovery.
+8. **Add #77 downstream canary.** Advanced to exact `milo-cli==0.4.1` and
+   `bengal-chirp==0.10.0` pins; help, parsing, exit, stdout/stderr, structured
+   calls, the three-command MCP/llms.txt allowlist, and lazy imports run under
+   Python 3.14 free-threading.
 9. **Publish #78 migration guide.** Completed as the public
    [mature-CLI adoption guide](https://lbliii.github.io/milo-cli/docs/get-started/migrate-existing-cli/framework-adoption/),
    grounded in this inventory and the released canary.

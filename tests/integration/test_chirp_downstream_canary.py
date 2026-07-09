@@ -23,9 +23,9 @@ def test_canary_pins_released_immutable_contract() -> None:
 
     assert contract["versions"] == {
         "milo": "0.4.1",
-        "chirp": "0.9.0",
-        "chirp_tag": "v0.9.0",
-        "chirp_commit": "9ada3ba4b26ed37fbfde0ef69b60c3897830d3d3",
+        "chirp": "0.10.0",
+        "chirp_tag": "v0.10.0",
+        "chirp_commit": "3f80f81d587e81a72dfacc7f7148e79bf1134d99",
     }
     assert list(contract["commands"]) == [
         "new",
@@ -64,7 +64,7 @@ def test_current_milo_passes_the_chirp_shaped_fixture() -> None:
     assert receipt["status"] == "passed"
     assert receipt["free_threaded"] is free_threaded
     assert receipt["commands"] == 11
-    assert receipt["mcp_tools"] == ["check", "diff", "routes", "security-check"]
+    assert receipt["mcp_tools"] == ["check", "diff", "routes"]
     assert receipt["versions"] == _contract()["versions"]
 
 
@@ -77,11 +77,11 @@ def test_canary_ci_and_advance_policy_use_the_same_exact_pair() -> None:
 
     for source in (makefile, workflow, docs):
         assert "0.4.1" in source
-        assert "0.9.0" in source
+        assert "0.10.0" in source
     assert "--no-project --isolated --python 3.14t" in makefile
-    assert "--with milo-cli==0.4.1 --with bengal-chirp==0.9.0" in makefile
+    assert "--with milo-cli==0.4.1 --with bengal-chirp==0.10.0" in makefile
     assert 'PYTHON_GIL: "0"' in workflow
     assert "schedule:" in workflow
     assert "make chirp-canary" in workflow
     assert "does not use a compatible range" in docs
-    assert "do not\n   scrape an unreleased branch" in docs
+    assert "scrape an unreleased branch" in docs

@@ -270,14 +270,14 @@ passed and release notes explain downstream-visible changes.
 
 Milo's first mature-framework receipt is
 [the Chirp downstream canary](https://github.com/lbliii/milo-cli/blob/main/docs/chirp-downstream-canary.md).
-It pins `milo-cli==0.4.1`, `bengal-chirp==0.9.0`, and Chirp commit
-`9ada3ba4b26ed37fbfde0ef69b60c3897830d3d3`. The deeper
+It pins `milo-cli==0.4.1`, `bengal-chirp==0.10.0`, and Chirp commit
+`3f80f81d587e81a72dfacc7f7148e79bf1134d99`. The deeper
 [compatibility inventory](https://github.com/lbliii/milo-cli/blob/main/docs/chirp-adoption-contract.md)
-maps all eleven commands and ownership boundaries. Chirp's actual packaged
-entry-point migration remains tracked in
-[Chirp issue #572](https://github.com/lbliii/chirp/issues/572); the canary is
-evidence that released Milo supports the contract, not a claim that Chirp has
-already switched.
+maps all eleven commands and ownership boundaries. Chirp 0.10.0 ships the
+packaged entry-point migration from
+[Chirp issue #572](https://github.com/lbliii/chirp/issues/572), with `check`,
+`diff`, and `routes` explicitly exposed through MCP and llms.txt while the
+remaining commands stay CLI-only.
 
 ## Next references
 

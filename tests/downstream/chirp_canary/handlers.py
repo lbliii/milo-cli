@@ -23,10 +23,10 @@ def new(
 
 def run(
     app: str,
-    host: str = "127.0.0.1",
-    port: int = 8000,
+    host: str | None = None,
+    port: int | None = None,
     production: bool = False,
-    workers: int = 1,
+    workers: int | None = None,
     metrics: bool = False,
     rate_limit: bool = False,
     queue: bool = False,
@@ -37,10 +37,10 @@ def run(
 
 def dev(
     app: str,
-    host: str = "127.0.0.1",
-    port: int = 8000,
+    host: str | None = None,
+    port: int | None = None,
     production: bool = False,
-    workers: int = 1,
+    workers: int | None = None,
     metrics: bool = False,
     rate_limit: bool = False,
     queue: bool = False,
@@ -102,6 +102,6 @@ def shapes_codegen(
     path: str = ".",
     dry_run: bool = False,
     audit: bool = False,
-    migrations_dir: str = "migrations",
+    migrations: str = "migrations",
 ) -> dict[str, Any]:
     return _result("shapes-codegen", dict(locals()))

@@ -180,7 +180,7 @@ def _Py_mod_gil() -> int:  # noqa: N802
     return 0
 
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 __all__ = [
     "BUILTIN_ACTIONS",
     "CLI",

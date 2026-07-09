@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   released-contract:
-    name: Milo 0.4.1 / Chirp 0.9.0 (Python 3.14t)
+    name: Milo 0.4.1 / Chirp 0.10.0 (Python 3.14t)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

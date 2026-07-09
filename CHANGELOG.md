@@ -1,3 +1,28 @@
+## 0.4.2 — 2026-07-08
+
+### Added
+
+- Added an isolated Python 3.14t downstream canary pinned to released Milo 0.4.1 and Chirp 0.10.0, covering the migrated eleven-command help contract, parsing and output channels, structured dispatch, the reviewed `check`/`diff`/`routes` MCP and llms.txt allowlist, and lazy startup. ([#77](https://github.com/lbliii/milo-cli/issues/77))
+- Published a mature-CLI adoption guide covering compatibility inventory, typed adapters, groups and lazy imports, help/output/exit preservation, Context and agent-surface policy, cross-dispatch proof, phased cutover, deprecation, and exact-version downstream canaries, grounded in the released Chirp receipt. ([#78](https://github.com/lbliii/milo-cli/issues/78))
+- Added the Waypoint showcase core: validated intent/checkpoint metadata, atomic
+  `refs/waypoint/*` storage, isolated-index worktree snapshots, competing-attempt
+  inspection, conflict-safe pick, operation-level undo, and intent-aware why. ([#99](https://github.com/lbliii/milo-cli/issues/99))
+- Added Waypoint's agent surface with automatic hook checkpoints, inferred agent
+  identity, per-intent MCP resources, an append-only journal, streamed mutation
+  progress, and real JSON-RPC conformance coverage. ([#100](https://github.com/lbliii/milo-cli/issues/100))
+- Added Waypoint's human surface with an Elm-style interactive timeline,
+  context-owned mutation confirmations, polished plain output, and consistent
+  plain/table/JSON list modes without changing MCP structured results. ([#101](https://github.com/lbliii/milo-cli/issues/101))
+- Added Waypoint's dependency-free MCP Apps attempt graph with parallel lanes,
+  checkpoint inspection, gateway-safe refresh/pick calls, and structured JSON
+  fallback for clients that do not negotiate Apps support. ([#102](https://github.com/lbliii/milo-cli/issues/102))
+- Added a clean-checkout Waypoint replay that proves the same typed functions through hook-driven CLI checkpoints, real MCP inspection and picking, and the human TUI/MCP Apps DAG, with focused CI verification and launch documentation. ([#103](https://github.com/lbliii/milo-cli/issues/103))
+- Aligned Milo with the cross-stack hygiene baseline by adding contributor and security governance, a documented unit/integration/docs test taxonomy, Hypothesis schema and reducer properties, an ordinary Python 3.14 GIL-on control lane beside Python 3.14t, and reusable CI reference patterns. ([#109](https://github.com/lbliii/milo-cli/issues/109))
+- Added a reproducible Typer + FastMCP comparison fixture and a machine-checked
+  public claims ledger for Milo's cross-surface, verifier, packaging,
+  free-threading, and benchmark claims. ([#110](https://github.com/lbliii/milo-cli/issues/110))
+
+
 ## 0.4.1 — 2026-07-07
 
 ### Changed

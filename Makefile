@@ -57,7 +57,7 @@ showcase-test:
 
 chirp-canary:
 	PYTHON_GIL=0 uv run --no-project --isolated --python 3.14t \
-		--with milo-cli==0.4.1 --with bengal-chirp==0.9.0 \
+		--with milo-cli==0.4.1 --with bengal-chirp==0.10.0 \
 		python scripts/check_chirp_canary.py --require-free-threaded
 
 lint:

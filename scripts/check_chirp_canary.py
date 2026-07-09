@@ -70,15 +70,10 @@ def _require(
     raise CanaryError(message)
 
 
-def _usage_line(output: str) -> str:
+def _help_heading(output: str) -> str:
     lines = output.splitlines()
-    _require(bool(lines) and lines[0].startswith("usage: "), "help output omitted usage")
-    usage: list[str] = []
-    for line in lines:
-        if not line.strip():
-            break
-        usage.append(line.strip())
-    return " ".join(" ".join(usage).split())
+    _require(bool(lines) and bool(lines[0].strip()), "help output omitted heading")
+    return lines[0].strip()
 
 
 def _check_installed_versions(contract: dict[str, Any]) -> None:
@@ -117,8 +112,14 @@ def _check_released_chirp(contract: dict[str, Any]) -> dict[str, float]:
         root_help.returncode == 0 and not root_help.stderr, "Chirp root help failed", root_help
     )
     _require(
-        _usage_line(root_help.stdout) == contract["root_usage"],
-        "Released Chirp root usage drifted; advance the pin and manifest explicitly",
+        _help_heading(root_help.stdout) == contract["root_help_heading"],
+        "Released Chirp root help drifted; advance the pin and manifest explicitly",
+        root_help,
+    )
+    command_offsets = [root_help.stdout.index(f"  {name}") for name in commands]
+    _require(
+        command_offsets == sorted(command_offsets),
+        "Released Chirp root command order drifted",
         root_help,
     )
     for command_name, command in commands.items():
@@ -127,10 +128,28 @@ def _check_released_chirp(contract: dict[str, Any]) -> dict[str, float]:
             result.returncode == 0 and not result.stderr, f"{command_name} help failed", result
         )
         _require(
-            _usage_line(result.stdout) == command["usage"],
-            f"Released Chirp {command_name} usage drifted; update the versioned contract",
+            _help_heading(result.stdout) == command["help_heading"],
+            f"Released Chirp {command_name} help drifted; update the versioned contract",
             result,
         )
+        for property_name, prop in command["schema"]["properties"].items():
+            presentation = prop.get("x-milo-cli", {})
+            if presentation.get("kind") == "positional":
+                _require(
+                    f"  {property_name} " in result.stdout,
+                    f"Released Chirp {command_name} help omitted positional {property_name}",
+                    result,
+                )
+                continue
+            flags = [
+                f"--{property_name.replace('_', '-')}",
+                *presentation.get("aliases", []),
+            ]
+            _require(
+                any(flag in result.stdout for flag in flags),
+                f"Released Chirp {command_name} help omitted {flags}",
+                result,
+            )
 
     no_command = _run((sys.executable, "-m", "chirp.cli"))
     _require(
@@ -212,11 +231,19 @@ def _check_milo_fixture(contract: dict[str, Any]) -> dict[str, Any]:
         _require(HANDLER_MODULE not in sys.modules, "Fixture eagerly imported its handlers")
         root_help = cli.invoke(["--help"])
         _require(root_help.exit_code == 0, "Milo fixture root help failed")
+        _require(
+            _help_heading(root_help.output) == contract["root_help_heading"],
+            "Milo fixture root help heading drifted",
+        )
         for command_name in contract["commands"]:
             _require(command_name in root_help.output, f"Milo root help omitted {command_name}")
         for command_name, command in contract["commands"].items():
             result = cli.invoke([command_name, "--help"])
             _require(result.exit_code == 0, f"Milo {command_name} help failed")
+            _require(
+                _help_heading(result.output) == command["help_heading"],
+                f"Milo {command_name} help heading drifted",
+            )
             for property_name, prop in command["schema"]["properties"].items():
                 presentation = prop.get("x-milo-cli", {})
                 if presentation.get("kind") == "positional":
@@ -233,7 +260,7 @@ def _check_milo_fixture(contract: dict[str, Any]) -> dict[str, Any]:
 
         discovered = [tool.name for tool in MCPClient(cli).list_tools()]
         _require(
-            discovered == ["check", "diff", "routes", "security-check"],
+            discovered == ["check", "diff", "routes"],
             "In-process MCP discovery did not preserve the safe command set",
         )
         llms = generate_llms_txt(cli)
@@ -244,6 +271,7 @@ def _check_milo_fixture(contract: dict[str, Any]) -> dict[str, Any]:
             "new",
             "run",
             "dev",
+            "security-check",
             "freeze",
             "makemigrations",
             "migrate",
@@ -331,7 +359,7 @@ def _check_milo_fixture(contract: dict[str, Any]) -> dict[str, Any]:
     call_response = next(message for message in messages if message.get("id") == 3)
     tools = tools_response["result"]["tools"]
     _require(
-        [tool["name"] for tool in tools] == ["check", "diff", "routes", "security-check"],
+        [tool["name"] for tool in tools] == ["check", "diff", "routes"],
         "MCP discovery did not preserve the safe command set",
         rpc,
     )

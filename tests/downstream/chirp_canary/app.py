@@ -19,7 +19,7 @@ def _version_report() -> str:
 
 cli = CLI(
     name="chirp",
-    description="Released Chirp command contract expressed through Milo.",
+    description="Chirp — A Python web framework for the modern web platform.",
     version=CONTRACT["versions"]["chirp"],
     version_flags=("-V", "--version"),
     version_report=_version_report,
