@@ -84,6 +84,14 @@ class TestVerify:
         ):
             assert checks[name].status == "ok"
 
+    def test_milo_verify_passes_over_http(self):
+        app_path = Path(__file__).resolve().parents[1] / "app.py"
+        report = verify(str(app_path), transport="http")
+        checks = {check.name: check for check in report.checks}
+        assert report.exit_code == 0, report.format()
+        assert checks["mcp_http_transport"].status == "ok"
+        assert checks["mcp_apps_http_transport"].status == "ok"
+
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

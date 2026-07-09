@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import base64
+import contextvars
 import json
 import re
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from milo import __version__ as _server_version
@@ -28,6 +31,30 @@ if TYPE_CHECKING:
     from milo.commands import CLI, CommandDef, LazyCommandDef
 
 _SERVER_NAME = "milo"
+_notification_sink: contextvars.ContextVar[Callable[[dict[str, Any]], None] | None] = (
+    contextvars.ContextVar("milo_mcp_notification_sink", default=None)
+)
+
+
+@contextmanager
+def _use_notification_sink(
+    sink: Callable[[dict[str, Any]], None],
+) -> Iterator[None]:
+    """Route MCP notifications to a request-local transport sink."""
+    token = _notification_sink.set(sink)
+    try:
+        yield
+    finally:
+        _notification_sink.reset(token)
+
+
+def _emit_notification(method: str, params: dict[str, Any]) -> None:
+    """Emit through the active transport without sharing request state."""
+    sink = _notification_sink.get()
+    if sink is None:
+        _write_notification(method, params)
+        return
+    sink({"jsonrpc": "2.0", "method": method, "params": params})
 
 
 def _server_capabilities(*, include_ui: bool = False) -> dict[str, Any]:
@@ -571,7 +598,7 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
                 while True:
                     value = next(result)
                     if isinstance(value, Progress):
-                        _write_notification(
+                        _emit_notification(
                             "notifications/progress",
                             {
                                 "progressToken": tool_name,

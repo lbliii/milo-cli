@@ -50,7 +50,7 @@ def _cmd_verify(args: argparse.Namespace) -> None:
     """Run diagnostic checks against an agent-built milo CLI."""
     from milo.verify import verify
 
-    report = verify(args.target, timeout=args.timeout)
+    report = verify(args.target, timeout=args.timeout, transport=args.transport)
     sys.stdout.write(report.format() + "\n")
     sys.exit(report.exit_code)
 
@@ -168,6 +168,12 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=5.0,
         help="Seconds to wait for the subprocess MCP handshake (default: 5.0)",
+    )
+    verify_parser.add_argument(
+        "--transport",
+        choices=("stdio", "http", "both"),
+        default="stdio",
+        help="MCP transport proof to run (default: stdio)",
     )
 
     # milo dev

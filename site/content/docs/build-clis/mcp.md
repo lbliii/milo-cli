@@ -11,7 +11,7 @@ category: build-clis
 icon: cpu
 ---
 
-Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing eligible registered commands as tools that AI agents can discover and invoke. Milo serves the locked **MCP 2026-07-28 release candidate** and the legacy **MCP 2025-11-25** revision over stdio. The final 2026-07-28 specification is scheduled for July 28, 2026; Milo will re-run its conformance audit against that publication before calling support final.
+Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing eligible registered commands as tools that AI agents can discover and invoke. Milo serves the locked **MCP 2026-07-28 release candidate** over stdio and dependency-free ASGI HTTP, plus the legacy **MCP 2025-11-25** revision over stdio. The final 2026-07-28 specification is scheduled for July 28, 2026; Milo will re-run its conformance audit against that publication before calling support final.
 
 Commands registered with `surfaces` that omit `"mcp"` are neither advertised
 by `tools/list` nor callable through `tools/call`. This is appropriate for
@@ -88,6 +88,106 @@ Or pipe from a file:
 Press Ctrl+C to stop.
 ```
 
+## Streamable HTTP and ASGI
+
+`CLI.asgi_app()` exposes the same handler and schemas as a dependency-free ASGI
+3 callable. The HTTP binding serves stateless MCP 2026-07-28 only; legacy
+2025-11-25 clients continue to use `--mcp` over stdio.
+
+```python milo-docs:compile
+from milo import CLI
+
+cli = CLI(name="weather")
+
+
+@cli.command("forecast")
+def forecast(city: str) -> dict[str, str]:
+    """Return a forecast.
+
+    Args:
+        city: City to forecast.
+    """
+    return {"city": city, "condition": "sunny"}
+
+
+mcp_app = cli.asgi_app()
+```
+
+Mount `mcp_app` at `/mcp` in an existing ASGI host, or configure another path
+with `cli.asgi_app(path="/agent/mcp")`. Milo offloads synchronous command
+dispatch to worker threads, so a Python 3.14t process can execute independent
+tool calls in parallel. Shared state inside command handlers remains the
+application's locking responsibility.
+
+### Local standalone mode
+
+The base package contains the ASGI app. The optional `http` extra adds only the
+standalone Uvicorn adapter:
+
+```bash
+pip install 'milo-cli[http]'
+python app.py --mcp-http --port 8000
+```
+
+Standalone mode defaults to `127.0.0.1:8000`. Milo refuses an unauthenticated
+non-loopback bind. `--allow-unauthenticated` is an explicit unsafe override for
+deployments where a trusted reverse proxy owns authentication; authenticated
+Python deployments should configure `cli.asgi_app(...)` directly.
+
+### Bearer tokens and protected-resource metadata
+
+Configure a sync or async bearer-token callback together with an RFC 9728
+metadata document:
+
+```python milo-docs:skip reason=deployment-callback-example
+async def validate_access_token(token: str) -> bool:
+    claims = await identity_provider.validate(token)
+    return claims.audience == "https://mcp.example.com/mcp"
+
+
+mcp_app = cli.asgi_app(
+    token_validator=validate_access_token,
+    protected_resource_metadata={
+        "resource": "https://mcp.example.com/mcp",
+        "authorization_servers": ["https://identity.example.com"],
+        "scopes_supported": ["tools:call"],
+    },
+    allowed_origins=["https://agent.example.com"],
+)
+```
+
+The callback owns signature, expiry, issuer, audience, and scope validation.
+Milo accepts bearer tokens only from the `Authorization` header, returns a
+`WWW-Authenticate` challenge on 401, and serves the protected-resource
+metadata at the RFC 9728 well-known path. Requests without `Origin` are
+accepted; requests that include it must match `allowed_origins` exactly.
+
+### HTTP request contract
+
+Every `/mcp` request is one POST with `Content-Type: application/json` and an
+`Accept` header containing both `application/json` and `text/event-stream`.
+The required `MCP-Protocol-Version`, `Mcp-Method`, and applicable `Mcp-Name`
+headers must match the JSON-RPC body. Milo decodes the specification's Base64
+sentinel form, validates recognized `Mcp-Param-*` tool headers, and returns
+`HeaderMismatch` (`-32020`) with HTTP 400 on disagreement. Request bodies are
+bounded to 1 MiB by default.
+
+Commands that yield `Progress` produce request-scoped SSE notifications before
+the final JSON-RPC response. Ordinary calls return one `application/json`
+response. Milo exposes no roots, sampling, elicitation, or other server-to-
+client request API, so it does not currently emit `InputRequiredResult` MRTR
+responses.
+
+### Verify both transports
+
+```bash
+milo verify app.py --transport both
+```
+
+The combined report retains the stdio checks and adds
+`mcp_http_transport` plus `mcp_apps_http_transport`. HTTP verification calls
+the ASGI app directly; it installs no adapter and opens no socket.
+
 ## Protocol support
 
 The 2026-07-28 path is stateless: clients may probe `server/discover`, then put
@@ -110,6 +210,8 @@ required metadata returns Invalid params (`-32602`).
 | Client sends unsupported `_meta` protocol version | Milo returns JSON-RPC `-32022` with `data.supported` and `data.requested` repair fields. |
 | Milo gateway → legacy child CLI | Gateway probes `server/discover`, falls back to `initialize` on method-not-found, and records child protocol mode as `legacy`. |
 | Milo gateway → modern child CLI | Gateway uses the discovered revision and includes client metadata plus incoming W3C Trace Context on every child call. |
+| Modern HTTP client → `cli.asgi_app()` | Each POST carries 2026-07-28 metadata and matching routing headers; Milo returns JSON or request-scoped SSE. |
+| Legacy HTTP client → `cli.asgi_app()` | Milo returns HTTP 400 with `-32022`; legacy sessions, GET streams, and `Mcp-Session-Id` are intentionally not implemented. |
 
 The detailed [2026-07-28 conformance matrix](https://github.com/lbliii/milo-cli/blob/main/docs/mcp-2026-07-28-conformance.md) records implemented, legacy-only, not-advertised, and transport-deferred features.
 
@@ -438,6 +540,8 @@ check identities isolate the broken view:
 | `mcp_apps_in_process` | Discovery and negotiated capabilities agree; tool links resolve; listed resources have valid URI, MIME/profile, metadata, and readable text/base64 payloads |
 | `mcp_apps_gateway` | A real single-child gateway projection rewrites each link and preserves resource/tool metadata |
 | `mcp_apps_transport` | The same capability, list, link, and resource-read checks pass over subprocess JSON-RPC |
+| `mcp_http_transport` | Modern discovery, cache metadata, and tool lists pass through the dependency-free ASGI HTTP binding |
+| `mcp_apps_http_transport` | Negotiated MCP Apps tool/resource links and reads pass through ASGI HTTP |
 
 These failures exit 1 and include the next repair action. Schema documentation
 warnings still exit 0. Milo validates transport shape only: it does not parse,

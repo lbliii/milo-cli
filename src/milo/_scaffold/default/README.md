@@ -62,11 +62,27 @@ uv run --python 3.14 --with milo-cli python app.py --mcp
 MCP uses stdout for JSON-RPC. Do not use `print()` for progress or logs in code
 that may run under `--mcp`; use `Context` output helpers or stderr boundary code.
 
+Verify the same contract through Milo's dependency-free ASGI HTTP app:
+
+```bash
+uv run --python 3.14 --with milo-cli milo verify app.py --transport http
+```
+
+For a local standalone server, install the optional adapter and bind loopback:
+
+```bash
+uv run --python 3.14 --with 'milo-cli[http]' python app.py --mcp-http --port 8000
+```
+
+Remote authenticated deployments should expose `cli.asgi_app(...)` through
+their existing ASGI host. See the public MCP guide for the bearer-token and
+Origin contracts; the scaffold intentionally adds no optional dependency.
+
 ## Test and Verify
 
 ```bash
 uv run --python 3.14 --with milo-cli --with pytest pytest tests/ -v
-uv run --python 3.14 --with milo-cli milo verify app.py
+uv run --python 3.14 --with milo-cli milo verify app.py --transport both
 ```
 
 The generated test file covers four layers:
@@ -76,7 +92,7 @@ The generated test file covers four layers:
 | Schema | `function_to_schema(greet)` matches the function signature |
 | Direct dispatch | `cli.invoke([...])` parses argv and returns expected output |
 | MCP dispatch | `_call_tool(cli, {...})` returns content, structured `errorData`, and `server/discover` metadata |
-| Verify | `milo verify app.py` passes import, schema, discovery, MCP Apps link/resource/gateway checks, and transport reads |
+| Verify | `milo verify app.py --transport both` passes import, schema, discovery, MCP Apps link/resource/gateway checks, stdio, and ASGI HTTP reads |
 
 `milo verify` exits 0 when checks pass or only warnings are present. It exits
 nonzero on failures that would make the CLI unsafe to register as an MCP tool.
@@ -97,7 +113,7 @@ Use both command tests and `milo verify`:
 
 ```bash
 uv run --python 3.14 --with milo-cli --with pytest pytest tests/ -v
-uv run --python 3.14 --with milo-cli milo verify app.py
+uv run --python 3.14 --with milo-cli milo verify app.py --transport both
 ```
 
 ## Register with Claude

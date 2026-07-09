@@ -140,6 +140,11 @@ The generated tests cover four layers:
 uv run milo verify app.py
 ```
 
+Use `uv run milo verify app.py --transport both` to prove the same
+tool/resource contract over stdio and the dependency-free ASGI HTTP binding.
+The combined report adds `mcp_http_transport` and
+`mcp_apps_http_transport`; it does not open a port.
+
 A healthy scaffold reports ten passing checks:
 
 ```text

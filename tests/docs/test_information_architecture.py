@@ -120,8 +120,9 @@ def test_comparison_page_names_honest_decision_boundaries_and_sources():
     assert "https://gofastmcp.com/cli/inspecting" in text
     assert "https://typer.tiangolo.com/" in text
     assert "not currently the broadest remote MCP platform" in normalized
-    assert "Parallel HTTP Proof Is Still Pending" in text
-    assert "issues/106" in text
+    assert "Cross-Server Parallel HTTP Proof Is Still Pending" in text
+    assert "embeddable modern Streamable HTTP" in text
+    assert "pounce/issues/229" in text
 
 
 def test_launch_assets_are_public_safe_and_share_one_demo_contract():

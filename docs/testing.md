@@ -98,7 +98,10 @@ This checks imports, CLI discovery, schema generation, MCP `tools/list`, and a
 subprocess MCP handshake. It also negotiates MCP Apps in-process and over
 JSON-RPC, reads every `ui://` resource, and proves tool/resource links survive
 the gateway projection. Failures use the stable `mcp_apps_in_process`,
-`mcp_apps_gateway`, and `mcp_apps_transport` check names.
+`mcp_apps_gateway`, and `mcp_apps_transport` check names. Use
+`milo verify app.py --transport both` to add the stable
+`mcp_http_transport` and `mcp_apps_http_transport` checks without opening a
+network socket or installing Uvicorn.
 
 Milo validates MCP Apps URI, MIME/profile, metadata, and text/base64 transport
 shape. It does not parse application HTML. A warning still exits 0; any failed
@@ -133,7 +136,7 @@ make test
 uv run pytest examples/greet/tests/ -v
 
 # Verify an agent-facing CLI
-uv run milo verify examples/greet/app.py
+uv run milo verify examples/greet/app.py --transport both
 
 # Verify built-in templates and tagged docs snippets
 make docs-test

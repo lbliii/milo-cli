@@ -8,7 +8,7 @@ import inspect
 import io
 import os
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from milo.context import Context
     from milo.groups import Group
     from milo.mcp_apps import MCPAppResourceDef, MCPAppResourceMeta, MCPAppToolMeta
+    from milo.mcp_http import BearerTokenValidator, MCPASGIApp
     from milo.middleware import MiddlewareStack
 
 # Re-export for backward compatibility
@@ -303,6 +304,35 @@ class CLI:
                     flags=("--mcp",),
                     dest="mcp",
                     description="Run as MCP server (JSON-RPC on stdin/stdout)",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--mcp-http",),
+                    dest="mcp_http",
+                    description="Run as a modern MCP Streamable HTTP server",
+                    action="store_true",
+                    default=False,
+                ),
+                RootOptionSpec(
+                    flags=("--host",),
+                    dest="mcp_http_host",
+                    description="MCP HTTP bind host (default: 127.0.0.1)",
+                    default="127.0.0.1",
+                    metavar="HOST",
+                ),
+                RootOptionSpec(
+                    flags=("--port",),
+                    dest="mcp_http_port",
+                    description="MCP HTTP bind port (default: 8000)",
+                    default=8000,
+                    option_type=int,
+                    metavar="PORT",
+                ),
+                RootOptionSpec(
+                    flags=("--allow-unauthenticated",),
+                    dest="allow_unauthenticated",
+                    description="Allow an unauthenticated non-loopback MCP HTTP bind",
                     action="store_true",
                     default=False,
                 ),
@@ -1155,6 +1185,33 @@ class CLI:
         args = parser.parse_args(resolved_argv)
         return self._dispatch_parsed_args(args)
 
+    def asgi_app(
+        self,
+        *,
+        path: str = "/mcp",
+        token_validator: BearerTokenValidator | None = None,
+        protected_resource_metadata: Mapping[str, Any] | None = None,
+        allowed_origins: Iterable[str] = (),
+        max_request_bytes: int = 1_048_576,
+    ) -> MCPASGIApp:
+        """Return a dependency-free ASGI app for modern Streamable HTTP MCP.
+
+        Configure *token_validator* and RFC 9728
+        *protected_resource_metadata* together for authenticated deployments.
+        Requests with an ``Origin`` header are accepted only when the exact
+        origin appears in *allowed_origins*.
+        """
+        from milo.mcp_http import MCPASGIApp
+
+        return MCPASGIApp(
+            self,
+            path=path,
+            token_validator=token_validator,
+            protected_resource_metadata=protected_resource_metadata,
+            allowed_origins=allowed_origins,
+            max_request_bytes=max_request_bytes,
+        )
+
     def _dispatch_parsed_args(self, args: argparse.Namespace) -> Any:
         """Execute a fully parsed command namespace."""
 
@@ -1272,6 +1329,8 @@ class CLI:
             return BuiltinMode("llms_txt")
         if getattr(args, "mcp", False):
             return BuiltinMode("mcp")
+        if getattr(args, "mcp_http", False):
+            return BuiltinMode("mcp_http")
         if getattr(args, "mcp_install", False):
             return BuiltinMode("mcp_install")
         if getattr(args, "mcp_uninstall", False):
@@ -1294,6 +1353,20 @@ class CLI:
             from milo.mcp import run_mcp_server
 
             run_mcp_server(self)
+            return
+        if mode.name == "mcp_http":
+            from milo.mcp_http import run_mcp_http_server
+
+            try:
+                run_mcp_http_server(
+                    self,
+                    host=args.mcp_http_host,
+                    port=args.mcp_http_port,
+                    allow_unauthenticated=args.allow_unauthenticated,
+                )
+            except (RuntimeError, ValueError) as exc:
+                sys.stderr.write(f"Error: {exc}\n")
+                raise SystemExit(2) from None
             return
         if mode.name == "mcp_install":
             self._mcp_install()

@@ -23,14 +23,14 @@ available:
 ```bash milo-docs:skip reason=downloads-package-and-creates-project
 uvx --python 3.14 --from milo-cli milo new hello_milo
 uv run --python 3.14 --with milo-cli python hello_milo/app.py greet --name World
-uv run --python 3.14 --with milo-cli milo verify hello_milo/app.py
+uv run --python 3.14 --with milo-cli milo verify hello_milo/app.py --transport both
 ```
 
-The second command prints `Hello, World!`. The ten-check verifier
+The second command prints `Hello, World!`. The verifier
 ([evidence: verify-ten-check-conformance](./public-claims.json)) then exercises
 import, schema generation, MCP discovery, MCP Apps tool/resource/gateway
-conformance, and a real subprocess JSON-RPC handshake with resource reads. Do
-not register a new tool until it reports zero failures.
+conformance, a real subprocess JSON-RPC handshake, and the dependency-free ASGI
+HTTP transport. Do not register a new tool until it reports zero failures.
 
 Now give Claude Code the same file as a local stdio MCP server:
 
@@ -55,6 +55,7 @@ Milo is a Python framework where every CLI is simultaneously a terminal app, a c
 **Why people pick it:**
 
 - **Every CLI is an MCP server** — `@cli.command` produces an argparse subcommand, MCP tool, and llms.txt entry from one function. AI agents discover and call your tools with zero extra code.
+- **Local or hosted MCP** — run stdio with `--mcp`, embed `cli.asgi_app()` in any ASGI host, or install `milo-cli[http]` for the standalone `--mcp-http` adapter.
 - **Dual-mode commands** — The same command shows an interactive UI when a human runs it, and returns structured JSON when an AI calls it via MCP.
 - **Annotated schemas** — Type hints + `Annotated` constraints generate rich JSON Schema, and Milo enforces it before handlers run.
 - **Streaming progress** — Commands that yield `Progress` objects stream notifications to MCP clients in real time.
@@ -82,6 +83,13 @@ Milo is a Python framework where every CLI is simultaneously a terminal app, a c
 pip install milo-cli
 ```
 
+The dependency-free ASGI app is included in the base package. Install the
+optional standalone HTTP adapter only when needed:
+
+```bash
+pip install 'milo-cli[http]'
+```
+
 The PyPI package is **milo-cli**; import the **`milo`** namespace in Python. The `milo` console command is installed with the package.
 
 ---
@@ -105,8 +113,10 @@ downstream canary before switching entry points.
 | `@cli.command(name, description)` | Register a typed command |
 | `cli.group(name, description)` | Create a command group |
 | `cli.run()` | Parse args and dispatch |
+| `cli.asgi_app()` | Embed modern MCP Streamable HTTP in an ASGI host |
 | `cli.call("cmd", **kwargs)` | Programmatic invocation |
 | `--mcp` | Run as MCP server |
+| `--mcp-http` | Run the optional standalone HTTP adapter on loopback |
 | `--llms-txt` | Generate AI discovery doc |
 | `--mcp-install` | Register in gateway |
 | `annotations={...}` | MCP behavioral hints |
@@ -138,7 +148,7 @@ downstream canary before switching entry points.
 
 | Feature | Description | Docs |
 |---------|-------------|------|
-| **MCP Server** | Every CLI doubles as an MCP server — AI agents discover and call commands via JSON-RPC | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
+| **MCP Server** | Every CLI serves local stdio and embeddable modern Streamable HTTP from the same command contract | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
 | **MCP Gateway** | Single gateway aggregates all registered Milo CLIs for unified AI agent access | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
 | **Tool Annotations** | Declare `readOnlyHint`, `destructiveHint`, `idempotentHint` per MCP spec | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |
 | **Streaming Progress** | Commands yield `Progress` objects; MCP clients receive real-time notifications | [MCP →](https://lbliii.github.io/milo-cli/docs/build-clis/mcp/) |

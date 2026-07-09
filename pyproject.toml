@@ -26,6 +26,7 @@ milo = "milo.cli:main"
 
 [project.optional-dependencies]
 docs = ["bengal>=0.3.2"]
+http = ["uvicorn>=0.51.0,<0.52.0"]
 yaml = ["pyyaml>=6.0"]
 watch = ["watchfiles>=1.0"]
 
