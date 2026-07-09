@@ -36,6 +36,17 @@ class TestCli:
         with pytest.raises(SystemExit):
             main(["replay"])
 
+    def test_verify_transport_is_forwarded(self):
+        report = MagicMock(exit_code=0)
+        report.format.return_value = "verified"
+        with (
+            patch("milo.verify.verify", return_value=report) as mock_verify,
+            pytest.raises(SystemExit, match="0"),
+        ):
+            main(["verify", "app.py", "--transport", "http", "--timeout", "2"])
+
+        mock_verify.assert_called_once_with("app.py", timeout=2.0, transport="http")
+
 
 class TestComponentsCommand:
     """`milo components` lists bundled defs and supports --json/--path."""

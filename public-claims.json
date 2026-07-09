@@ -19,7 +19,7 @@
         "tests/test_command_contract.py",
         "benchmarks/comparison/milo_app.py"
       ],
-      "notes": "This is a local stdio MCP claim. Hosted streamable HTTP remains tracked by issue #106."
+      "notes": "The same definition now feeds local stdio and the embeddable modern ASGI HTTP binding; hosted deployment recipes remain tracked separately."
     },
     {
       "id": "verify-ten-check-conformance",
@@ -102,9 +102,12 @@
       "status": "pending",
       "files": [],
       "patterns": [],
-      "proof": "No public product claim is authorized until issue #106 provides streamable HTTP and the pounce #229 workload produces an artifact-backed chart.",
-      "evidence": [],
-      "notes": "Do not promote this claim from issue #110 before its dependencies land."
+      "proof": "tests/unit/test_mcp_http.py proves two handlers overlap in one CPython 3.14t process with PYTHON_GIL=0. No hosted throughput claim is authorized until pounce #229 produces an artifact-backed cross-server chart.",
+      "evidence": [
+        "src/milo/mcp_http.py",
+        "tests/unit/test_mcp_http.py"
+      ],
+      "notes": "Repository-level parallel execution is proven; hosted throughput remains pending and must not be promoted before pounce #229."
     }
   ]
 }

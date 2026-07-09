@@ -23,6 +23,7 @@ from app import cli, greet  # type: ignore[import-not-found]
 
 from milo.mcp import _CLIHandler, _call_tool, _list_tools
 from milo.schema import function_to_schema
+from milo.verify import verify
 
 
 class TestSchema:
@@ -77,6 +78,16 @@ class TestMCPDispatch:
         assert result["isError"] is True
         assert result["errorData"]["argument"] == "name"
         assert result["errorData"]["reason"] == "missing_required_argument"
+
+
+class TestVerify:
+    def test_milo_verify_passes_over_http(self):
+        app_path = Path(__file__).resolve().parents[1] / "app.py"
+        report = verify(str(app_path), transport="http")
+        checks = {check.name: check for check in report.checks}
+        assert report.exit_code == 0, report.format()
+        assert checks["mcp_http_transport"].status == "ok"
+        assert checks["mcp_apps_http_transport"].status == "ok"
 
 
 if __name__ == "__main__":

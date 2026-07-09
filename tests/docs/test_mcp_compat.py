@@ -51,6 +51,33 @@ def test_mcp_reference_documents_gateway_ui_contract() -> None:
     assert "does not parse" in text
 
 
+def test_mcp_reference_documents_streamable_http_security_contract() -> None:
+    text = (_ROOT / "site/content/docs/build-clis/mcp.md").read_text(encoding="utf-8")
+    for expected in (
+        "CLI.asgi_app()",
+        "--mcp-http",
+        "MCP-Protocol-Version",
+        "Mcp-Method",
+        "Mcp-Name",
+        "Mcp-Param-*",
+        "HeaderMismatch",
+        "protected_resource_metadata",
+        "allowed_origins",
+        "mcp_http_transport",
+        "mcp_apps_http_transport",
+    ):
+        assert expected in text
+
+
+def test_agent_quickstart_documents_http_verification_and_repairs() -> None:
+    text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
+    assert "--transport both" in text
+    assert "mcp_http_transport" in text
+    assert "mcp_apps_http_transport" in text
+    assert "milo-cli[http]" in text
+    assert "Non-loopback" in text
+
+
 def test_agent_quickstart_distinguishes_direct_and_gateway_tool_names() -> None:
     text = (_ROOT / "docs/agent-quickstart.md").read_text(encoding="utf-8")
     assert 'Use the `greet` tool to greet "Bob"' in text

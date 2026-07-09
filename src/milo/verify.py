@@ -1,6 +1,6 @@
 """Self-diagnosis for agent-built milo CLIs (`milo verify`).
 
-Answers "is this CLI correctly built?" via ten checks:
+Answers "is this CLI correctly built?" via ten default stdio checks:
 
 1. **Imports** — the file (or module) loads without error.
 2. **CLI located** — a ``milo.CLI`` instance is reachable in the module.
@@ -22,12 +22,16 @@ Answers "is this CLI correctly built?" via ten checks:
 10. **Subprocess MCP Apps** — the same process negotiates the MCP Apps
     extension, lists matching tool/resource views, and reads each UI resource.
 
+``--transport http`` replaces checks 9-10 with dependency-free ASGI HTTP
+checks. ``--transport both`` runs all twelve transport checks together.
+
 The report distinguishes pass/warn/fail; `milo verify` exits non-zero only on
 failures, not warnings.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import importlib
 import importlib.util
@@ -38,7 +42,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from milo._jsonrpc import (
     LEGACY_MCP_VERSION as _LEGACY_MCP_PROTOCOL_VERSION,
@@ -114,7 +118,12 @@ class VerifyReport:
         return "\n".join(lines)
 
 
-def verify(target: str, *, timeout: float = 5.0) -> VerifyReport:
+def verify(
+    target: str,
+    *,
+    timeout: float = 5.0,
+    transport: Literal["stdio", "http", "both"] = "stdio",
+) -> VerifyReport:
     """Run all verify checks against ``target``.
 
     Args:
@@ -123,12 +132,16 @@ def verify(target: str, *, timeout: float = 5.0) -> VerifyReport:
             ``sys.path`` pollution is required; module:attr is resolved via
             the standard import machinery with the cwd added to ``sys.path``.
         timeout: Seconds to wait for the subprocess MCP handshake.
+        transport: Run stdio subprocess proof, dependency-free ASGI HTTP
+            proof, or both. The default preserves the original report shape.
 
     Returns:
         A :class:`VerifyReport` with every check attached. The report's
         ``exit_code`` is 1 iff any check failed (warnings do not fail the
         report).
     """
+    if transport not in {"stdio", "http", "both"}:
+        raise ValueError("transport must be 'stdio', 'http', or 'both'")
     checks: list[VerifyCheck] = []
 
     # --- Check 1: imports ---
@@ -189,29 +202,34 @@ def verify(target: str, *, timeout: float = 5.0) -> VerifyReport:
     # --- Check 8: gateway MCP Apps projection ---
     checks.append(_check_mcp_apps_gateway(cli))
 
-    # --- Checks 9-10: subprocess MCP transport and MCP Apps conformance ---
-    if file_path is None:
-        checks.extend(
-            (
-                VerifyCheck(
-                    name="mcp_transport",
-                    status="skip",
-                    message="subprocess transport check skipped for module:attr input",
-                ),
-                VerifyCheck(
-                    name="mcp_apps_transport",
-                    status="skip",
-                    message="subprocess MCP Apps check skipped for module:attr input",
-                ),
+    ui_resource_uris = _ui_resource_uris(cli)
+    if transport in {"stdio", "both"}:
+        # --- Subprocess MCP transport and MCP Apps conformance ---
+        if file_path is None:
+            checks.extend(
+                (
+                    VerifyCheck(
+                        name="mcp_transport",
+                        status="skip",
+                        message="subprocess transport check skipped for module:attr input",
+                    ),
+                    VerifyCheck(
+                        name="mcp_apps_transport",
+                        status="skip",
+                        message="subprocess MCP Apps check skipped for module:attr input",
+                    ),
+                )
             )
-        )
-    else:
-        transport_checks = _check_subprocess_mcp(
-            file_path,
-            timeout=timeout,
-            ui_resource_uris=_ui_resource_uris(cli),
-        )
-        checks.extend(transport_checks)
+        else:
+            checks.extend(
+                _check_subprocess_mcp(
+                    file_path,
+                    timeout=timeout,
+                    ui_resource_uris=ui_resource_uris,
+                )
+            )
+    if transport in {"http", "both"}:
+        checks.extend(_check_http_mcp(cli, ui_resource_uris=ui_resource_uris))
 
     return VerifyReport(target=target, checks=tuple(checks))
 
@@ -1070,6 +1088,242 @@ def _ui_resource_uris(cli: CLI) -> tuple[str, ...]:
         if isinstance(uri, str):
             uris[uri] = None
     return tuple(uris)
+
+
+def _check_http_mcp(
+    cli: CLI,
+    *,
+    ui_resource_uris: tuple[str, ...],
+) -> tuple[VerifyCheck, VerifyCheck]:
+    """Verify the same modern base and MCP Apps views through ASGI HTTP."""
+    modern_params = {"_meta": _modern_meta(include_ui=True)}
+    requests: list[dict[str, Any]] = [
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": modern_params,
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": modern_params,
+        },
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "resources/list",
+            "params": modern_params,
+        },
+    ]
+    read_ids: dict[str, int] = {}
+    for request_id, uri in enumerate(ui_resource_uris, start=4):
+        read_ids[uri] = request_id
+        requests.append(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "resources/read",
+                "params": {"uri": uri, **modern_params},
+            }
+        )
+
+    responses: dict[int, dict[str, Any]] = {}
+    issues: list[str] = []
+    app = cli.asgi_app()
+    for request in requests:
+        try:
+            status, response = asyncio.run(_invoke_asgi_http(app, request))
+        except Exception as exc:
+            issues.append(f"{request['method']}: ASGI request raised {type(exc).__name__}: {exc}")
+            continue
+        if status != 200:
+            issues.append(
+                f"{request['method']}: expected HTTP 200, got {status}: "
+                f"{json.dumps(response, sort_keys=True)[:300]}"
+            )
+        request_id = request["id"]
+        if isinstance(request_id, int):
+            responses[request_id] = response
+
+    base_issues = list(issues)
+    discover, issue = _response_result(responses, 1, "server/discover")
+    if issue is not None or discover is None:
+        base_issues.append(issue or "server/discover: missing result object.")
+    else:
+        if _MCP_PROTOCOL_VERSION not in discover.get("supportedVersions", []):
+            base_issues.append("server/discover: response is missing the active protocol version.")
+        if discover.get("resultType") != "complete":
+            base_issues.append("server/discover: response is missing resultType=complete.")
+
+    tools_result, issue = _response_result(responses, 2, "tools/list")
+    tools: Any = []
+    if issue is not None or tools_result is None:
+        base_issues.append(issue or "tools/list: missing result object.")
+    else:
+        tools = tools_result.get("tools")
+        if not isinstance(tools, list):
+            base_issues.append("tools/list: response is missing a tools list.")
+            tools = []
+        base_issues.extend(_cacheable_result_issues(tools_result, method="tools/list"))
+
+    if base_issues:
+        base_check = VerifyCheck(
+            name="mcp_http_transport",
+            status="fail",
+            message=f"{len(base_issues)} Streamable HTTP issue(s)",
+            details="\n".join(base_issues),
+        )
+    else:
+        base_check = VerifyCheck(
+            name="mcp_http_transport",
+            status="ok",
+            message=f"modern ASGI discovery and {len(tools)} tool(s) passed over HTTP",
+        )
+
+    app_issues = list(issues)
+    if discover is not None:
+        app_issues.extend(_mcp_apps_capability_issues(discover, surface="HTTP server/discover"))
+    resources_result, issue = _response_result(responses, 3, "resources/list")
+    resources: Any = []
+    if issue is not None or resources_result is None:
+        app_issues.append(issue or "resources/list: missing result object.")
+    else:
+        resources = resources_result.get("resources")
+        app_issues.extend(_cacheable_result_issues(resources_result, method="resources/list"))
+
+    def read_resource(uri: str) -> dict[str, Any]:
+        request_id = read_ids.get(uri)
+        if request_id is None:
+            raise ValueError(f"resources/list advertised unexpected UI URI {uri!r}")
+        result, response_issue = _response_result(
+            responses,
+            request_id,
+            f"resources/read {uri}",
+        )
+        if response_issue is not None or result is None:
+            raise ValueError(response_issue or f"resources/read {uri}: missing result")
+        cache_issues = _cacheable_result_issues(result, method=f"resources/read {uri}")
+        if cache_issues:
+            raise ValueError("; ".join(cache_issues))
+        return result
+
+    view_issues, link_count, resource_count, read_count = _mcp_apps_view_issues(
+        tools,
+        resources,
+        surface="HTTP",
+        read_resource=read_resource,
+    )
+    app_issues.extend(view_issues)
+    if app_issues:
+        apps_check = VerifyCheck(
+            name="mcp_apps_http_transport",
+            status="fail",
+            message=f"{len(app_issues)} HTTP MCP Apps issue(s)",
+            details="\n".join(app_issues),
+        )
+    else:
+        apps_check = VerifyCheck(
+            name="mcp_apps_http_transport",
+            status="ok",
+            message=(
+                f"{link_count} tool link(s) and {resource_count} UI resource(s) agree over HTTP; "
+                f"{read_count} resource(s) readable"
+            ),
+        )
+    return base_check, apps_check
+
+
+async def _invoke_asgi_http(
+    app: Any,
+    request: dict[str, Any],
+) -> tuple[int, dict[str, Any]]:
+    """Send one modern POST directly through an ASGI app."""
+    body = json.dumps(request).encode("utf-8")
+    method = request["method"]
+    params = request.get("params", {})
+    name = None
+    if method in {"tools/call", "prompts/get"}:
+        name = params.get("name")
+    elif method == "resources/read":
+        name = params.get("uri")
+    headers: list[tuple[bytes, bytes]] = [
+        (b"content-type", b"application/json"),
+        (b"accept", b"application/json, text/event-stream"),
+        (b"mcp-protocol-version", _MCP_PROTOCOL_VERSION.encode("ascii")),
+        (b"mcp-method", method.encode("ascii")),
+    ]
+    if isinstance(name, str):
+        headers.append((b"mcp-name", _http_header_value(name)))
+
+    received = False
+
+    async def receive() -> dict[str, Any]:
+        nonlocal received
+        if received:
+            return {"type": "http.disconnect"}
+        received = True
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    sent: list[dict[str, Any]] = []
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await app(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/mcp",
+            "raw_path": b"/mcp",
+            "query_string": b"",
+            "headers": tuple(headers),
+            "client": ("127.0.0.1", 1),
+            "server": ("127.0.0.1", 80),
+        },
+        receive,
+        send,
+    )
+    if not sent or sent[0].get("type") != "http.response.start":
+        raise ValueError("ASGI app did not start an HTTP response")
+    status = sent[0].get("status")
+    if not isinstance(status, int):
+        raise ValueError("ASGI response is missing an integer status")
+    response_body = b"".join(message.get("body", b"") for message in sent[1:])
+    content_type = dict(sent[0].get("headers", ())).get(b"content-type", b"")
+    if content_type == b"text/event-stream":
+        events = [
+            json.loads(line.removeprefix(b"data: "))
+            for line in response_body.splitlines()
+            if line.startswith(b"data: ")
+        ]
+        if not events:
+            raise ValueError("ASGI SSE response contained no JSON-RPC events")
+        response = events[-1]
+    else:
+        response = json.loads(response_body)
+    if not isinstance(response, dict):
+        raise ValueError("ASGI HTTP response must be a JSON object")
+    return status, response
+
+
+def _http_header_value(value: str) -> bytes:
+    """Encode a mirrored MCP name using the HTTP sentinel when required."""
+    try:
+        encoded = value.encode("ascii")
+    except UnicodeEncodeError:
+        encoded = b""
+    if (
+        not encoded
+        or value != value.strip(" \t")
+        or (value.startswith("=?base64?") and value.endswith("?="))
+    ):
+        return b"=?base64?" + base64.b64encode(value.encode("utf-8")) + b"?="
+    return encoded
 
 
 def _check_subprocess_mcp(

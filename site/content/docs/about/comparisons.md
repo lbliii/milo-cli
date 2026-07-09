@@ -68,7 +68,7 @@ Reproduction commands and the counting rule live beside the
 | Agent schema | `function_to_schema()` is shared by Milo's dispatch paths | FastMCP generates and validates the MCP tool schema |
 | Verification | One ten-check run covers import, registration, schema, in-process MCP, discovery, MCP Apps, gateway projection, and subprocess transport | Typer documents `CliRunner`; FastMCP provides server inspection and MCP-format metadata; the application supplies cross-surface parity tests |
 | Discovery | Built-in llms.txt and MCP `tools/list` | MCP discovery through FastMCP; any separate llms.txt artifact is application-owned |
-| Remote MCP breadth | Local stdio today; streamable HTTP is tracked separately | Remote transports, auth, deployment, clients, apps, providers, and transforms |
+| Remote MCP breadth | Local stdio plus embeddable modern Streamable HTTP, strict routing headers, bearer-token hooks, and an optional standalone adapter | Remote transports, auth, deployment, clients, apps, providers, and transforms |
 | Runtime dependency posture | One runtime dependency, `kida-templates` | Typer/Click and FastMCP's MCP/validation stack |
 
 ## The Verification Difference
@@ -122,10 +122,10 @@ Choose Milo when drift between the CLI and agent surface is the problem you
 want the framework to own. Milo is not currently the broadest remote MCP
 platform or the largest CLI ecosystem.
 
-Milo currently serves the locked MCP 2026-07-28 release candidate and legacy
-2025-11-25 over stdio. Final 2026-07-28 conformance, full JSON Schema 2020-12
-validation, and the Streamable HTTP surface remain explicit pre-launch proof
-items; see the [conformance matrix](https://github.com/lbliii/milo-cli/blob/main/docs/mcp-2026-07-28-conformance.md).
+Milo currently serves the locked MCP 2026-07-28 release candidate through
+stdio and dependency-free ASGI HTTP, while retaining legacy 2025-11-25 over
+stdio. Final 2026-07-28 conformance and full JSON Schema 2020-12 validation
+remain explicit pre-launch proof items; see the [conformance matrix](https://github.com/lbliii/milo-cli/blob/main/docs/mcp-2026-07-28-conformance.md).
 
 ## Scoped Performance Receipts
 
@@ -142,12 +142,12 @@ a speed claim. The machine-readable
 [`public-claims.json`](https://github.com/lbliii/milo-cli/blob/main/public-claims.json)
 keeps this evidence classified as a scoped snapshot.
 
-## Parallel HTTP Proof Is Still Pending
+## Cross-Server Parallel HTTP Proof Is Still Pending
 
-Milo does not yet publish the planned free-threaded parallel HTTP tool-call
-claim. That evidence depends on the streamable HTTP work tracked in
-[#106](https://github.com/lbliii/milo-cli/issues/106) and the shared workload
-from pounce
+Milo's repository tests prove that two ASGI tool handlers overlap in one
+CPython 3.14t process with `PYTHON_GIL=0`. Milo does not yet turn that local
+contract test into a hosted throughput claim. The cross-server evidence still
+depends on the shared workload from pounce
 [#229](https://github.com/lbliii/pounce/issues/229). The claims ledger marks it
 `pending`; this page will link the resulting artifact instead of restating an
 unverified headline.

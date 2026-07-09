@@ -143,6 +143,16 @@ Before registering with Claude (or any time you break something), run:
 uv run milo verify my_cli/app.py
 ```
 
+To prove both supported transports from the same command definitions, run:
+
+```bash milo-docs:skip reason=requires-prior-scaffold
+uv run milo verify my_cli/app.py --transport both
+```
+
+The combined report adds `mcp_http_transport` and
+`mcp_apps_http_transport`. The HTTP checks call the dependency-free ASGI app
+directly, so verification does not require Uvicorn or a listening port.
+
 All ten checks should pass:
 
 ```
@@ -178,6 +188,8 @@ interprets application HTML.
 | Tool appears but call returns `isError: True` with `argument: "name"` | Required arg was not supplied by the caller | Claude sometimes calls without all args — the error payload tells you which is missing. |
 | Tool returns `isError: True` with no `errorData.argument` | User code raised a plain exception | Raise `milo.MiloError(ErrorCode.INP_*, "…", argument="name", constraint={…})` so error data is structured. |
 | `print()` breaks the protocol | MCP uses stdout for JSON-RPC; any other stdout write corrupts the stream | Use the provided `Context` (`ctx.info`, `ctx.error`) or write to stderr. |
+| `--mcp-http` says the HTTP extra is missing | The dependency-free ASGI app is installed, but the standalone adapter is not | Install `milo-cli[http]`, or mount `cli.asgi_app()` in an existing ASGI host. |
+| Non-loopback `--mcp-http` bind is refused | Standalone mode has no bearer-token callback | Use authenticated `cli.asgi_app(...)` in an ASGI host, or explicitly accept the risk with `--allow-unauthenticated`. |
 | Schema is missing a parameter | Parameter is typed as `Context` (or named `ctx`) | Correct — these are injected at dispatch time and intentionally excluded from the schema. See `function_to_schema` in `src/milo/schema.py`. |
 | Lazy command exits with `M-CMD-004` | Its module or named attribute could not import | Use `errorData.importPath` or the terminal hint to fix the dotted path or installation. |
 | Non-serializable return type | Return value can't be JSON-encoded | Return `dict`, `list`, `str`, `int`, `float`, `bool`, `None`, or a `@dataclass`. |

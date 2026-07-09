@@ -88,6 +88,39 @@ class TestVerifyScaffold:
         }:
             assert expected in check_names
 
+    def test_scaffold_passes_stdio_and_http_transport_proof(self, tmp_path):
+        project = scaffold("verify_both", tmp_path)
+        report = verify(str(project / "app.py"), transport="both")
+
+        assert report.exit_code == 0, report.format()
+        assert report.passed == 12
+        checks = {check.name: check for check in report.checks}
+        assert checks["mcp_transport"].status == "ok"
+        assert checks["mcp_apps_transport"].status == "ok"
+        assert checks["mcp_http_transport"].status == "ok"
+        assert checks["mcp_apps_http_transport"].status == "ok"
+
+    def test_http_transport_proof_supports_module_attr(self, tmp_path, monkeypatch):
+        package = tmp_path / "verify_http_pkg"
+        package.mkdir()
+        (package / "__init__.py").write_text(
+            "from milo import CLI\n"
+            "cli = CLI(name='http-module')\n"
+            "@cli.command('ping')\n"
+            "def ping() -> str:\n"
+            "    return 'pong'\n"
+        )
+        monkeypatch.syspath_prepend(tmp_path)
+
+        report = verify("verify_http_pkg:cli", transport="http")
+
+        assert report.exit_code == 0, report.format()
+        assert report.passed == 10
+        assert {check.name for check in report.checks} >= {
+            "mcp_http_transport",
+            "mcp_apps_http_transport",
+        }
+
 
 class TestVerifyFailurePaths:
     def test_missing_file_fails_imports(self, tmp_path):

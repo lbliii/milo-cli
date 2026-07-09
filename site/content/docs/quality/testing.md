@@ -67,6 +67,10 @@ URI, MIME/profile, metadata, and text/base64 shape without parsing application
 HTML. Warnings keep exit code 0; any failed conformance check exits 1 with the
 next repair action.
 
+Run `milo verify app.py --transport both` to retain those stdio checks and add
+`mcp_http_transport` plus `mcp_apps_http_transport`. HTTP verification calls
+the dependency-free ASGI app directly and does not open a socket.
+
 ## Docs and example drift
 
 Milo's own docs use tagged Markdown fences for snippets that should keep
