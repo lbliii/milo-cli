@@ -89,11 +89,14 @@ Look for these lines:
 
 ```
 **greet**: Say hello
-  Parameters: `--name` (string, **required**), `--loud` (boolean, optional, default: False)
+  Parameters:
+    - `--name` (string, **required**) — Person to greet.
+    - `--loud` (boolean, optional, default: False) — SHOUT if true.
 ```
 
-If `--name` shows `**required**` and `--loud` shows the default, the JSON Schema
-is correct. If not, check that type hints are on both parameters.
+If `--name` shows `**required**`, `--loud` shows the default, and both descriptions
+match the docstring, the shared command schema is correct. If not, check that type
+hints and `Args:` documentation are present for both parameters.
 
 ## Step 4 — Register with Claude
 

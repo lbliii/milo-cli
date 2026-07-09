@@ -157,14 +157,18 @@ def _format_command(cmd: CommandDef | LazyCommandDef) -> str:
             )
             param_type = schema.get("type", "string")
             if name in required:
-                params.append(f"`{flag}` ({param_type}, **required**)")
+                summary = f"`{flag}` ({param_type}, **required**)"
             elif "default" in schema:
                 default = schema["default"]
                 default_repr = f'"{default}"' if isinstance(default, str) else repr(default)
-                params.append(f"`{flag}` ({param_type}, optional, default: {default_repr})")
+                summary = f"`{flag}` ({param_type}, optional, default: {default_repr})"
             else:
-                params.append(f"`{flag}` ({param_type}, optional)")
-        parts.append("\n  Parameters: " + ", ".join(params))
+                summary = f"`{flag}` ({param_type}, optional)"
+            description = " ".join(str(schema.get("description", "")).split())
+            if description:
+                summary += f" — {description}"
+            params.append(summary)
+        parts.append("\n  Parameters:\n" + "\n".join(f"    - {param}" for param in params))
 
     # Examples
     examples = getattr(cmd, "examples", ())
