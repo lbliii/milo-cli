@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from milo.commands import CLI
 from milo.groups import Group
 from milo.mcp import (
@@ -283,8 +285,10 @@ class TestReadResource:
 
     def test_read_unknown_resource(self) -> None:
         cli = _make_cli()
-        result = _read_resource(cli, {"uri": "nonexistent://x"})
-        assert result["contents"] == []
+        from milo._mcp_router import ResourceNotFoundError
+
+        with pytest.raises(ResourceNotFoundError, match="nonexistent://x"):
+            _read_resource(cli, {"uri": "nonexistent://x"})
 
 
 class TestBuiltinResources:
@@ -365,7 +369,7 @@ class TestCLIHandler:
         cli = _make_cli()
         handler = _CLIHandler(cli)
         result = handler.server_discover({})
-        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["supportedVersions"] == ["2026-07-28", "2025-11-25"]
         assert result["serverInfo"]["name"] == "testapp"
         assert result["capabilities"]["tools"] == {}
 

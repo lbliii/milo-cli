@@ -151,10 +151,10 @@ All ten checks should pass:
 ✓ commands_registered: 1 command(s) registered
 ✓ schemas_generate: 1 schema(s) generated; all params documented
 ✓ mcp_list_tools: 1 tool(s) listed with valid inputSchema
-✓ mcp_discover: server/discover advertises 2025-11-25
+✓ mcp_discover: server/discover advertises 2026-07-28
 ✓ mcp_apps_in_process: 0 tool link(s) and 0 UI resource(s) agree; 0 resource(s) readable
 ✓ mcp_apps_gateway: gateway preserves 0 tool link(s) and 0 UI resource(s)
-✓ mcp_transport: subprocess discovery and handshake succeeded; 1 tool(s) over JSON-RPC
+✓ mcp_transport: subprocess modern discovery and legacy fallback succeeded; 1 tool(s) over JSON-RPC
 ✓ mcp_apps_transport: 0 tool link(s) and 0 UI resource(s) agree over JSON-RPC; 0 resource(s) readable
 ```
 
@@ -181,7 +181,7 @@ interprets application HTML.
 | Schema is missing a parameter | Parameter is typed as `Context` (or named `ctx`) | Correct — these are injected at dispatch time and intentionally excluded from the schema. See `function_to_schema` in `src/milo/schema.py`. |
 | Lazy command exits with `M-CMD-004` | Its module or named attribute could not import | Use `errorData.importPath` or the terminal hint to fix the dotted path or installation. |
 | Non-serializable return type | Return value can't be JSON-encoded | Return `dict`, `list`, `str`, `int`, `float`, `bool`, `None`, or a `@dataclass`. |
-| Client gets JSON-RPC `-32004` | The request declared an unsupported MCP protocol version in `_meta` | Retry with one of `error.data.supported`, or use the legacy `initialize` handshake for `2025-11-25`. |
+| Client gets JSON-RPC `-32022` | The request declared an unsupported MCP protocol version in `_meta` | Retry with one of `error.data.supported`, or use the legacy `initialize` handshake for `2025-11-25`. |
 
 ## Error data contract (important for agents)
 

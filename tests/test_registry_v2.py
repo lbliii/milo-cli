@@ -57,7 +57,11 @@ class TestHealthCheck:
             },
         }
         response = json.dumps(
-            {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-11-25"}}
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"supportedVersions": ["2026-07-28", "2025-11-25"]},
+            }
         )
         mock_run.return_value.stdout = response
         mock_run.return_value.returncode = 0
@@ -65,6 +69,40 @@ class TestHealthCheck:
         result = health_check("myapp")
         assert result.reachable is True
         assert result.latency_ms >= 0
+
+    @patch("milo.registry.subprocess.run")
+    @patch("milo.registry._load")
+    def test_legacy_fallback_is_reachable(self, mock_load, mock_run) -> None:
+        mock_load.return_value = {
+            "version": 1,
+            "clis": {"myapp": {"command": ["python", "app.py", "--mcp"]}},
+        }
+        mock_run.return_value.stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "error": {"code": -32601, "message": "Method not found"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "result": {"protocolVersion": "2025-11-25"},
+                    }
+                ),
+            ]
+        )
+
+        result = health_check("myapp")
+
+        assert result.reachable is True
+        payload = mock_run.call_args.kwargs["input"]
+        requests = [json.loads(line) for line in payload.splitlines()]
+        assert requests[0]["method"] == "server/discover"
+        assert requests[1]["params"]["protocolVersion"] == "2025-11-25"
 
     @patch("milo.registry.subprocess.run")
     @patch("milo.registry._load")

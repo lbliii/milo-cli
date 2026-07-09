@@ -6,14 +6,22 @@ import base64
 import json
 import re
 import sys
+import threading
 import time
 from typing import TYPE_CHECKING, Any
 
 from milo import __version__ as _server_version
+from milo._jsonrpc import LEGACY_MCP_VERSION as _LEGACY_MCP_VERSION
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import SUPPORTED_MCP_VERSIONS as _SUPPORTED_MCP_VERSIONS
 from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_notification, _write_result
-from milo._mcp_router import MethodNotFoundError, UnsupportedProtocolVersionError, dispatch
+from milo._mcp_router import (
+    InvalidRequestMetadataError,
+    MethodNotFoundError,
+    ResourceNotFoundError,
+    UnsupportedProtocolVersionError,
+    dispatch,
+)
 from milo.observability import RequestLogger, log_request, new_correlation_id
 
 if TYPE_CHECKING:
@@ -70,18 +78,19 @@ class _CLIHandler:
 
     def __init__(self, cli: CLI, cached_tools: list[dict[str, Any]] | None = None) -> None:
         self._cli = cli
-        self._cached_tools = cached_tools
+        self._cached_tools: dict[bool, list[dict[str, Any]]] = {}
+        if cached_tools is not None:
+            self._cached_tools[False] = cached_tools
         self._cached_version: int = cli._command_version
+        self._cache_lock = threading.Lock()
         self._ui_enabled = False
         self._logger = RequestLogger()
 
     def initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         ui_enabled = _client_supports_ui(params)
-        if ui_enabled != self._ui_enabled:
-            self._cached_tools = None
         self._ui_enabled = ui_enabled
         return {
-            "protocolVersion": _MCP_VERSION,
+            "protocolVersion": _LEGACY_MCP_VERSION,
             "capabilities": _server_capabilities(include_ui=ui_enabled),
             "serverInfo": _server_info(self._cli),
             "instructions": self._cli.description,
@@ -98,12 +107,24 @@ class _CLIHandler:
     def list_tools(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
         start = time.monotonic()
-        # Invalidate cache when commands have been added or removed
-        if self._cached_tools is None or self._cached_version != self._cli._command_version:
-            self._cached_tools = _list_tools(self._cli, include_ui=self._ui_enabled)
-            self._cached_version = self._cli._command_version
+        include_ui = self._ui_enabled_for(params)
+        tools = self._cached_tools.get(include_ui)
+        command_version = self._cli._command_version
+        if tools is None or self._cached_version != command_version:
+            # Command registration is a startup concern. The lock serializes
+            # cache publication for concurrent requests without charging the
+            # steady-state list path for an uncontended lock acquisition.
+            with self._cache_lock:
+                command_version = self._cli._command_version
+                if self._cached_version != command_version:
+                    self._cached_tools.clear()
+                    self._cached_version = command_version
+                tools = self._cached_tools.get(include_ui)
+                if tools is None:
+                    tools = _list_tools(self._cli, include_ui=include_ui)
+                    self._cached_tools[include_ui] = tools
         log_request(self._logger, "tools/list", "", start)
-        return {"tools": self._cached_tools}
+        return {"tools": tools}
 
     def call_tool(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
@@ -123,7 +144,7 @@ class _CLIHandler:
         new_correlation_id()
         start = time.monotonic()
         resources = _list_resources(self._cli)
-        if self._ui_enabled:
+        if self._ui_enabled_for(params):
             resources += _list_ui_resources(self._cli)
         resources += _builtin_resources()
         log_request(self._logger, "resources/list", "", start)
@@ -139,7 +160,11 @@ class _CLIHandler:
         start = time.monotonic()
         try:
             if isinstance(uri, str) and uri.startswith("ui://"):
-                result = _read_ui_resource(self._cli, params, enabled=self._ui_enabled)
+                result = _read_ui_resource(
+                    self._cli,
+                    params,
+                    enabled=self._ui_enabled_for(params),
+                )
             else:
                 result = _read_resource(self._cli, params)
         except Exception as e:
@@ -147,6 +172,13 @@ class _CLIHandler:
             raise
         log_request(self._logger, "resources/read", uri, start)
         return result
+
+    def _ui_enabled_for(self, params: dict[str, Any]) -> bool:
+        """Use per-request capabilities for modern calls and state for legacy calls."""
+        meta = params.get("_meta")
+        if isinstance(meta, dict) and "io.modelcontextprotocol/clientCapabilities" in meta:
+            return _client_supports_ui(params)
+        return self._ui_enabled
 
     def list_prompts(self, params: dict[str, Any]) -> dict[str, Any]:
         new_correlation_id()
@@ -181,15 +213,15 @@ def run_mcp_server(cli: CLI) -> None:
     tool_names = [t["name"] for t in tools]
 
     _stderr(f"MCP server ready — {cli.name}")
-    _stderr(f"  Protocol:  {_MCP_VERSION}")
+    _stderr(f"  Protocols: {_MCP_VERSION}, {_LEGACY_MCP_VERSION}")
     _stderr(f"  Tools:     {len(tools)} ({', '.join(tool_names)})")
     _stderr(f"  Resources: {len(cli._resources) + len(cli._ui_resources)}")
     _stderr(f"  Prompts:   {len(cli._prompts)}")
     _stderr("  Transport: stdin/stdout (JSON-RPC, one request per line)")
     _stderr("")
     _stderr("Send requests as JSON, for example:")
-    _stderr('  {"jsonrpc":"2.0","id":1,"method":"initialize"}')
-    _stderr('  {"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+    _stderr('  {"jsonrpc":"2.0","id":1,"method":"server/discover"}')
+    _stderr("  Legacy clients may initialize with protocol 2025-11-25.")
     if tool_names:
         example_tool = tool_names[0]
         example_schema = tools[0].get("inputSchema", {})
@@ -265,6 +297,18 @@ def _classify_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
             "type": type(exc).__name__,
             "supported": exc.supported,
             "requested": exc.requested,
+        }
+
+    if isinstance(exc, InvalidRequestMetadataError):
+        return exc.code, {
+            "type": type(exc).__name__,
+            "missing": exc.missing,
+        }
+
+    if isinstance(exc, ResourceNotFoundError):
+        return exc.code, {
+            "type": type(exc).__name__,
+            "uri": exc.uri,
         }
 
     # Unknown exceptions -> Internal error with traceback
@@ -513,7 +557,10 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
 
     try:
         _ensure_public_tool(cli, tool_name)
-        result = cli.call_raw(tool_name, **arguments)
+        if "ctx" in arguments:
+            result = cli.call_raw(tool_name, **arguments)
+        else:
+            result = cli.call_raw(tool_name, ctx=_mcp_context(params), **arguments)
 
         # Stream progress notifications for generator results
         from milo.streaming import Progress, is_generator_result
@@ -551,6 +598,15 @@ def _call_tool(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
         response["structuredContent"] = result
 
     return response
+
+
+def _mcp_context(params: dict[str, Any]):
+    """Expose request metadata, including W3C trace context, to command handlers."""
+    from milo.context import Context
+
+    meta = params.get("_meta")
+    request_meta = dict(meta) if isinstance(meta, dict) else {}
+    return Context(globals={"mcp": request_meta})
 
 
 _MISSING_ARG_RE = re.compile(r"missing \d+ required (?:positional|keyword) argument(?:s)?: (.+)")
@@ -751,7 +807,7 @@ def _read_resource(cli: CLI, params: dict[str, Any]) -> dict[str, Any]:
 
     res = cli._resources.get(uri)
     if not res:
-        return {"contents": []}
+        raise ResourceNotFoundError(str(uri))
 
     try:
         if cli._middleware:

@@ -40,7 +40,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from milo._jsonrpc import MCP_VERSION as _MCP_PROTOCOL_VERSION
+from milo._jsonrpc import (
+    LEGACY_MCP_VERSION as _LEGACY_MCP_PROTOCOL_VERSION,
+)
+from milo._jsonrpc import (
+    MCP_CLIENT_CAPABILITIES_META_KEY,
+    MCP_CLIENT_INFO_META_KEY,
+    MCP_PROTOCOL_VERSION_META_KEY,
+)
+from milo._jsonrpc import (
+    MCP_VERSION as _MCP_PROTOCOL_VERSION,
+)
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -425,10 +435,15 @@ def _check_in_process_mcp(cli: CLI, expected_count: int) -> VerifyCheck:
 
 def _check_mcp_discovery(cli: CLI) -> VerifyCheck:
     """Verify ``server/discover`` advertises the active MCP contract."""
+    from milo._mcp_router import dispatch
     from milo.mcp import _CLIHandler
 
     try:
-        result = _CLIHandler(cli).server_discover({})
+        result = dispatch(
+            _CLIHandler(cli),
+            "server/discover",
+            {"_meta": _modern_meta()},
+        )
     except Exception as e:
         return VerifyCheck(
             name="mcp_discover",
@@ -436,6 +451,12 @@ def _check_mcp_discovery(cli: CLI) -> VerifyCheck:
             message=f"server/discover raised: {type(e).__name__}: {e}",
         )
 
+    if result is None:
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message="server/discover returned no result",
+        )
     supported = result.get("supportedVersions")
     if not isinstance(supported, list) or _MCP_PROTOCOL_VERSION not in supported:
         return VerifyCheck(
@@ -449,6 +470,13 @@ def _check_mcp_discovery(cli: CLI) -> VerifyCheck:
             name="mcp_discover",
             status="fail",
             message="server/discover missing capabilities object",
+            details=json.dumps(result)[:300],
+        )
+    if result.get("resultType") != "complete":
+        return VerifyCheck(
+            name="mcp_discover",
+            status="fail",
+            message="server/discover missing resultType=complete",
             details=json.dumps(result)[:300],
         )
     server_info = result.get("serverInfo")
@@ -476,6 +504,16 @@ def _mcp_apps_params() -> dict[str, Any]:
                 MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]},
             }
         }
+    }
+
+
+def _modern_meta(*, include_ui: bool = False) -> dict[str, Any]:
+    """Return required per-request metadata for the active MCP revision."""
+    capabilities = _mcp_apps_params()["capabilities"] if include_ui else {}
+    return {
+        MCP_PROTOCOL_VERSION_META_KEY: _MCP_PROTOCOL_VERSION,
+        MCP_CLIENT_INFO_META_KEY: {"name": "milo-verify", "version": "1.0"},
+        MCP_CLIENT_CAPABILITIES_META_KEY: capabilities,
     }
 
 
@@ -840,6 +878,7 @@ def _registered_link_issues(cli: CLI) -> list[str]:
 def _check_mcp_apps_in_process(cli: CLI) -> VerifyCheck:
     """Validate negotiated MCP Apps views and payload reads in-process."""
     from milo._errors import format_error
+    from milo._mcp_router import dispatch
     from milo.mcp import _CLIHandler
 
     handler = _CLIHandler(cli)
@@ -849,8 +888,13 @@ def _check_mcp_apps_in_process(cli: CLI) -> VerifyCheck:
         issues.extend(_mcp_apps_capability_issues(discovered, surface="server/discover"))
         initialized = handler.initialize(_mcp_apps_params())
         issues.extend(_mcp_apps_capability_issues(initialized, surface="initialize"))
-        tools = handler.list_tools({}).get("tools")
-        resources = handler.list_resources({}).get("resources")
+        modern_params = {"_meta": _modern_meta(include_ui=True)}
+        tools_result = dispatch(handler, "tools/list", modern_params) or {}
+        resources_result = dispatch(handler, "resources/list", modern_params) or {}
+        tools = tools_result.get("tools")
+        resources = resources_result.get("resources")
+        issues.extend(_cacheable_result_issues(tools_result, method="tools/list"))
+        issues.extend(_cacheable_result_issues(resources_result, method="resources/list"))
     except Exception as exc:
         issues.append(
             f"in-process MCP Apps negotiation/list failed: {format_error(exc)}\n"
@@ -862,7 +906,14 @@ def _check_mcp_apps_in_process(cli: CLI) -> VerifyCheck:
         tools,
         resources,
         surface="in-process",
-        read_resource=lambda uri: handler.read_resource({"uri": uri}),
+        read_resource=lambda uri: (
+            dispatch(
+                handler,
+                "resources/read",
+                {"uri": uri, "_meta": _modern_meta(include_ui=True)},
+            )
+            or {}
+        ),
     )
     issues.extend(view_issues)
     if issues:
@@ -904,6 +955,7 @@ class _VerifyGatewayChild:
 def _check_mcp_apps_gateway(cli: CLI) -> VerifyCheck:
     """Project one CLI through the real gateway and compare every UI link."""
     from milo._errors import format_error
+    from milo._mcp_router import dispatch
     from milo.gateway import _discover_all, _GatewayHandler
 
     child = _VerifyGatewayChild(cli)
@@ -918,8 +970,13 @@ def _check_mcp_apps_gateway(cli: CLI) -> VerifyCheck:
         issues.extend(_mcp_apps_capability_issues(discovered, surface="gateway server/discover"))
         initialized = handler.initialize(_mcp_apps_params())
         issues.extend(_mcp_apps_capability_issues(initialized, surface="gateway initialize"))
-        gateway_tools = handler.list_tools({})["tools"]
-        gateway_resources = handler.list_resources({})["resources"]
+        modern_params = {"_meta": _modern_meta(include_ui=True)}
+        gateway_tools_result = dispatch(handler, "tools/list", modern_params) or {}
+        gateway_resources_result = dispatch(handler, "resources/list", modern_params) or {}
+        gateway_tools = gateway_tools_result["tools"]
+        gateway_resources = gateway_resources_result["resources"]
+        issues.extend(_cacheable_result_issues(gateway_tools_result, method="tools/list"))
+        issues.extend(_cacheable_result_issues(gateway_resources_result, method="resources/list"))
     except Exception as exc:
         issues.append(
             f"gateway MCP Apps projection failed: {format_error(exc)}\n"
@@ -1032,19 +1089,30 @@ def _check_subprocess_mcp(
     )
     try:
         initialize_params = {
-            "protocolVersion": _MCP_PROTOCOL_VERSION,
+            "protocolVersion": _LEGACY_MCP_PROTOCOL_VERSION,
             **_mcp_apps_params(),
         }
+        modern_params = {"_meta": _modern_meta(include_ui=True)}
         requests: list[dict[str, Any]] = [
-            {"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "server/discover",
+                "params": modern_params,
+            },
             {
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "initialize",
                 "params": initialize_params,
             },
-            {"jsonrpc": "2.0", "id": 3, "method": "tools/list"},
-            {"jsonrpc": "2.0", "id": 4, "method": "resources/list"},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": modern_params},
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "resources/list",
+                "params": modern_params,
+            },
         ]
         read_ids: dict[str, int] = {}
         for request_id, uri in enumerate(ui_resource_uris, start=5):
@@ -1054,7 +1122,7 @@ def _check_subprocess_mcp(
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "method": "resources/read",
-                    "params": {"uri": uri},
+                    "params": {"uri": uri, **modern_params},
                 }
             )
         payload = "\n".join(json.dumps(r) for r in requests) + "\n"
@@ -1157,14 +1225,17 @@ def _check_base_transport_responses(
     discover, issue = _response_result(responses, 1, "server/discover")
     if issue is not None or discover is None:
         issues.append(issue or "server/discover: missing result object.")
-    elif _MCP_PROTOCOL_VERSION not in discover.get("supportedVersions", []):
-        issues.append("server/discover: response is missing the active protocol version.")
+    else:
+        if _MCP_PROTOCOL_VERSION not in discover.get("supportedVersions", []):
+            issues.append("server/discover: response is missing the active protocol version.")
+        if discover.get("resultType") != "complete":
+            issues.append("server/discover: response is missing resultType=complete.")
 
     initialized, issue = _response_result(responses, 2, "initialize")
     if issue is not None or initialized is None:
         issues.append(issue or "initialize: missing result object.")
-    elif "protocolVersion" not in initialized:
-        issues.append("initialize: response is missing protocolVersion.")
+    elif initialized.get("protocolVersion") != _LEGACY_MCP_PROTOCOL_VERSION:
+        issues.append("initialize: response did not select the supported legacy protocol.")
 
     tools_result, issue = _response_result(responses, 3, "tools/list")
     tools: list[Any] = []
@@ -1176,6 +1247,7 @@ def _check_base_transport_responses(
             issues.append("tools/list: response is missing a tools list.")
         else:
             tools = listed_tools
+        issues.extend(_cacheable_result_issues(tools_result, method="tools/list"))
 
     if issues:
         if stderr_excerpt:
@@ -1190,9 +1262,23 @@ def _check_base_transport_responses(
         name="mcp_transport",
         status="ok",
         message=(
-            f"subprocess discovery and handshake succeeded; {len(tools)} tool(s) over JSON-RPC"
+            f"subprocess modern discovery and legacy fallback succeeded; "
+            f"{len(tools)} tool(s) over JSON-RPC"
         ),
     )
+
+
+def _cacheable_result_issues(result: dict[str, Any], *, method: str) -> list[str]:
+    """Validate modern result typing and cache hints on a cacheable method."""
+    issues: list[str] = []
+    if result.get("resultType") != "complete":
+        issues.append(f"{method}: response is missing resultType=complete.")
+    ttl = result.get("ttlMs")
+    if not isinstance(ttl, int) or ttl < 0:
+        issues.append(f"{method}: response ttlMs must be a non-negative integer.")
+    if result.get("cacheScope") not in {"public", "private"}:
+        issues.append(f"{method}: response cacheScope must be public or private.")
+    return issues
 
 
 def _check_apps_transport_responses(
@@ -1222,6 +1308,7 @@ def _check_apps_transport_responses(
         tools: Any = []
     else:
         tools = tools_result.get("tools")
+        issues.extend(_cacheable_result_issues(tools_result, method="tools/list"))
 
     resources_result, issue = _response_result(responses, 4, "resources/list")
     if issue is not None or resources_result is None:
@@ -1229,6 +1316,7 @@ def _check_apps_transport_responses(
         resources: Any = []
     else:
         resources = resources_result.get("resources")
+        issues.extend(_cacheable_result_issues(resources_result, method="resources/list"))
 
     advertised_ui_uris = (
         {
@@ -1264,6 +1352,9 @@ def _check_apps_transport_responses(
             raise ValueError(response_issue)
         if result is None:  # pragma: no cover - narrowed by response_issue
             raise ValueError(f"resources/read {uri}: missing result")
+        cache_issues = _cacheable_result_issues(result, method=f"resources/read {uri}")
+        if cache_issues:
+            raise ValueError("; ".join(cache_issues))
         return result
 
     view_issues, link_count, resource_count, read_count = _mcp_apps_view_issues(

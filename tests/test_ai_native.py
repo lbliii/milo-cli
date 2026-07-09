@@ -285,7 +285,7 @@ class TestMCP:
     def test_server_discover(self):
         cli = self._make_cli()
         result = _mcp_dispatch(_CLIHandler(cli), "server/discover", {})
-        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["supportedVersions"] == ["2026-07-28", "2025-11-25"]
         assert result["capabilities"]["tools"] == {}
 
     def test_list_tools(self):
@@ -676,7 +676,7 @@ class TestGateway:
         state = GatewayState([], {}, [], {}, [], {})
         handler = _GatewayHandler({}, state, {})
         result = _mcp_dispatch(handler, "server/discover", {})
-        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["supportedVersions"] == ["2026-07-28", "2025-11-25"]
         assert result["serverInfo"]["name"] == "milo-gateway"
 
     def test_handle_method_notifications_initialized(self):

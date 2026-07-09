@@ -122,6 +122,11 @@ Choose Milo when drift between the CLI and agent surface is the problem you
 want the framework to own. Milo is not currently the broadest remote MCP
 platform or the largest CLI ecosystem.
 
+Milo currently serves the locked MCP 2026-07-28 release candidate and legacy
+2025-11-25 over stdio. Final 2026-07-28 conformance, full JSON Schema 2020-12
+validation, and the Streamable HTTP surface remain explicit pre-launch proof
+items; see the [conformance matrix](https://github.com/lbliii/milo-cli/blob/main/docs/mcp-2026-07-28-conformance.md).
+
 ## Scoped Performance Receipts
 
 Milo's [`BASELINE.md`](https://github.com/lbliii/milo-cli/blob/main/benchmarks/BASELINE.md)
