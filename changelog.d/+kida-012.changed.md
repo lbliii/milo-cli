@@ -1,0 +1,1 @@
+Widened Milo's sole runtime dependency to `kida-templates>=0.11.0,<0.13.0` after revalidating its CLI, MCP, templates, examples, and free-threaded suite on Kida 0.12. This unblocks downstream frameworks adopting Kida's typed block metadata without dropping Kida 0.11 compatibility.
