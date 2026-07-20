@@ -6,6 +6,7 @@ import base64
 import io
 import json
 import runpy
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -27,6 +28,12 @@ from milo import (
     MCPAppVisibility,
 )
 from milo._errors import ErrorCode
+from milo._jsonrpc import (
+    MCP_CLIENT_CAPABILITIES_META_KEY,
+    MCP_CLIENT_INFO_META_KEY,
+    MCP_PROTOCOL_VERSION_META_KEY,
+    MCP_VERSION,
+)
 from milo._mcp_router import UnsupportedProtocolVersionError, dispatch
 from milo.mcp import (
     _classify_exception,
@@ -45,6 +52,17 @@ def _ui_capabilities() -> dict[str, object]:
             "extensions": {
                 MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]},
             }
+        }
+    }
+
+
+def _modern_params(*, ui: bool) -> dict[str, object]:
+    capabilities = _ui_capabilities()["capabilities"] if ui else {}
+    return {
+        "_meta": {
+            MCP_PROTOCOL_VERSION_META_KEY: MCP_VERSION,
+            MCP_CLIENT_INFO_META_KEY: {"name": "ui-client", "version": "1.0"},
+            MCP_CLIENT_CAPABILITIES_META_KEY: capabilities,
         }
     }
 
@@ -183,6 +201,39 @@ def test_initialize_negotiates_extension_and_server_discover_advertises_support(
     discovered = dispatch(handler, "server/discover", {})
     assert discovered is not None
     assert MCP_APPS_EXTENSION_ID in discovered["capabilities"]["extensions"]
+
+
+def test_modern_ui_negotiation_is_request_scoped_without_state_leakage() -> None:
+    handler = _CLIHandler(_make_ui_cli())
+
+    negotiated = dispatch(handler, "tools/list", _modern_params(ui=True))
+    plain = dispatch(handler, "tools/list", _modern_params(ui=False))
+    negotiated_again = dispatch(handler, "tools/list", _modern_params(ui=True))
+
+    assert negotiated is not None
+    assert plain is not None
+    assert negotiated_again is not None
+    assert "_meta" in negotiated["tools"][0]
+    assert "_meta" not in plain["tools"][0]
+    assert negotiated_again["tools"] == negotiated["tools"]
+
+
+def test_modern_ui_negotiation_is_isolated_across_free_threaded_requests() -> None:
+    handler = _CLIHandler(_make_ui_cli())
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [
+            pool.submit(dispatch, handler, "tools/list", _modern_params(ui=index % 2 == 0))
+            for index in range(100)
+        ]
+
+    for index, future in enumerate(futures):
+        result = future.result()
+        assert result is not None
+        if index % 2 == 0:
+            assert "_meta" in result["tools"][0]
+        else:
+            assert "_meta" not in result["tools"][0]
 
 
 def test_negotiated_list_and_read_round_trip_preserves_metadata() -> None:

@@ -34,7 +34,8 @@ def test_unknown_method_gets_method_not_found_error() -> None:
 
 def test_server_discover_lists_supported_versions() -> None:
     responses = _run_server('{"jsonrpc":"2.0","id":1,"method":"server/discover"}\n')
-    assert responses[0]["result"]["supportedVersions"] == ["2025-11-25"]
+    assert responses[0]["result"]["supportedVersions"] == ["2026-07-28", "2025-11-25"]
+    assert responses[0]["result"]["resultType"] == "complete"
     assert responses[0]["result"]["serverInfo"]["name"] == "transport"
 
 
@@ -47,8 +48,8 @@ def test_explicit_unsupported_protocol_version_returns_repair_data() -> None:
     }
     responses = _run_server(json.dumps(request) + "\n")
     error = responses[0]["error"]
-    assert error["code"] == -32004
-    assert error["data"]["supported"] == ["2025-11-25"]
+    assert error["code"] == -32022
+    assert error["data"]["supported"] == ["2026-07-28", "2025-11-25"]
     assert error["data"]["requested"] == "1900-01-01"
 
 

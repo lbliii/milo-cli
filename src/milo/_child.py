@@ -9,7 +9,12 @@ import threading
 import time
 from typing import Any
 
-from milo._jsonrpc import MCP_PROTOCOL_VERSION_META_KEY, MCP_VERSION, UNSUPPORTED_PROTOCOL_VERSION
+from milo._jsonrpc import (
+    LEGACY_MCP_VERSION,
+    MCP_PROTOCOL_VERSION_META_KEY,
+    MCP_VERSION,
+    UNSUPPORTED_PROTOCOL_VERSION,
+)
 
 
 def _gateway_client_capabilities() -> dict[str, Any]:
@@ -80,9 +85,9 @@ class ChildProcess:
     def _ensure_initialized(self) -> None:
         """Negotiate enough protocol context for child calls.
 
-        Milo still speaks the initialization-based 2025-11-25 protocol, but
-        newer MCP revisions probe with ``server/discover`` and may omit
-        ``initialize`` entirely. The gateway can therefore talk to both eras.
+        Milo serves stateless 2026-07-28 and initialization-based 2025-11-25.
+        The gateway probes first and falls back to the legacy handshake when a
+        child does not advertise a modern revision.
         """
         if self._initialized:
             return
@@ -97,7 +102,7 @@ class ChildProcess:
         response = self._send_request(
             "initialize",
             {
-                "protocolVersion": MCP_VERSION,
+                "protocolVersion": LEGACY_MCP_VERSION,
                 "capabilities": _gateway_client_capabilities(),
                 "clientInfo": {"name": "milo-gateway", "version": "unknown"},
             },
@@ -105,9 +110,11 @@ class ChildProcess:
         result = response.get("result")
         if isinstance(result, dict):
             protocol_version = result.get("protocolVersion")
-            self._protocol_version = str(protocol_version) if protocol_version else MCP_VERSION
+            self._protocol_version = (
+                str(protocol_version) if protocol_version else LEGACY_MCP_VERSION
+            )
         else:
-            self._protocol_version = MCP_VERSION
+            self._protocol_version = LEGACY_MCP_VERSION
         self._protocol_mode = "legacy"
         # Send notifications/initialized
         notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
@@ -119,8 +126,8 @@ class ChildProcess:
         if isinstance(error, dict) and error.get("code") == UNSUPPORTED_PROTOCOL_VERSION:
             data = error.get("data", {})
             supported = data.get("supported", []) if isinstance(data, dict) else []
-            if supported:
-                self._set_stateless_protocol(str(supported[0]))
+            if MCP_VERSION in supported:
+                self._set_stateless_protocol(MCP_VERSION)
                 self._initialized = True
                 return True
             return False
@@ -132,10 +139,10 @@ class ChildProcess:
         if not isinstance(supported, list) or not supported:
             return False
         if MCP_VERSION in supported:
-            return False
-        self._set_stateless_protocol(str(supported[0]))
-        self._initialized = True
-        return True
+            self._set_stateless_protocol(MCP_VERSION)
+            self._initialized = True
+            return True
+        return False
 
     def _set_stateless_protocol(self, protocol_version: str) -> None:
         self._protocol_mode = "stateless"
@@ -179,7 +186,10 @@ class ChildProcess:
             request_params = params
             if self._stateless_protocol_version is not None:
                 request_params = dict(params)
-                request_params.setdefault("_meta", _client_meta(self._stateless_protocol_version))
+                incoming_meta = params.get("_meta")
+                request_meta = dict(incoming_meta) if isinstance(incoming_meta, dict) else {}
+                request_meta.update(_client_meta(self._stateless_protocol_version))
+                request_params["_meta"] = request_meta
             response = self._send_request(method, request_params, timeout=timeout)
             self._last_use = time.monotonic()
 

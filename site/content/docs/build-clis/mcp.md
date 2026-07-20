@@ -11,7 +11,7 @@ category: build-clis
 icon: cpu
 ---
 
-Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing eligible registered commands as tools that AI agents can discover and invoke. Milo implements the **MCP 2025-11-25** specification.
+Every Milo CLI can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, exposing eligible registered commands as tools that AI agents can discover and invoke. Milo serves the locked **MCP 2026-07-28 release candidate** and the legacy **MCP 2025-11-25** revision over stdio. The final 2026-07-28 specification is scheduled for July 28, 2026; Milo will re-run its conformance audit against that publication before calling support final.
 
 Commands registered with `surfaces` that omit `"mcp"` are neither advertised
 by `tools/list` nor callable through `tools/call`. This is appropriate for
@@ -73,13 +73,13 @@ This starts a JSON-RPC server on stdin/stdout. The server writes a startup banne
 
 ```
 MCP server ready — myapp
-  Protocol:  2025-11-25
+  Protocols: 2026-07-28, 2025-11-25
   Tools:     3 (add, list, stats)
   Transport: stdin/stdout (JSON-RPC, one request per line)
 
 Send requests as JSON, for example:
-  {"jsonrpc":"2.0","id":1,"method":"initialize"}
-  {"jsonrpc":"2.0","id":2,"method":"tools/list"}
+  {"jsonrpc":"2.0","id":1,"method":"server/discover"}
+  Legacy clients may initialize with protocol 2025-11-25.
   {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add","arguments":{"title":"..."}}}
 
 Or pipe from a file:
@@ -90,33 +90,46 @@ Press Ctrl+C to stop.
 
 ## Protocol support
 
-Milo implements the MCP 2025-11-25 specification and keeps the
-initialization handshake for current clients. It also exposes
-`server/discover` so clients preparing for stateless MCP revisions can
-detect the supported protocol version before deciding whether to use the
-legacy handshake.
+The 2026-07-28 path is stateless: clients may probe `server/discover`, then put
+the protocol revision, client identity, and client capabilities in `_meta` on
+every request. There is no modern `initialize`/`notifications/initialized`
+handshake. Milo keeps that handshake only for 2025-11-25 clients during the
+revision's compatibility window.
 
-When a request includes explicit per-request MCP metadata with an
-unsupported protocol version, Milo returns JSON-RPC error `-32004` with
-the supported versions instead of silently treating the request as
-2025-11-25.
+An unsupported explicit revision returns `UnsupportedProtocolVersionError`
+(`-32022`) with `data.supported` and `data.requested`. A modern request missing
+required metadata returns Invalid params (`-32602`).
 
 ### Compatibility matrix
 
 | Scenario | Expected behavior |
 |---|---|
+| Modern MCP client → Milo server | Client sends `server/discover`, then self-contained requests with the three required `_meta` fields. Milo returns 2026-07-28 result and cache metadata. |
 | Legacy MCP client → Milo server | Client sends `initialize`, then `notifications/initialized`, then normal requests. Milo responds as MCP `2025-11-25`. |
-| Probe-first client → Milo server | Client sends `server/discover`. Milo returns `supportedVersions: ["2025-11-25"]`; the client can then use the legacy handshake. |
-| Client sends unsupported `_meta` protocol version | Milo returns JSON-RPC `-32004` with `data.supported` and `data.requested` repair fields. |
+| Probe-first client → Milo server | Milo returns `supportedVersions: ["2026-07-28", "2025-11-25"]`; the client selects the first revision it supports. |
+| Client sends unsupported `_meta` protocol version | Milo returns JSON-RPC `-32022` with `data.supported` and `data.requested` repair fields. |
 | Milo gateway → legacy child CLI | Gateway probes `server/discover`, falls back to `initialize` on method-not-found, and records child protocol mode as `legacy`. |
-| Milo gateway → stateless-only child CLI | Gateway uses the discovered protocol version and includes per-request `_meta` on child calls. |
+| Milo gateway → modern child CLI | Gateway uses the discovered revision and includes client metadata plus incoming W3C Trace Context on every child call. |
+
+The detailed [2026-07-28 conformance matrix](https://github.com/lbliii/milo-cli/blob/main/docs/mcp-2026-07-28-conformance.md) records implemented, legacy-only, not-advertised, and transport-deferred features.
 
 The server handles these methods:
 
 ### server/discover
 
 ```json
-{"jsonrpc": "2.0", "id": 1, "method": "server/discover"}
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "server/discover",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {"name": "my-client", "version": "1.0"},
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
 ```
 
 Returns supported protocol versions, server info, capabilities, and
@@ -124,8 +137,9 @@ instructions:
 
 ```json
 {
-  "supportedVersions": ["2025-11-25"],
-  "capabilities": {"tools": {}},
+  "resultType": "complete",
+  "supportedVersions": ["2026-07-28", "2025-11-25"],
+  "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
   "serverInfo": {
     "name": "myapp",
     "version": "1.0.0",
@@ -137,8 +151,20 @@ instructions:
 
 ### initialize
 
+`initialize` and `notifications/initialized` are legacy-only. A 2026-07-28
+request for either removed method returns Method not found (`-32601`).
+
 ```json
-{"jsonrpc": "2.0", "id": 1, "method": "initialize"}
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-11-25",
+    "clientInfo": {"name": "legacy-client", "version": "1.0"},
+    "capabilities": {}
+  }
+}
 ```
 
 Returns protocol version, server info (with `title`), and capabilities:
@@ -162,18 +188,32 @@ Returns protocol version, server info (with `title`), and capabilities:
 {"jsonrpc": "2.0", "method": "notifications/initialized"}
 ```
 
-Client confirmation after `initialize`. No response is sent (per MCP spec).
+Legacy client confirmation after `initialize`. No response is sent.
 
 ### tools/list
 
 ```json
-{"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {"name": "my-client", "version": "1.0"},
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
 ```
 
 Returns commands whose `surfaces` include `"mcp"` as tools with full schemas:
 
 ```json
 {
+  "resultType": "complete",
+  "ttlMs": 30000,
+  "cacheScope": "private",
   "tools": [
     {
       "name": "greet",
@@ -211,6 +251,11 @@ Each tool includes:
 | `inputSchema` | Parameter type annotations | JSON Schema for arguments |
 | `outputSchema` | Return type annotation | JSON Schema for the return value (when available) |
 
+Modern `tools/list`, `resources/list`, and `prompts/list` results use a
+30-second private cache hint. `resources/read` is private and immediately
+stale (`ttlMs: 0`). Legacy responses omit `resultType`, `ttlMs`, and
+`cacheScope`. Unknown resource URIs return Invalid params (`-32602`).
+
 ### tools/call
 
 ```json
@@ -219,7 +264,12 @@ Each tool includes:
   "method": "tools/call",
   "params": {
     "name": "greet",
-    "arguments": {"name": "Alice", "loud": true}
+    "arguments": {"name": "Alice", "loud": true},
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": {"name": "my-client", "version": "1.0"},
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
   }
 }
 ```
@@ -228,6 +278,7 @@ Dispatches to the command handler and returns the result as MCP content:
 
 ```json
 {
+  "resultType": "complete",
   "content": [{"type": "text", "text": "HELLO, ALICE!"}]
 }
 ```
@@ -236,12 +287,17 @@ When a handler returns structured data (dict, list, number, bool), the response 
 
 ```json
 {
+  "resultType": "complete",
   "content": [{"type": "text", "text": "{\n  \"id\": 1,\n  \"status\": \"done\"\n}"}],
   "structuredContent": {"id": 1, "status": "done"}
 }
 ```
 
 This lets MCP clients consume typed data directly instead of parsing text.
+
+For modern calls, Milo makes the request `_meta` available to a handler as
+`ctx.globals["mcp"]`. The gateway preserves `traceparent`, `tracestate`, and
+`baggage` so a W3C trace can continue through a namespaced child call.
 
 Before middleware reaches a handler, Milo validates tool arguments against the
 same `inputSchema` returned by `tools/list`. Required and unexpected arguments,
@@ -298,7 +354,9 @@ document as `str`, or bytes that Milo serializes as a deterministic base64
 
 ### Capability negotiation
 
-The host opts in during `initialize`:
+A modern host opts in per request through
+`_meta["io.modelcontextprotocol/clientCapabilities"]`. A legacy host opts in
+during `initialize`:
 
 ```json
 {
@@ -476,7 +534,7 @@ On startup, the gateway:
 
 ```
 milo gateway ready
-  Protocol:  2025-11-25
+  Protocols: 2026-07-28, 2025-11-25
   CLIs:      2 (taskman, ghub)
   Tools:     8
   Available: taskman.add, taskman.list, taskman.done, ghub.repo.list, ...
@@ -485,7 +543,7 @@ milo gateway ready
 When an agent calls `taskman.add`, the gateway:
 1. Looks up `taskman` in the routing table
 2. Spawns `taskman --mcp`
-3. Sends an `initialize` + `tools/call` request with the original tool name (`add`)
+3. Sends a modern self-contained `tools/call`, or a legacy `initialize` followed by `tools/call`, with the original tool name (`add`)
 4. Returns the result to the agent
 
 ### Listing registered CLIs

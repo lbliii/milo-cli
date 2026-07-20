@@ -67,9 +67,42 @@ class TestChildProcess:
         assert result == {"tools": [{"name": "greet"}]}
         requests = [json.loads(call.args[0]) for call in mock_proc.stdin.write.call_args_list]
         initialize = next(request for request in requests if request.get("method") == "initialize")
+        assert initialize["params"]["protocolVersion"] == "2025-11-25"
         assert initialize["params"]["capabilities"]["extensions"] == {
             MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}
         }
+
+    @patch("milo._child.subprocess.Popen")
+    def test_legacy_only_version_error_falls_back_to_initialize(
+        self, mock_popen_cls: MagicMock
+    ) -> None:
+        version_error = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+                "code": -32022,
+                "message": "Unsupported protocol version",
+                "data": {"supported": ["2025-11-25"]},
+            },
+        }
+        init_response = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {"protocolVersion": "2025-11-25"},
+        }
+        call_response = {"jsonrpc": "2.0", "id": 3, "result": {"tools": []}}
+        mock_proc = _make_mock_popen([version_error, init_response, call_response])
+        mock_popen_cls.return_value = mock_proc
+
+        child = ChildProcess("test", ["python", "-m", "test"])
+        result = child.send_call("tools/list", {})
+
+        assert result == {"tools": []}
+        assert child.protocol_mode == "legacy"
+        assert child.protocol_version == "2025-11-25"
+        requests = [json.loads(call.args[0]) for call in mock_proc.stdin.write.call_args_list]
+        initialize = next(request for request in requests if request.get("method") == "initialize")
+        assert initialize["params"]["protocolVersion"] == "2025-11-25"
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call_skips_progress_notifications(self, mock_popen_cls: MagicMock) -> None:
@@ -116,7 +149,8 @@ class TestChildProcess:
         mock_popen_cls.return_value = mock_proc
 
         child = ChildProcess("test", ["python", "-m", "test"])
-        result = child.send_call("tools/list", {})
+        traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        result = child.send_call("tools/list", {"_meta": {"traceparent": traceparent}})
 
         assert result == {"tools": []}
         assert child.protocol_mode == "stateless"
@@ -127,6 +161,7 @@ class TestChildProcess:
         assert request["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"][
             "extensions"
         ] == {MCP_APPS_EXTENSION_ID: {"mimeTypes": [MCP_APPS_MIME_TYPE]}}
+        assert request["params"]["_meta"]["traceparent"] == traceparent
 
     @patch("milo._child.subprocess.Popen")
     def test_send_call_records_child_error(self, mock_popen_cls: MagicMock) -> None:

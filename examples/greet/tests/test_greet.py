@@ -64,7 +64,7 @@ class TestDirectDispatch:
 class TestMCPDispatch:
     def test_server_discover_exposes_supported_version(self):
         result = _CLIHandler(cli).server_discover({})
-        assert "2025-11-25" in result["supportedVersions"]
+        assert result["supportedVersions"] == ["2026-07-28", "2025-11-25"]
         assert result["serverInfo"]["name"] == "greet"
 
     def test_call_tool_returns_content(self):

@@ -235,6 +235,31 @@ class TestProxyCall:
         )
         assert result["content"][0]["text"] == "called add"
 
+    def test_proxy_call_preserves_trace_context(self):
+        child = _make_child("taskman")
+        children = {"taskman": child}
+        routing = {"taskman.add": ("taskman", "add")}
+        traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+        _proxy_call(
+            children,
+            routing,
+            {
+                "name": "taskman.add",
+                "arguments": {"title": "hi"},
+                "_meta": {"traceparent": traceparent},
+            },
+        )
+
+        child.send_call.assert_called_once_with(
+            "tools/call",
+            {
+                "name": "add",
+                "arguments": {"title": "hi"},
+                "_meta": {"traceparent": traceparent},
+            },
+        )
+
     def test_proxy_call_unknown_tool(self):
         """Unknown tool name returns isError."""
         result = _proxy_call({}, {}, {"name": "nonexistent.tool", "arguments": {}})
@@ -288,15 +313,17 @@ class TestProxyResource:
         assert result["contents"][0]["text"] == "data"
 
     def test_proxy_resource_unknown_uri(self):
-        """Unknown URI returns empty contents."""
-        result = _proxy_resource({}, {}, {"uri": "unknown://x"})
-        assert result["contents"] == []
+        """Unknown URI uses the standard Invalid Params resource error."""
+        from milo._mcp_router import ResourceNotFoundError
+
+        with pytest.raises(ResourceNotFoundError, match="unknown://x"):
+            _proxy_resource({}, {}, {"uri": "unknown://x"})
 
     def test_proxy_resource_child_unavailable(self):
-        """Missing child returns empty contents."""
+        """Missing child reports an internal availability failure."""
         routing = {"deployer/milo://stats": ("deployer", "milo://stats")}
-        result = _proxy_resource({}, routing, {"uri": "deployer/milo://stats"})
-        assert result["contents"] == []
+        with pytest.raises(RuntimeError, match="not available"):
+            _proxy_resource({}, routing, {"uri": "deployer/milo://stats"})
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +386,7 @@ class TestGatewayHandler:
     def test_server_discover(self):
         handler, _ = self._make_handler()
         result = handler.server_discover({})
-        assert result["supportedVersions"] == ["2025-11-25"]
+        assert result["supportedVersions"] == ["2026-07-28", "2025-11-25"]
         assert result["serverInfo"]["name"] == "milo-gateway"
         assert "taskman" in result["instructions"]
 

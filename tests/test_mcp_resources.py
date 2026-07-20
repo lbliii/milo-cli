@@ -75,8 +75,10 @@ class TestMCPResourcesRead:
 
     def test_read_unknown_resource(self, cli: CLI) -> None:
         client = MCPClient(cli)
-        result = client.read_resource("unknown://foo")
-        assert result["contents"] == []
+        from milo._mcp_router import ResourceNotFoundError
+
+        with pytest.raises(ResourceNotFoundError, match="unknown://foo"):
+            client.read_resource("unknown://foo")
 
 
 class TestInitializeCapabilities:

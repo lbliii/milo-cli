@@ -6,10 +6,15 @@ import json
 import sys
 from typing import Any
 
-MCP_VERSION = "2025-11-25"
-SUPPORTED_MCP_VERSIONS = (MCP_VERSION,)
+MCP_VERSION = "2026-07-28"
+LEGACY_MCP_VERSION = "2025-11-25"
+SUPPORTED_MCP_VERSIONS = (MCP_VERSION, LEGACY_MCP_VERSION)
 MCP_PROTOCOL_VERSION_META_KEY = "io.modelcontextprotocol/protocolVersion"
-UNSUPPORTED_PROTOCOL_VERSION = -32004
+MCP_CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo"
+MCP_CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities"
+UNSUPPORTED_PROTOCOL_VERSION = -32022
+HEADER_MISMATCH = -32020
+MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
 
 
 def _parse_request(line: str) -> tuple[Any, str, dict[str, Any], bool] | None:

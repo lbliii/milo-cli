@@ -13,7 +13,7 @@ class TestDispatch:
     def _make_handler(self):
         handler = MagicMock()
         handler.initialize.return_value = {"protocolVersion": "2025-11-25"}
-        handler.server_discover.return_value = {"supportedVersions": ["2025-11-25"]}
+        handler.server_discover.return_value = {"supportedVersions": ["2026-07-28", "2025-11-25"]}
         handler.list_tools.return_value = {"tools": []}
         handler.call_tool.return_value = {"content": []}
         handler.list_resources.return_value = {"resources": []}
@@ -41,7 +41,10 @@ class TestDispatch:
         params = {}
         result = dispatch(handler, "server/discover", params)
         handler.server_discover.assert_called_once_with(params)
-        assert result == {"supportedVersions": ["2025-11-25"]}
+        assert result == {
+            "supportedVersions": ["2026-07-28", "2025-11-25"],
+            "resultType": "complete",
+        }
 
     def test_explicit_unsupported_protocol_version(self):
         handler = self._make_handler()

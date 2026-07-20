@@ -8,10 +8,12 @@ _ROOT = Path(__file__).resolve().parents[2]
 def test_mcp_reference_documents_compatibility_matrix() -> None:
     text = (_ROOT / "site/content/docs/build-clis/mcp.md").read_text(encoding="utf-8")
     assert "### Compatibility matrix" in text
+    assert "Modern MCP client" in text
     assert "Legacy MCP client" in text
     assert "Probe-first client" in text
-    assert "JSON-RPC `-32004`" in text
+    assert "JSON-RPC `-32022`" in text
     assert "Milo gateway" in text
+    assert "mcp-2026-07-28-conformance.md" in text
 
 
 def test_agent_quickstart_documents_discovery_and_version_repair() -> None:
@@ -21,7 +23,7 @@ def test_agent_quickstart_documents_discovery_and_version_repair() -> None:
     assert "mcp_apps_in_process" in text
     assert "mcp_apps_gateway" in text
     assert "mcp_apps_transport" in text
-    assert "JSON-RPC `-32004`" in text
+    assert "JSON-RPC `-32022`" in text
     assert "error.data.supported" in text
 
 

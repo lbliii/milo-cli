@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from milo._compat import data_dir
+from milo._jsonrpc import (
+    LEGACY_MCP_VERSION,
+    MCP_CLIENT_CAPABILITIES_META_KEY,
+    MCP_CLIENT_INFO_META_KEY,
+    MCP_PROTOCOL_VERSION_META_KEY,
+    MCP_VERSION,
+)
 
 _REGISTRY_DIR = data_dir()
 _REGISTRY_FILE = _REGISTRY_DIR / "registry.json"
@@ -135,7 +142,25 @@ def _health_check_entry(name: str, info: dict[str, Any]) -> HealthResult:
 
     start = time.monotonic()
     try:
-        input_data = '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n'
+        discover = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "server/discover",
+            "params": {
+                "_meta": {
+                    MCP_PROTOCOL_VERSION_META_KEY: MCP_VERSION,
+                    MCP_CLIENT_INFO_META_KEY: {"name": "milo-registry", "version": "1.0"},
+                    MCP_CLIENT_CAPABILITIES_META_KEY: {},
+                }
+            },
+        }
+        initialize = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "initialize",
+            "params": {"protocolVersion": LEGACY_MCP_VERSION},
+        }
+        input_data = json.dumps(discover) + "\n" + json.dumps(initialize) + "\n"
         result = subprocess.run(
             command,
             input=input_data,
@@ -151,7 +176,15 @@ def _health_check_entry(name: str, info: dict[str, Any]) -> HealthResult:
                 continue
             try:
                 response = json.loads(line)
-                if response.get("id") == 1 and "result" in response:
+                response_id = response.get("id")
+                response_result = response.get("result")
+                modern_ok = response_id == 1 and isinstance(response_result, dict)
+                legacy_ok = (
+                    response_id == 2
+                    and isinstance(response_result, dict)
+                    and response_result.get("protocolVersion") == LEGACY_MCP_VERSION
+                )
+                if modern_ok or legacy_ok:
                     # Check staleness
                     stored_fp = info.get("fingerprint", "")
                     project_root = info.get("project_root", "")
@@ -185,7 +218,7 @@ def _health_check_entry(name: str, info: dict[str, Any]) -> HealthResult:
 
 
 def health_check(name: str) -> HealthResult:
-    """Ping a registered CLI with initialize and measure latency."""
+    """Probe a registered CLI with modern discovery and legacy fallback."""
     data = _load()
     clis = data.get("clis", {})
     if name not in clis:

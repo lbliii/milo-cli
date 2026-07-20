@@ -28,10 +28,11 @@ from urllib.parse import quote
 
 from milo import __version__ as _server_version
 from milo._child import ChildProcess
+from milo._jsonrpc import LEGACY_MCP_VERSION as _LEGACY_MCP_VERSION
 from milo._jsonrpc import MCP_VERSION as _MCP_VERSION
 from milo._jsonrpc import SUPPORTED_MCP_VERSIONS as _SUPPORTED_MCP_VERSIONS
 from milo._jsonrpc import _parse_request, _stderr, _write_error, _write_result
-from milo._mcp_router import MethodNotFoundError, UnsupportedProtocolVersionError, dispatch
+from milo._mcp_router import dispatch
 from milo.registry import list_clis
 
 _logger = logging.getLogger("milo.gateway")
@@ -192,7 +193,7 @@ def _run_gateway() -> None:
     all_prompts = discovery.prompts
 
     _stderr("milo gateway ready")
-    _stderr(f"  Protocol:  {_MCP_VERSION}")
+    _stderr(f"  Protocols: {_MCP_VERSION}, {_LEGACY_MCP_VERSION}")
     _stderr(f"  CLIs:      {len(clis)} ({', '.join(clis.keys()) if clis else 'none'})")
     _stderr(f"  Tools:     {len(all_tools)}")
     _stderr(f"  Resources: {len(all_resources)}")
@@ -245,21 +246,9 @@ def _idle_reaper(children: dict[str, ChildProcess]) -> None:
 
 
 def _classify_gateway_exception(exc: Exception) -> tuple[int, dict[str, Any] | None]:
-    from milo._errors import MiloError
+    from milo.mcp import _classify_exception
 
-    if isinstance(exc, MiloError):
-        from milo.mcp import _classify_exception
-
-        return _classify_exception(exc)
-    if isinstance(exc, MethodNotFoundError):
-        return -32601, {"type": type(exc).__name__}
-    if isinstance(exc, UnsupportedProtocolVersionError):
-        return exc.code, {
-            "type": type(exc).__name__,
-            "supported": exc.supported,
-            "requested": exc.requested,
-        }
-    return -32603, {"type": type(exc).__name__}
+    return _classify_exception(exc)
 
 
 @dataclass
@@ -476,7 +465,7 @@ class _GatewayHandler:
 
         self._ui_enabled = _client_supports_ui(params)
         return {
-            "protocolVersion": _MCP_VERSION,
+            "protocolVersion": _LEGACY_MCP_VERSION,
             "capabilities": _gateway_capabilities(include_ui=self._ui_enabled),
             "serverInfo": _gateway_server_info(),
             "instructions": self._instructions(),
@@ -593,7 +582,10 @@ def _proxy_call(
             },
         }
 
-    result = child.send_call("tools/call", {"name": original_name, "arguments": arguments})
+    result = child.send_call(
+        "tools/call",
+        {"name": original_name, "arguments": arguments, **_forwarded_meta(params)},
+    )
     if "error" in result:
         error = result["error"]
         return {
@@ -625,7 +617,9 @@ def _proxy_resource(
                 },
                 suggestion="Call resources/list and use an advertised ui:// URI.",
             )
-        return {"contents": []}
+        from milo._mcp_router import ResourceNotFoundError
+
+        raise ResourceNotFoundError(str(uri))
 
     cli_name, original_uri = resource_routing[uri]
     child = children.get(cli_name)
@@ -644,10 +638,13 @@ def _proxy_resource(
                 },
                 suggestion="Restart the gateway or repair the registered CLI command.",
             )
-        return {"contents": []}
+        raise RuntimeError(f"MCP child {cli_name!r} is not available for resources/read")
 
     try:
-        result = child.send_call("resources/read", {"uri": original_uri})
+        result = child.send_call(
+            "resources/read",
+            {"uri": original_uri, **_forwarded_meta(params)},
+        )
     except Exception as exc:
         if not is_ui:
             raise
@@ -713,8 +710,19 @@ def _proxy_prompt(
         return {"messages": []}
 
     return child.send_call(
-        "prompts/get", {"name": original_name, "arguments": params.get("arguments", {})}
+        "prompts/get",
+        {
+            "name": original_name,
+            "arguments": params.get("arguments", {}),
+            **_forwarded_meta(params),
+        },
     )
+
+
+def _forwarded_meta(params: dict[str, Any]) -> dict[str, Any]:
+    """Preserve request metadata for the child; ChildProcess sets its own identity."""
+    meta = params.get("_meta")
+    return {"_meta": dict(meta)} if isinstance(meta, dict) else {}
 
 
 if __name__ == "__main__":
