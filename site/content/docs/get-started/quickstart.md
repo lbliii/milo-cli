@@ -113,11 +113,14 @@ Look for the generated command entry:
 
 ```text
 **greet**: Return a greeting
-  Parameters: `--name` (string, **required**), `--loud` (boolean, optional, default: False)
+  Parameters:
+    - `--name` (string, **required**) — The person to greet.
+    - `--loud` (boolean, optional, default: False) — If true, SHOUT.
 ```
 
 The llms.txt output is a readable catalog. MCP clients use the JSON Schema from
-`tools/list`; both are generated from the same Python function.
+`tools/list`; both include the parameter descriptions generated from the same
+Python function.
 
 ## Test the Contract
 

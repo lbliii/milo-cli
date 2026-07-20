@@ -31,14 +31,18 @@ Version: 1.0.0
 ## Commands
 
 - **greet**: Say hello
-  Parameters: `--name` (string, required), `--loud` (boolean)
+  Parameters:
+    - `--name` (string, required)
+    - `--loud` (boolean)
 
 ## Site Operations
 
 - **build**: Build the site
-  Parameters: `--output` (string)
+  Parameters:
+    - `--output` (string)
 - **serve**: Start dev server
-  Parameters: `--port` (integer)
+  Parameters:
+    - `--port` (integer)
 ```
 
 ## Structure
@@ -49,7 +53,8 @@ The output follows the llms.txt specification:
 2. **Description** — CLI description as a blockquote
 3. **Version** — if set
 4. **Commands** — grouped by tag, then by command group
-5. **Parameters** — with types and required markers
+5. **Parameters** — one per line, with types, required markers, defaults, and
+   schema-derived descriptions when available
 
 ## Tags
 
@@ -69,9 +74,11 @@ Produces:
 ## Ops
 
 - **deploy**: Deploy the app
-  Parameters: `--target` (string, required)
+  Parameters:
+    - `--target` (string, required)
 - **rollback**: Rollback
-  Parameters: `--steps` (integer)
+  Parameters:
+    - `--steps` (integer)
 ```
 
 ## Groups

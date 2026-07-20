@@ -178,6 +178,32 @@ def test_llms_txt_uses_cli_flag_names() -> None:
     assert "--dry_run" not in output
 
 
+def test_parameter_descriptions_match_schema_mcp_and_llms_txt() -> None:
+    cli = CLI(name="contract", description="")
+
+    @cli.command("serve")
+    def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+        """Serve requests.
+
+        Args:
+            host: Bind address.
+            port: Bind port.
+        """
+
+    schema = cli.commands["serve"].schema
+    tools = _list_tools(cli)
+    mcp_schema = tools[0]["inputSchema"]
+    output = generate_llms_txt(cli)
+
+    for name, description in {"host": "Bind address.", "port": "Bind port."}.items():
+        assert schema["properties"][name]["description"] == description
+        assert mcp_schema["properties"][name]["description"] == description
+        assert f"— {description}" in output
+
+    assert "  Parameters:\n    - `--host`" in output
+    assert "\n    - `--port`" in output
+
+
 def test_positionals_and_option_aliases_preserve_programmatic_schema_names() -> None:
     cli = CLI(name="contract")
 
